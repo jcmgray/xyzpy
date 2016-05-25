@@ -1,6 +1,6 @@
 from setuptools import setup, find_packages
 
-setup(name='ximio',
+setup(name='xyzpy',
       version='0.1.1',
       author='Johnnie Gray',
       license='MIT',
