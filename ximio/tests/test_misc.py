@@ -1,7 +1,7 @@
 from collections import OrderedDict
 import numpy as np
 from numpy.testing import assert_allclose
-from ximu.misc import (
+from ..misc import (
     param_runner,
     sub_split,
     np_param_runner,

@@ -104,6 +104,7 @@ def xmlineplot(ds, y_coo, x_coo, z_coo,
     using matplotlib and xarray. """
     # TODO: fallback fonts
     # TODO: font size
+    # TODO: no z_coo
 
     import matplotlib as mpl
     import matplotlib.pyplot as plt
