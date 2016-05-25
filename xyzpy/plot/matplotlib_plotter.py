@@ -4,6 +4,9 @@ Functions for plotting datasets nicely.
 # TODO: unify options
 # TODO: matplotlib style hlines, vlines
 # TODO: logcolor
+# TODO: names
+# TODO: modularise, with mian fig func, xarray handler, and basic plotter
+
 from itertools import cycle
 from collections import OrderedDict
 from itertools import repeat
@@ -57,6 +60,9 @@ def mplot(x, y_i, fignum=1, logx=False, logy=False,
           color=False, colormap="viridis", **kwargs):
     """ Function for automatically plotting multiple sets of data
     using matplot lib. """
+
+    # TODO: homogenise options with xmlineplot
+
     import matplotlib.pyplot as plt
     y_i = np.array(np.squeeze(y_i), ndmin=2)
     if np.size(x) == y_i.shape[0]:
@@ -99,12 +105,16 @@ def xmlineplot(ds, y_coo, x_coo, z_coo,
                xlabel=None, xlims=None, xticks=None, logx=False,
                ylabel=None, ylims=None, yticks=None, logy=False,
                zlabel=None, padding=0.0, vlines=None, hlines=None,
-               title=None, fignum=1, font='Arial', **kwargs):
+               title=None, fignum=1, font="Arial", **kwargs):
     """ Function for automatically plotting multiple sets of data
     using matplotlib and xarray. """
+
     # TODO: fallback fonts
     # TODO: font size
     # TODO: no z_coo
+    # TODO: add graph to existing fig, return fig, axes location
+    # TODO: homogenise options with plotly
+    # TODO: docs
 
     import matplotlib as mpl
     import matplotlib.pyplot as plt
@@ -113,7 +123,7 @@ def xmlineplot(ds, y_coo, x_coo, z_coo,
     axes = fig.add_axes([0.15, 0.15, 0.8, 0.75],
                         title=("" if title is None else title))
     axes.tick_params(labelsize=16)
-    mpl.rc('font', family=font)
+    mpl.rc("font", family=font)
 
     n_z = len(ds[z_coo])
     n_y = len(ds[y_coo])
@@ -127,7 +137,7 @@ def xmlineplot(ds, y_coo, x_coo, z_coo,
         cols = repeat(None)
     markers = (n_y <= 50) if markers is None else markers
     mrkrs = cycle(mpl_markers()) if markers else repeat(None)
-    lines = repeat('-') if line_styles is None else cycle(line_styles)
+    lines = repeat("-") if line_styles is None else cycle(line_styles)
 
     custom_zticks = zticks is not None
     if custom_zticks:

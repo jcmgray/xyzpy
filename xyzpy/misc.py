@@ -1,4 +1,12 @@
 """ Misc. functions not quantum related. """
+
+# TODO: split into generate and manage data
+# TODO: single access function for param_runners
+# TODO: nested inner param_runner function
+# TODO: multiprocessing param_runner (for ordered arguements and single arg fn)
+# TODO: update timing functions script
+# TODO: xarray spline resample
+
 from functools import partial
 from itertools import product
 import numpy as np

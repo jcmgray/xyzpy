@@ -1,8 +1,9 @@
 """
 Functions for plotting datasets nicely.
 """
-# TODO: unify options
+# TODO: unify options with xmlinplot
 # TODO: plotly hlines, vlines
+# TODO: names
 from math import log
 from itertools import repeat
 import numpy as np
