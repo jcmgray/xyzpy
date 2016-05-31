@@ -125,9 +125,6 @@ def xmlineplot(ds, y_coo, x_coo, z_coo,
     axes.tick_params(labelsize=16)
     mpl.rc("font", family=font)
 
-    n_z = len(ds[z_coo])
-    n_y = len(ds[y_coo])
-
     if color:
         from matplotlib import cm
         cmap = getattr(cm, colormap)
@@ -135,7 +132,7 @@ def xmlineplot(ds, y_coo, x_coo, z_coo,
         cols = [cmap(1 - (z-zmin)/(zmax-zmin)) for z in ds[z_coo].values]
     else:
         cols = repeat(None)
-    markers = (n_y <= 50) if markers is None else markers
+    markers = (len(ds[y_coo]) <= 50) if markers is None else markers
     mrkrs = cycle(mpl_markers()) if markers else repeat(None)
     lines = repeat("-") if line_styles is None else cycle(line_styles)
 
@@ -180,7 +177,8 @@ def xmlineplot(ds, y_coo, x_coo, z_coo,
     if yticks is not None:
         axes.set_yticks(yticks)
         axes.get_yaxis().set_major_formatter(mpl.ticker.ScalarFormatter())
-    if legend or not (legend is False or n_z > 10):
+
+    if legend or not (legend is False or len(ds[z_coo]) > 10):
         legend = axes.legend(title=(z_coo if zlabel is None else zlabel),
                              loc="best", fontsize=16, frameon=False)
         legend.get_title().set_fontsize(20)
