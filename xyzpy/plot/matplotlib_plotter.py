@@ -115,16 +115,18 @@ def xmlineplot(ds, y_coo, x_coo, z_coo,
     # TODO: add graph to existing fig, return fig, axes location
     # TODO: homogenise options with plotly
     # TODO: docs
+    # TODO: log color map
 
     import matplotlib as mpl
     import matplotlib.pyplot as plt
-
-    fig = plt.figure(fignum, figsize=(8, 6), dpi=100)
-    axes = fig.add_axes([0.15, 0.15, 0.8, 0.75],
-                        title=("" if title is None else title))
-    axes.tick_params(labelsize=16)
     mpl.rc("font", family=font)
 
+    fig = plt.figure(fignum, figsize=(8, 6), dpi=100)
+    axes = fig.add_axes([0.15, 0.15, 0.8, 0.75])
+    axes.set_title("" if title is None else title)
+    axes.tick_params(labelsize=16)
+
+    # Use a colormap
     if color:
         from matplotlib import cm
         cmap = getattr(cm, colormap)
@@ -132,14 +134,20 @@ def xmlineplot(ds, y_coo, x_coo, z_coo,
         cols = [cmap(1 - (z-zmin)/(zmax-zmin)) for z in ds[z_coo].values]
     else:
         cols = repeat(None)
+
+    # Decide on using markers, and set custom markers and line-styles
     markers = (len(ds[y_coo]) <= 50) if markers is None else markers
     mrkrs = cycle(mpl_markers()) if markers else repeat(None)
     lines = repeat("-") if line_styles is None else cycle(line_styles)
 
+    # Set custom names for each line ("ztick")
     custom_zticks = zticks is not None
     if custom_zticks:
         zticks = iter(zticks)
 
+    # ----------------------------------------------------------------------- #
+    # Plot Lines                                                              #
+    # ----------------------------------------------------------------------- #
     for z, col, mrkr, ln in zip(ds[z_coo].data, cols, mrkrs, lines):
         x = ds.loc[{z_coo: z}][x_coo].data.flatten()
         y = ds.loc[{z_coo: z}][y_coo].data.flatten()
@@ -147,6 +155,19 @@ def xmlineplot(ds, y_coo, x_coo, z_coo,
         axes.plot(x, y, ln, c=col, lw=1.3, marker=mrkr,
                   label=label, zorder=3, **kwargs)
 
+    # Add a legend
+    if legend or not (legend is False or len(ds[z_coo]) > 10):
+        legend = axes.legend(title=(z_coo if zlabel is None else zlabel),
+                             loc="best", fontsize=16, frameon=False)
+        legend.get_title().set_fontsize(20)
+
+    # Set axis scale-type and names
+    axes.set_xscale("log" if logx else "linear")
+    axes.set_yscale("log" if logy else "linear")
+    axes.set_xlabel(x_coo if xlabel is None else xlabel, fontsize=20)
+    axes.set_ylabel(y_coo if ylabel is None else ylabel, fontsize=20)
+
+    # Set plot range
     if xlims is None:
         xmax, xmin = ds[x_coo].max(), ds[x_coo].min()
         xrange = xmax - xmin
@@ -158,6 +179,15 @@ def xmlineplot(ds, y_coo, x_coo, z_coo,
     axes.set_xlim(xlims)
     axes.set_ylim(ylims)
 
+    # Set custom axis tick marks
+    if xticks is not None:
+        axes.set_xticks(xticks)
+        axes.get_xaxis().set_major_formatter(mpl.ticker.ScalarFormatter())
+    if yticks is not None:
+        axes.set_yticks(yticks)
+        axes.get_yaxis().set_major_formatter(mpl.ticker.ScalarFormatter())
+
+    # Add grid and any custom lines
     axes.grid(True, color="0.666")
     if vlines is not None:
         for x in vlines:
@@ -166,20 +196,4 @@ def xmlineplot(ds, y_coo, x_coo, z_coo,
         for y in hlines:
             axes.axhline(y)
 
-    axes.set_xscale("log" if logx else "linear")
-    axes.set_yscale("log" if logy else "linear")
-    axes.set_xlabel(x_coo if xlabel is None else xlabel, fontsize=20)
-    axes.set_ylabel(y_coo if ylabel is None else ylabel, fontsize=20)
-
-    if xticks is not None:
-        axes.set_xticks(xticks)
-        axes.get_xaxis().set_major_formatter(mpl.ticker.ScalarFormatter())
-    if yticks is not None:
-        axes.set_yticks(yticks)
-        axes.get_yaxis().set_major_formatter(mpl.ticker.ScalarFormatter())
-
-    if legend or not (legend is False or len(ds[z_coo]) > 10):
-        legend = axes.legend(title=(z_coo if zlabel is None else zlabel),
-                             loc="best", fontsize=16, frameon=False)
-        legend.get_title().set_fontsize(20)
     return fig
