@@ -2,40 +2,33 @@ from collections import OrderedDict
 import numpy as np
 from numpy.testing import assert_allclose
 from ..generate import (
-    param_runner,
     sub_split,
-    np_param_runner,
-    np_param_runner2,
-    xr_param_runner,
+    case_runner,
+    parallel_case_runner,
+    xr_case_runner,
 )
 
 
-class TestCaseRunner:
-    def test_param_runner_simple(self):
-        def foo(a, b, c):
-            return a + b + c
-        params = (('a', [1, 2]),
-                  ('b', [10, 20, 30]),
-                  ('c', [100, 200, 300, 400]))
-        x = [*param_runner(foo, params)]
-        xn = (np.array([1, 2]).reshape((2, 1, 1)) +
-              np.array([10, 20, 30]).reshape((1, 3, 1)) +
-              np.array([100, 200, 300, 400]).reshape((1, 1, 4)))
-        assert_allclose(x, xn)
+def foo1(a, b, c):
+    return a + b + c
 
-    def test_param_runner_dict(self):
-        def foo(a, b, c):
-            return a + b + c
-        params = OrderedDict((('a', [1, 2]),
-                              ('b', [10, 20, 30]),
-                              ('c', [100, 200, 300, 400])))
-        x = [*param_runner(foo, params)]
-        xn = (np.array([1, 2]).reshape((2, 1, 1)) +
-              np.array([10, 20, 30]).reshape((1, 3, 1)) +
-              np.array([100, 200, 300, 400]).reshape((1, 1, 4)))
-        assert_allclose(x, xn)
 
-    def test_sub_split(self):
+def foo2(a, b, c):
+    return a + b + c, a % 2 == 0
+
+
+def foo1s(abc):
+    a, b, c = abc
+    return a + b + c
+
+
+def foo2s(abc):
+        a, b, c = abc
+        return a + b + c, a % 2 == 0
+
+
+class TestSubSplit:
+    def test_2res(self):
         a = [[[('a', 1), ('b', 2)],
               [('c', 3), ('d', 4)]],
              [[('e', 5), ('f', 6)],
@@ -50,89 +43,92 @@ class TestCaseRunner:
                               [[5, 6],
                                [7, 8]]]
 
-    def test_param_runner_np(self):
-        def foo(a, b, c):
-            return a + b + c
-        params = (('a', [1, 2]),
+
+class TestCaseRunner:
+    def test_simple(self):
+        params = [('a', [1, 2]),
                   ('b', [10, 20, 30]),
-                  ('c', [100, 200, 300, 400]))
-        x = np_param_runner(foo, params)
+                  ('c', [100, 200, 300, 400])]
+        x = case_runner(foo1, params)
         xn = (np.array([1, 2]).reshape((2, 1, 1)) +
               np.array([10, 20, 30]).reshape((1, 3, 1)) +
               np.array([100, 200, 300, 400]).reshape((1, 1, 4)))
         assert_allclose(x, xn)
 
-    def test_param_runner_np_multires(self):
-        def foo(a, b, c):
-            return a + b + c, a % 2 == 0
-        params = (('a', [1, 2]),
-                  ('b', [10, 20, 30]),
-                  ('c', [100, 200, 300, 400]))
-        x = np_param_runner(foo, params)
-        xn = (np.array([1, 2]).reshape((2, 1, 1)) +
-              np.array([10, 20, 30]).reshape((1, 3, 1)) +
-              np.array([100, 200, 300, 400]).reshape((1, 1, 4)))
-        assert_allclose(x[0], xn)
-        assert np.all(x[1][1, ...])
-
-    def test_param_runner_np2(self):
-        def foo(a, b, c):
-            return a + b + c
-        params = (('a', [1, 2]),
-                  ('b', [10, 20, 30]),
-                  ('c', [100, 200, 300, 400]))
-        x = np_param_runner2(foo, params)
-        assert x.shape == (2, 3, 4)
-        xn = (np.array([1, 2]).reshape((2, 1, 1)) +
-              np.array([10, 20, 30]).reshape((1, 3, 1)) +
-              np.array([100, 200, 300, 400]).reshape((1, 1, 4)))
-        assert_allclose(x, xn)
-
-    def test_param_runner_np2_multires(self):
-        def foo(a, b, c):
-            return a + b + c, a % 2 == 0
-        params = (('a', [1, 2]),
-                  ('b', [10, 20, 30]),
-                  ('c', [100, 200, 300, 400]))
-        x = np_param_runner2(foo, params)
-        assert x[0].shape == (2, 3, 4)
-        assert x[0].dtype == int
-        assert x[1].shape == (2, 3, 4)
-        assert x[1].dtype == bool
-        xn = (np.array([1, 2]).reshape((2, 1, 1)) +
-              np.array([10, 20, 30]).reshape((1, 3, 1)) +
-              np.array([100, 200, 300, 400]).reshape((1, 1, 4)))
-        assert_allclose(x[0], xn)
-        assert np.all(x[1][1, ...])
-
-    def test_param_runner_np_dict(self):
-        def foo(a, b, c):
-            return a + b + c
+    def test_dict(self):
         params = OrderedDict((('a', [1, 2]),
                               ('b', [10, 20, 30]),
                               ('c', [100, 200, 300, 400])))
-        x = [*np_param_runner(foo, params)]
+        x = case_runner(foo1, params)
         xn = (np.array([1, 2]).reshape((2, 1, 1)) +
               np.array([10, 20, 30]).reshape((1, 3, 1)) +
               np.array([100, 200, 300, 400]).reshape((1, 1, 4)))
         assert_allclose(x, xn)
 
-    def test_xr_param_runner(self):
+    def test_multires(self):
+        params = [('a', [1, 2]),
+                  ('b', [10, 20, 30]),
+                  ('c', [100, 200, 300, 400])]
+        x, y = case_runner(foo2, params, split=True)
+        xn = (np.array([1, 2]).reshape((2, 1, 1)) +
+              np.array([10, 20, 30]).reshape((1, 3, 1)) +
+              np.array([100, 200, 300, 400]).reshape((1, 1, 4)))
+        yn = (np.array([1, 2]).reshape((2, 1, 1)) %
+              np.array([2]*24).reshape((2, 3, 4))) == 0
+        assert_allclose(x, xn)
+        assert_allclose(y, yn)
+
+
+class TestParallelCaseRunner:
+    def test_basic(self):
+        params = (('a', [1, 2]),
+                  ('b', [10, 20, 30]),
+                  ('c', [100, 200, 300, 400]))
+        x = parallel_case_runner(foo1s, params)
+        xn = (np.array([1, 2]).reshape((2, 1, 1)) +
+              np.array([10, 20, 30]).reshape((1, 3, 1)) +
+              np.array([100, 200, 300, 400]).reshape((1, 1, 4)))
+        assert_allclose(x, xn)
+
+    def test_multires(self):
+        params = (('a', [1, 2]),
+                  ('b', [10, 20, 30]),
+                  ('c', [100, 200, 300, 400]))
+        x = parallel_case_runner(foo2s, params)
+        xn = (np.array([1, 2]).reshape((2, 1, 1)) +
+              np.array([10, 20, 30]).reshape((1, 3, 1)) +
+              np.array([100, 200, 300, 400]).reshape((1, 1, 4)))
+        assert_allclose(x[0], xn)
+        assert np.all(x[1][1, ...])
+
+    def test_dict(self):
+        params = OrderedDict((('a', [1, 2]),
+                              ('b', [10, 20, 30]),
+                              ('c', [100, 200, 300, 400])))
+        x = [*parallel_case_runner(foo1s, params)]
+        xn = (np.array([1, 2]).reshape((2, 1, 1)) +
+              np.array([10, 20, 30]).reshape((1, 3, 1)) +
+              np.array([100, 200, 300, 400]).reshape((1, 1, 4)))
+        assert_allclose(x, xn)
+
+
+class TestXRCaseRunner:
+    def test_basic(self):
         def foo(a, b, c):
             return a + b + c
         params = (('a', [1, 2]),
                   ('b', [10, 20, 30]),
                   ('c', [100, 200, 300, 400]))
-        ds = xr_param_runner(foo, params, 'bananas')
+        ds = xr_case_runner(foo, params, 'bananas')
         assert ds.sel(a=2, b=30, c=400)['bananas'].data == 432
 
-    def test_xr_param_runner_multiresult(self):
+    def test_multiresult(self):
         def foo(a, b, c):
             return a + b + c, a % 2 == 0
         params = (('a', [1, 2]),
                   ('b', [10, 20, 30]),
                   ('c', [100, 200, 300, 400]))
-        ds = xr_param_runner(foo, params, ['bananas', 'cakes'])
+        ds = xr_case_runner(foo, params, ['bananas', 'cakes'])
         assert ds.bananas.data.dtype == int
         assert ds.cakes.data.dtype == bool
         assert ds.sel(a=2, b=30, c=400)['bananas'].data == 432
