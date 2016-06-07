@@ -1,10 +1,11 @@
 from pytest import fixture
-
 import numpy as np
 import xarray as xr
-
 from ..plot.matplotlib_plotter import (
     xmlineplot
+    )
+from ..plot.plotly_plotter import (
+    ilineplot,
     )
 
 
@@ -24,3 +25,17 @@ class TestXmlineplot:
     def test_works_at_all(self, dataset_3d):
         ds = dataset_3d
         xmlineplot(ds, "y", "x", "z")
+
+    def test_works_1d(self, dataset_3d):
+        ds = dataset_3d
+        xmlineplot(ds.loc[{"z": "c"}], "y", "x")
+
+
+class TestILinePlot:
+    def test_works_at_all(self, dataset_3d):
+        ds = dataset_3d
+        ilineplot(ds, "y", "x", "z", return_fig=True)
+
+    def test_works_1d(self, dataset_3d):
+        ds = dataset_3d
+        ilineplot(ds.loc[{"z": "c"}], "y", "x", return_fig=True)

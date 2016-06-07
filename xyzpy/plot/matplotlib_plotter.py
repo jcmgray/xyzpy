@@ -99,23 +99,28 @@ def mplot(x, y_i, fignum=1, logx=False, logy=False,
 # Plots with matplotlib and xarray                                           #
 # -------------------------------------------------------------------------- #
 
-def xmlineplot(ds, y_coo, x_coo, z_coo,
+def xmlineplot(ds, y_coo, x_coo, z_coo=None,
                color=False, colormap="viridis", legend=None, markers=None,
-               line_styles=None, zticks=None,
                xlabel=None, xlims=None, xticks=None, logx=False,
                ylabel=None, ylims=None, yticks=None, logy=False,
-               zlabel=None, padding=0.0, vlines=None, hlines=None,
-               title=None, fignum=1, font="Arial", **kwargs):
+               zlabel=None, padding=0.0, vlines=None, hlines=None, zticks=None,
+               line_styles=None, title=None, fignum=1, font="Arial",
+               fontsize_title=20,
+               fontsize_ticks=16,
+               fontsize_xlabel=20,
+               fontsize_ylabel=20,
+               fontsize_zlabel=20,
+               ):
     """ Function for automatically plotting multiple sets of data
     using matplotlib and xarray. """
 
+    # TODO: set custom line and marker for single plot
+    # TODO: add graph to existing fig, return fig, axes location
+    # TODO: log color map
     # TODO: fallback fonts
     # TODO: font size
-    # TODO: no z_coo
-    # TODO: add graph to existing fig, return fig, axes location
     # TODO: homogenise options with plotly
     # TODO: docs
-    # TODO: log color map
 
     import matplotlib as mpl
     import matplotlib.pyplot as plt
@@ -123,49 +128,57 @@ def xmlineplot(ds, y_coo, x_coo, z_coo,
 
     fig = plt.figure(fignum, figsize=(8, 6), dpi=100)
     axes = fig.add_axes([0.15, 0.15, 0.8, 0.75])
-    axes.set_title("" if title is None else title)
-    axes.tick_params(labelsize=16)
+    axes.set_title("" if title is None else title, fontsize=fontsize_title)
+    axes.tick_params(labelsize=fontsize_ticks)
 
-    # Use a colormap
-    if color:
-        from matplotlib import cm
-        cmap = getattr(cm, colormap)
-        zmin, zmax = ds[z_coo].values.min(), ds[z_coo].values.max()
-        cols = [cmap(1 - (z-zmin)/(zmax-zmin)) for z in ds[z_coo].values]
-    else:
-        cols = repeat(None)
-
-    # Decide on using markers, and set custom markers and line-styles
     markers = (len(ds[y_coo]) <= 50) if markers is None else markers
-    mrkrs = cycle(mpl_markers()) if markers else repeat(None)
-    lines = repeat("-") if line_styles is None else cycle(line_styles)
 
-    # Set custom names for each line ("ztick")
-    custom_zticks = zticks is not None
-    if custom_zticks:
-        zticks = iter(zticks)
+    if z_coo is not None:
+        # Use a colormap
+        if color:
+            from matplotlib import cm
+            cmap = getattr(cm, colormap)
+            zmin, zmax = ds[z_coo].values.min(), ds[z_coo].values.max()
+            cols = [cmap(1 - (z-zmin)/(zmax-zmin)) for z in ds[z_coo].values]
+        else:
+            cols = repeat(None)
 
-    # ----------------------------------------------------------------------- #
-    # Plot Lines                                                              #
-    # ----------------------------------------------------------------------- #
-    for z, col, mrkr, ln in zip(ds[z_coo].data, cols, mrkrs, lines):
-        x = ds.loc[{z_coo: z}][x_coo].data.flatten()
-        y = ds.loc[{z_coo: z}][y_coo].data.flatten()
-        label = next(zticks) if custom_zticks else str(z)
-        axes.plot(x, y, ln, c=col, lw=1.3, marker=mrkr,
-                  label=label, zorder=3, **kwargs)
+        # Decide on using markers, and set custom markers and line-styles
+        mrkrs = cycle(mpl_markers()) if markers else repeat(None)
+        lines = repeat("-") if line_styles is None else cycle(line_styles)
 
-    # Add a legend
-    if legend or not (legend is False or len(ds[z_coo]) > 10):
-        legend = axes.legend(title=(z_coo if zlabel is None else zlabel),
-                             loc="best", fontsize=16, frameon=False)
-        legend.get_title().set_fontsize(20)
+        # Set custom names for each line ("ztick")
+        custom_zticks = zticks is not None
+        if custom_zticks:
+            zticks = iter(zticks)
+
+        # Cycle through lines and plot
+        for z, col, mrkr, ln in zip(ds[z_coo].data, cols, mrkrs, lines):
+            x = ds.loc[{z_coo: z}][x_coo].data.flatten()
+            y = ds.loc[{z_coo: z}][y_coo].data.flatten()
+            label = next(zticks) if custom_zticks else str(z)
+            axes.plot(x, y, ln, c=col, lw=1.3, marker=mrkr,
+                      label=label, zorder=3)
+        # Add a legend
+        if legend or not (legend is False or len(ds[z_coo]) > 10):
+            legend = axes.legend(title=(z_coo if zlabel is None else zlabel),
+                                 loc="best", fontsize=16, frameon=False)
+            legend.get_title().set_fontsize(fontsize_zlabel)
+    else:
+        # Plot single line
+        x = ds[x_coo].data.flatten()
+        y = ds[y_coo].data.flatten()
+        # line_styles
+        # marker
+        axes.plot(x, y, lw=1.3, zorder=3, marker=("." if markers else None))
 
     # Set axis scale-type and names
     axes.set_xscale("log" if logx else "linear")
     axes.set_yscale("log" if logy else "linear")
-    axes.set_xlabel(x_coo if xlabel is None else xlabel, fontsize=20)
-    axes.set_ylabel(y_coo if ylabel is None else ylabel, fontsize=20)
+    axes.set_xlabel(x_coo if xlabel is None else xlabel,
+                    fontsize=fontsize_xlabel)
+    axes.set_ylabel(y_coo if ylabel is None else ylabel,
+                    fontsize=fontsize_ylabel)
 
     # Set plot range
     if xlims is None:
