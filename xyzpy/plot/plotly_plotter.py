@@ -4,9 +4,12 @@ Functions for plotting datasets nicely.
 # TODO: unify options with xmlinplot
 # TODO: plotly hlines, vlines
 # TODO: names
-from math import log
+# TODO: reverse color
+# TODO: logarithmic color
+
 from itertools import repeat
 import numpy as np
+from .color import calc_colors
 
 
 def ishow(figs, nb=True, **kwargs):
@@ -129,10 +132,22 @@ def iheatmap(ds, data_name, x_coo, y_coo, colormap="Portland",
     ishow(fig, nb=nb, **kwargs)
 
 
-def ilineplot(ds, data_name, x_coo, z_coo=None, logx=False, logy=False,
-              erry=None, errx=None, nb=True, color=False, colormap="viridis",
-              log_color=False, legend=None, traces=[], go_dict={},
-              ly_dict={}, return_fig=False, **kwargs):
+def ilineplot(ds, data_name, x_coo, z_coo=None,
+              logx=False,
+              logy=False,
+              erry=None,
+              errx=None,
+              nb=True,
+              color=False,
+              colormap="viridis",
+              colormap_reverse=False,
+              colormap_log=False,
+              legend=None,
+              traces=[],
+              go_dict={},
+              ly_dict={},
+              return_fig=False,
+              **kwargs):
     # TODO: add hlines, vlines, xlims, ylims, title
 
     from plotly.graph_objs import Scatter
@@ -141,7 +156,10 @@ def ilineplot(ds, data_name, x_coo, z_coo=None, logx=False, logy=False,
         traces = [Scatter({"x": ds[x_coo].values,
                            "y": ds[data_name].values.flatten(), **go_dict})]
     else:
-        cols = (calc_colors(ds, z_coo, colormap=colormap, log_scale=log_color)
+        cols = (calc_colors(ds, z_coo,
+                            colormap=colormap,
+                            log_scale=colormap_log,
+                            reverse=colormap_reverse)
                 if color else repeat(None))
         traces = [Scatter({
                     "x": ds.loc[{z_coo: z}][x_coo].values.flatten(),
@@ -164,18 +182,3 @@ def ilineplot(ds, data_name, x_coo, z_coo=None, logx=False, logy=False,
     if return_fig:
         return fig
     ishow(fig, nb=nb, **kwargs)
-
-
-def calc_colors(ds, z_coo, colormap="viridis", log_scale=False):
-    import matplotlib.cm as cm
-    cmap = getattr(cm, colormap)
-    zmin = ds[z_coo].values.min()
-    zmax = ds[z_coo].values.max()
-    if log_scale:
-        cols = ["rgba" + str(cmap(1 -
-                                  (log(z)-log(zmin))/(log(zmax)-log(zmin))))
-                for z in ds[z_coo].values]
-    else:
-        cols = ["rgba" + str(cmap(1 - (z - zmin) / (zmax - zmin)))
-                for z in ds[z_coo].values]
-    return cols

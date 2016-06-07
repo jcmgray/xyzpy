@@ -11,6 +11,7 @@ from itertools import cycle
 from collections import OrderedDict
 from itertools import repeat
 import numpy as np
+from .color import calc_colors
 
 
 # -------------------------------------------------------------------------- #
@@ -100,11 +101,29 @@ def mplot(x, y_i, fignum=1, logx=False, logy=False,
 # -------------------------------------------------------------------------- #
 
 def xmlineplot(ds, y_coo, x_coo, z_coo=None,
-               color=False, colormap="viridis", legend=None, markers=None,
-               xlabel=None, xlims=None, xticks=None, logx=False,
-               ylabel=None, ylims=None, yticks=None, logy=False,
-               zlabel=None, padding=0.0, vlines=None, hlines=None, zticks=None,
-               line_styles=None, title=None, fignum=1, font="Arial",
+               color=False,
+               colormap="viridis",
+               colormap_log=False,
+               colormap_reverse=False,
+               xlabel=None,
+               xlims=None,
+               xticks=None,
+               logx=False,
+               ylabel=None,
+               ylims=None,
+               yticks=None,
+               logy=False,
+               zlabel=None,
+               padding=0.0,
+               vlines=None,
+               hlines=None,
+               zticks=None,
+               legend=None,
+               markers=None,
+               line_styles=None,
+               title=None,
+               fignum=1,
+               font="Arial",
                fontsize_title=20,
                fontsize_ticks=16,
                fontsize_xlabel=20,
@@ -136,10 +155,11 @@ def xmlineplot(ds, y_coo, x_coo, z_coo=None,
     if z_coo is not None:
         # Use a colormap
         if color:
-            from matplotlib import cm
-            cmap = getattr(cm, colormap)
-            zmin, zmax = ds[z_coo].values.min(), ds[z_coo].values.max()
-            cols = [cmap(1 - (z-zmin)/(zmax-zmin)) for z in ds[z_coo].values]
+            cols = calc_colors(ds, z_coo,
+                               plotly=False,
+                               colormap=colormap,
+                               log_scale=colormap_log,
+                               reverse=colormap_reverse)
         else:
             cols = repeat(None)
 
