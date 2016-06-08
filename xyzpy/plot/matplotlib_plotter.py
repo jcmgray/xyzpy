@@ -115,10 +115,12 @@ def xmlineplot(ds, y_coo, x_coo, z_coo=None,
                fignum=1,
                font="Arial",
                xlabel=None,
+               xlabel_pad=10,
                xlims=None,
                xticks=None,
                logx=False,
                ylabel=None,
+               ylabel_pad=10,
                ylims=None,
                yticks=None,
                logy=False,
@@ -222,8 +224,10 @@ def xmlineplot(ds, y_coo, x_coo, z_coo=None,
     axes.set_yscale("log" if logy else "linear")
     axes.set_xlabel(x_coo if xlabel is None else xlabel,
                     fontsize=fontsize_xlabel)
+    axes.xaxis.labelpad = xlabel_pad
     axes.set_ylabel(y_coo if ylabel is None else ylabel,
                     fontsize=fontsize_ylabel)
+    axes.yaxis.labelpad = ylabel_pad
 
     # Set plot range
     if xlims is None:
