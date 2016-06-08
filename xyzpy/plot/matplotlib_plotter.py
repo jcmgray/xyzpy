@@ -107,6 +107,7 @@ def xmlineplot(ds, y_coo, x_coo, z_coo=None,
                colormap_log=False,
                colormap_reverse=False,
                legend=None,
+               legend_loc=0,
                legend_ncol=1,
                markers=None,
                line_styles=None,
@@ -205,7 +206,7 @@ def xmlineplot(ds, y_coo, x_coo, z_coo=None,
         # Add a legend
         if legend or not (legend is False or len(ds[z_coo]) > 10):
             lgnd = axes.legend(title=(z_coo if zlabel is None else zlabel),
-                               loc="best", fontsize=fontsize_legend,
+                               loc=legend_loc, fontsize=fontsize_legend,
                                frameon=False, ncol=legend_ncol)
             lgnd.get_title().set_fontsize(fontsize_zlabel)
     else:
