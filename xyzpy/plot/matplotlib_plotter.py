@@ -6,6 +6,7 @@ Functions for plotting datasets nicely.
 # TODO: logcolor
 # TODO: names
 # TODO: modularise, with mian fig func, xarray handler, and basic plotter
+# TODO: mshow?
 
 from itertools import cycle
 from collections import OrderedDict
@@ -101,10 +102,17 @@ def mplot(x, y_i, fignum=1, logx=False, logy=False,
 # -------------------------------------------------------------------------- #
 
 def xmlineplot(ds, y_coo, x_coo, z_coo=None,
-               color=False,
+               color=[None],
                colormap="viridis",
                colormap_log=False,
                colormap_reverse=False,
+               legend=None,
+               legend_ncol=1,
+               markers=None,
+               line_styles=None,
+               line_widths=None,
+               fignum=1,
+               font="Arial",
                xlabel=None,
                xlims=None,
                xticks=None,
@@ -118,50 +126,60 @@ def xmlineplot(ds, y_coo, x_coo, z_coo=None,
                vlines=None,
                hlines=None,
                zticks=None,
-               legend=None,
-               markers=None,
-               line_styles=None,
                title=None,
-               fignum=1,
-               font="Arial",
                fontsize_title=20,
                fontsize_ticks=16,
                fontsize_xlabel=20,
                fontsize_ylabel=20,
                fontsize_zlabel=20,
+               fontsize_legend=18,
+               add_to_fig=None,
+               new_axes_loc=[0.4, 0.6, 0.30, 0.25],
+               add_to_axes=None,
+               zorder=3,
                ):
     """ Function for automatically plotting multiple sets of data
     using matplotlib and xarray. """
 
-    # TODO: set custom line and marker for single plot
-    # TODO: add graph to existing fig, return fig, axes location
-    # TODO: log color map
+    # TODO: set custom line and marker for single line
     # TODO: fallback fonts
-    # TODO: font size
-    # TODO: homogenise options with plotly
+    # TODO: homogenise options with plotly, mplot etc
     # TODO: docs
+    # TODO: set colors explicitly.
+    # TODO: set canvas size, side by side plots etc.
+    # TODO: annotations, arbitrary text
 
     import matplotlib as mpl
     import matplotlib.pyplot as plt
     mpl.rc("font", family=font)
 
-    fig = plt.figure(fignum, figsize=(8, 6), dpi=100)
-    axes = fig.add_axes([0.15, 0.15, 0.8, 0.75])
-    axes.set_title("" if title is None else title, fontsize=fontsize_title)
-    axes.tick_params(labelsize=fontsize_ticks)
+    if add_to_fig is not None:
+        fig = add_to_fig
+        axes = fig.add_axes(new_axes_loc)
+        axes.set_title("" if title is None else title, fontsize=fontsize_title)
+        axes.tick_params(labelsize=fontsize_ticks)
+    elif add_to_axes is not None:
+        fig = add_to_axes
+        axes = fig.get_axes()[-1]
+    else:
+        fig = plt.figure(fignum, figsize=(8, 6), dpi=100)
+        axes = fig.add_axes([0.15, 0.15, 0.8, 0.75])
+        axes.set_title("" if title is None else title, fontsize=fontsize_title)
+        axes.tick_params(labelsize=fontsize_ticks)
 
     markers = (len(ds[y_coo]) <= 50) if markers is None else markers
 
     if z_coo is not None:
-        # Use a colormap
-        if color:
+
+        # Color lines
+        if color is True:
             cols = calc_colors(ds, z_coo,
                                plotly=False,
                                colormap=colormap,
                                log_scale=colormap_log,
                                reverse=colormap_reverse)
         else:
-            cols = repeat(None)
+            cols = cycle(color)
 
         # Decide on using markers, and set custom markers and line-styles
         mrkrs = cycle(mpl_markers()) if markers else repeat(None)
@@ -172,18 +190,24 @@ def xmlineplot(ds, y_coo, x_coo, z_coo=None,
         if custom_zticks:
             zticks = iter(zticks)
 
+        if line_widths is not None:
+            lws = cycle(line_widths)
+        else:
+            lws = cycle([1.3])
+
         # Cycle through lines and plot
         for z, col, mrkr, ln in zip(ds[z_coo].data, cols, mrkrs, lines):
             x = ds.loc[{z_coo: z}][x_coo].data.flatten()
             y = ds.loc[{z_coo: z}][y_coo].data.flatten()
             label = next(zticks) if custom_zticks else str(z)
-            axes.plot(x, y, ln, c=col, lw=1.3, marker=mrkr,
-                      label=label, zorder=3)
+            axes.plot(x, y, ln, c=col, lw=next(lws), marker=mrkr,
+                      label=label, zorder=zorder)
         # Add a legend
         if legend or not (legend is False or len(ds[z_coo]) > 10):
-            legend = axes.legend(title=(z_coo if zlabel is None else zlabel),
-                                 loc="best", fontsize=16, frameon=False)
-            legend.get_title().set_fontsize(fontsize_zlabel)
+            lgnd = axes.legend(title=(z_coo if zlabel is None else zlabel),
+                               loc="best", fontsize=fontsize_legend,
+                               frameon=False, ncol=legend_ncol)
+            lgnd.get_title().set_fontsize(fontsize_zlabel)
     else:
         # Plot single line
         x = ds[x_coo].data.flatten()
