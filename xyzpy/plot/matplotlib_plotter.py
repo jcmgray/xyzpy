@@ -130,6 +130,7 @@ def xmlineplot(ds, y_coo, x_coo, z_coo=None,
                hlines=None,
                zticks=None,
                title=None,
+               gridlines=True,
                fontsize_title=20,
                fontsize_ticks=16,
                fontsize_xlabel=20,
@@ -250,7 +251,8 @@ def xmlineplot(ds, y_coo, x_coo, z_coo=None,
         axes.get_yaxis().set_major_formatter(mpl.ticker.ScalarFormatter())
 
     # Add grid and any custom lines
-    axes.grid(True, color="0.666")
+    if gridlines:
+        axes.grid(True, color="0.666")
     if vlines is not None:
         for x in vlines:
             axes.axvline(x)
