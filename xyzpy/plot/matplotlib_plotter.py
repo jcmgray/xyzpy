@@ -8,7 +8,7 @@ Functions for plotting datasets nicely.
 # TODO: modularise, with mian fig func, xarray handler, and basic plotter
 # TODO: mshow?
 
-from itertools import cycle
+from itertools import cycle as icycle
 from collections import OrderedDict
 from itertools import repeat
 import numpy as np
@@ -74,7 +74,7 @@ def mplot(x, y_i, fignum=1, logx=False, logy=False,
     axes = fig.add_axes([0.1, 0.1, 0.85, 0.8])
 
     if markers:
-        mrkrs = cycle(mpl_markers())
+        mrkrs = icycle(mpl_markers())
     else:
         repeat(None)
 
@@ -100,6 +100,7 @@ def mplot(x, y_i, fignum=1, logx=False, logy=False,
 # -------------------------------------------------------------------------- #
 # Plots with matplotlib and xarray                                           #
 # -------------------------------------------------------------------------- #
+
 
 def xmlineplot(ds, y_coo, x_coo, z_coo=None,
                color=[None],
@@ -141,11 +142,14 @@ def xmlineplot(ds, y_coo, x_coo, z_coo=None,
                new_axes_loc=[0.4, 0.6, 0.30, 0.25],
                add_to_axes=None,
                zorder=3,
+               figsize=(8, 6),
+               subplot=None,
                ):
     """ Function for automatically plotting multiple sets of data
     using matplotlib and xarray. """
 
     # TODO: set custom line and marker for single line
+    # TODO: hide ticklabels but not ticks and gridlines.
     # TODO: fallback fonts
     # TODO: homogenise options with plotly, mplot etc
     # TODO: docs
@@ -157,19 +161,23 @@ def xmlineplot(ds, y_coo, x_coo, z_coo=None,
     import matplotlib.pyplot as plt
     mpl.rc("font", family=font)
 
-    if add_to_fig is not None:
+    if add_to_fig is not None and subplot is None:
         fig = add_to_fig
         axes = fig.add_axes(new_axes_loc)
-        axes.set_title("" if title is None else title, fontsize=fontsize_title)
-        axes.tick_params(labelsize=fontsize_ticks)
     elif add_to_axes is not None:
         fig = add_to_axes
-        axes = fig.get_axes()[-1]
+        axes = fig.get_axes()[0]
+    elif subplot is not None:
+        if add_to_fig is not None:
+            fig = add_to_fig
+        else:
+            fig = plt.figure(fignum, figsize=figsize, dpi=100)
+        axes = fig.add_subplot(subplot)
     else:
-        fig = plt.figure(fignum, figsize=(8, 6), dpi=100)
+        fig = plt.figure(fignum, figsize=figsize, dpi=100)
         axes = fig.add_axes([0.15, 0.15, 0.8, 0.75])
-        axes.set_title("" if title is None else title, fontsize=fontsize_title)
-        axes.tick_params(labelsize=fontsize_ticks)
+    axes.set_title("" if title is None else title, fontsize=fontsize_title)
+    axes.tick_params(labelsize=fontsize_ticks)
 
     markers = (len(ds[y_coo]) <= 50) if markers is None else markers
 
@@ -183,11 +191,11 @@ def xmlineplot(ds, y_coo, x_coo, z_coo=None,
                                log_scale=colormap_log,
                                reverse=colormap_reverse)
         else:
-            cols = cycle(color)
+            cols = icycle(color)
 
         # Decide on using markers, and set custom markers and line-styles
-        mrkrs = cycle(mpl_markers()) if markers else repeat(None)
-        lines = repeat("-") if line_styles is None else cycle(line_styles)
+        mrkrs = icycle(mpl_markers()) if markers else repeat(None)
+        lines = repeat("-") if line_styles is None else icycle(line_styles)
 
         # Set custom names for each line ("ztick")
         custom_zticks = zticks is not None
@@ -195,14 +203,17 @@ def xmlineplot(ds, y_coo, x_coo, z_coo=None,
             zticks = iter(zticks)
 
         if line_widths is not None:
-            lws = cycle(line_widths)
+            lws = icycle(line_widths)
         else:
-            lws = cycle([1.3])
+            lws = icycle([1.3])
 
         # Cycle through lines and plot
         for z, col, mrkr, ln in zip(ds[z_coo].data, cols, mrkrs, lines):
-            x = ds.loc[{z_coo: z}][x_coo].data.flatten()
-            y = ds.loc[{z_coo: z}][y_coo].data.flatten()
+            sds = ds.loc[{z_coo: z}]
+            x = sds[x_coo].data.flatten()
+            y = sds[y_coo].data.flatten()
+            nans = np.logical_not(np.isnan(x) | np.isnan(y))
+            x, y = x[nans], y[nans]
             label = next(zticks) if custom_zticks else str(z)
             axes.plot(x, y, ln, c=col, lw=next(lws), marker=mrkr,
                       label=label, zorder=zorder)

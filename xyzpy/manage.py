@@ -6,6 +6,7 @@ import xarray as xr
 
 def xrsmoosh(*dss, accept_new=False):
     """ Aggregates xarray Datasets and DataArrays """
+    # TODO: rename --> aggregate, look into, part_align -> concat.
     ds = dss[0]
     for new_ds in dss[1:]:
         # First make sure both datasets have the same variables
@@ -43,6 +44,7 @@ def xrload(file_name, engine="h5netcdf", load_to_mem=True,
 
 def xrsave(ds, file_name, engine="h5netcdf"):
     """ Saves a xarray dataset. """
+    # TODO: look for "." and append .xyz if not found
     ds.to_netcdf(file_name, engine=engine)
 
 
