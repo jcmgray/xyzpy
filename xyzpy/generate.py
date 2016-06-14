@@ -3,24 +3,40 @@ Generate datasets from function and parameter lists
 """
 # TODO: find NaNs in xarray and perform cases
 
-from functools import partial
-from itertools import product, cycle
-
-from multiprocessing import Pool
+import functools
+import itertools
+import operator
+import multiprocessing
 
 import numpy as np
 import xarray as xr
 from tqdm import tqdm, tqdm_notebook
 
 
+def prod(a):
+    """ Product of iterable """
+    return functools.reduce(operator.mul, a)
+
+
 def progbar(it, nb=False, **kwargs):
-    """
-    Turn any iterable into a progress bar, with notebook version.
-    """
+    """ Turn any iterable into a progress bar, with notebook version. """
+    defaults = {'ascii': True}
+    settings = {**defaults, **kwargs}
     if nb:
-        return tqdm_notebook(it, **kwargs)
+        return tqdm_notebook(it, **settings)
     else:
-        return tqdm(it, ascii=True, **kwargs)
+        return tqdm(it, **settings)
+
+
+def parse_cases(cases):
+    """ Turn dicts and single tuples into proper form for case runners. """
+    if isinstance(cases, dict):
+        cases = tuple(cases.items())
+    elif isinstance(cases[0], str):
+        cases = (cases,)
+    else:
+        cases = tuple(cases)
+    return cases
 
 
 def case_runner(fn, cases, constants=None, split=False, progbars=0,
@@ -95,21 +111,16 @@ def case_runner(fn, cases, constants=None, split=False, progbars=0,
     """
 
     # Prepare cases
-    if isinstance(cases, dict):
-        cases = tuple(cases.items())
-    elif isinstance(cases[0], str):
-        cases = (cases,)
-    else:
-        cases = tuple(cases)
+    cases = parse_cases(cases)
     fn_args, _ = zip(*cases)
 
     # Prepare Function
     if constants is not None:
-        fn = partial(fn, **dict(constants))
+        fn = functools.partial(fn, **dict(constants))
 
     # Evaluate cases in parallel
-    if parallel or processes is not None:
-        p = Pool(processes=processes)
+    if parallel or (processes is not None and processes > 1):
+        p = multiprocessing.Pool(processes=processes)
 
         # Submit jobs in parallel and in nested structure
         def submit_jobs(fn, cases, _l=0):
@@ -118,7 +129,7 @@ def case_runner(fn, cases, constants=None, split=False, progbars=0,
                 if len(cases) == 1:
                     yield p.apply_async(fn, kwds={arg: x})
                 else:
-                    sub_fn = partial(fn, **{arg: x})
+                    sub_fn = functools.partial(fn, **{arg: x})
                     yield tuple(submit_jobs(sub_fn, cases[1:], _l+1))
 
         # Run through nested structure retrieving results
@@ -134,6 +145,7 @@ def case_runner(fn, cases, constants=None, split=False, progbars=0,
         futures = tuple(submit_jobs(fn, cases))
         outputs = tuple(zip(*get_outputs(futures)))
 
+    # Evaluate cases sequentially
     else:
         def sub_case_runner(fn, cases, _l=0):
             arg, inputs = cases[0]
@@ -142,7 +154,7 @@ def case_runner(fn, cases, constants=None, split=False, progbars=0,
                 if len(cases) == 1:
                     yield fn(**{arg: x}) if split else [fn(**{arg: x})]
                 else:
-                    sub_fn = partial(fn, **{arg: x})
+                    sub_fn = functools.partial(fn, **{arg: x})
                     yield tuple(zip(*sub_case_runner(sub_fn, cases[1:], _l+1)))
 
         outputs = tuple(zip(*sub_case_runner(fn, cases)))
@@ -186,6 +198,7 @@ def xr_case_runner(fn, cases, var_names, var_dims=([],),
         split = False
     else:
         split = True
+        var_dims = itertools.cycle(var_dims)
 
     # Generate the data
     vdatas = case_runner(fn, cases, split=split, **kwargs)
@@ -196,7 +209,7 @@ def xr_case_runner(fn, cases, var_names, var_dims=([],),
     ds = xr.Dataset(coords={**dict(cases), **dict(var_coords)})
 
     # Set Dataset dataarrays
-    for vdata, vname, vdims in zip(vdatas, var_names, cycle(var_dims)):
+    for vdata, vname, vdims in zip(vdatas, var_names, var_dims):
         ds[vname] = (tuple(case_names) + tuple(vdims), np.asarray(vdata))
 
     return ds
@@ -215,15 +228,14 @@ def numpy_case_runner(fn, cases, progbars=0, processes=None):
     -------
         x: list of arrays, one for each return object of fn,
             each with ndim == len(cases) """
+    cases = parse_cases(cases)
+    fn_args, fn_inputs = zip(*cases)
 
-    fn_args, fn_inputs = zip(*(cases.items() if isinstance(cases, dict) else
-                               cases))
-
-    cfgs = product(*fn_inputs)
+    cfgs = itertools.product(*fn_inputs)
     shp_inputs = [len(inputs) for inputs in fn_inputs]
-    coos = product(*(range(i) for i in shp_inputs))
+    coos = itertools.product(*(range(i) for i in shp_inputs))
     first_run = True
-    p = Pool(processes=processes)
+    p = multiprocessing.Pool(processes=processes)
     fx = [p.apply_async(fn, kwds=dict(zip(fn_args, cfg))) for cfg in cfgs]
     for res, coo in progbar(zip(fx, coos),
                             total=np.prod(shp_inputs), disable=progbars < 1):
@@ -241,3 +253,32 @@ def numpy_case_runner(fn, cases, progbars=0, processes=None):
         else:
             x[coo] = res
     return x
+
+
+def config_runner(fn, fn_args, configs, constants=None, split=False,
+                  progbars=0, parallel=False, processes=None, progbar_opts={}):
+
+    # Prepare Function
+    if constants is not None:
+        fn = functools.partial(fn, **dict(constants))
+
+    # Prepate fn_args and values
+    if isinstance(fn_args, str):
+        fn_args = (fn_args,)
+        configs = tuple((c,) for c in configs)
+
+    # Evaluate configurations in parallel
+    if parallel or (processes is not None and processes > 1):
+        p = multiprocessing.Pool(processes=processes)
+        fut = tuple(p.apply_async(fn, kwds=dict(zip(fn_args, c)))
+                    for c in configs)
+        xs = tuple(x.get() for x in progbar(fut, total=len(configs),
+                                            disable=progbars<1))
+
+    # Evaluate configutation sequentially
+    else:
+        xs = tuple(fn(**{arg: y for arg, y in zip(fn_args, cnfg)})
+                   for cnfg in progbar(configs, total=len(configs),
+                                       disable=progbars<1))
+
+    return xs if not split else tuple(zip(*xs))

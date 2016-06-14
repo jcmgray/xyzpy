@@ -7,6 +7,7 @@ from numpy.testing import assert_allclose
 
 from ..generate import (
     case_runner,
+    config_runner,
     xr_case_runner,
 )
 
@@ -156,7 +157,7 @@ class TestXRCaseRunner:
         assert ds.bananas.data.dtype == float
         assert_allclose(ds.sel(a=2, b=30)['bananas'].data,
                         [32.0, 32.1, 32.2, 32.3, 32.4,
-                         32.5, 32.6, 32.7, 32.8, 32.9,])
+                         32.5, 32.6, 32.7, 32.8, 32.9])
 
     def test_array_and_single_result(self):
         cases = (('a', [1, 2]),
@@ -169,3 +170,55 @@ class TestXRCaseRunner:
         assert ds.sel(a=2, b=30, sugar=14)['bananas'].data == 32.4
         with raises(KeyError):
             ds['ripe'].sel(sugar=12)
+
+    def test_double_array_return_with_same_dimensions(self):
+        def foo(a, b):
+            return [a + i*b for i in range(5)], [a - i*b for i in range(5)]
+        cases = (('a', [1, 2]),
+                 ('b', [10, 20, 30]))
+        ds = xr_case_runner(foo, cases,
+                            var_names=['apples', 'oranges'],
+                            var_dims=(['seeds'],),
+                            var_coords={'seeds': [*range(5)]})
+        assert ds.oranges.data.dtype == int
+        assert 'seeds' in ds.apples.coords
+        assert 'seeds' in ds.oranges.coords
+
+
+class TestConfigRunner:
+    def test_seq(self):
+        configs = ((1, 10, 100),
+                   (2, 20, 200),
+                   (3, 30, 300))
+        xs = config_runner(foo1, ('a', 'b', 'c'), configs)
+        assert xs == (111, 222, 333)
+
+    def test_constants(self):
+        configs = ((1,),
+                   (2,),
+                   (3,))
+        xs = config_runner(foo1, ('a', 'b', 'c'), configs,
+                           constants={'b':10, 'c':100})
+        assert xs == (111, 112, 113)
+
+    def test_parallel(self):
+        configs = ((1, 10, 100),
+                   (2, 20, 200),
+                   (3, 30, 300))
+        xs = config_runner(foo1, ('a', 'b', 'c'), configs, processes=2)
+        assert xs == (111, 222, 333)
+
+    def test_split(self):
+        configs = ((1, 10, 100),
+                   (2, 20, 200),
+                   (3, 30, 300))
+        a, b = config_runner(foo2, ('a', 'b', 'c'), configs, split=True)
+        assert a == (111, 222, 333)
+        assert b == (False, True, False)
+
+
+    def test_single_args(self):
+        configs = (1, 2, 3)
+        xs = config_runner(foo1, 'a', configs,
+                           constants={'b':10, 'c':100})
+        assert xs == (111, 112, 113)
