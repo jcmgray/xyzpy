@@ -5,27 +5,22 @@ Generate datasets from function and parameter lists
 
 import functools
 import itertools
-import operator
 import multiprocessing
 
 import numpy as np
 import xarray as xr
-from tqdm import tqdm, tqdm_notebook
-
-
-def prod(a):
-    """ Product of iterable """
-    return functools.reduce(operator.mul, a)
+import tqdm
 
 
 def progbar(it, nb=False, **kwargs):
     """ Turn any iterable into a progress bar, with notebook version. """
     defaults = {'ascii': True}
+    # Overide defaults with custom kwargs
     settings = {**defaults, **kwargs}
-    if nb:
-        return tqdm_notebook(it, **settings)
+    if nb:  # pragma: no cover
+        return tqdm.tqdm_notebook(it, **settings)
     else:
-        return tqdm(it, **settings)
+        return tqdm.tqdm(it, **settings)
 
 
 def parse_cases(cases):
@@ -215,49 +210,12 @@ def xr_case_runner(fn, cases, var_names, var_dims=([],),
     return ds
 
 
-def numpy_case_runner(fn, cases, progbars=0, processes=None):
-    """ Use numpy arrays to analyse function, now with progress bar
-
-    Parameters
-    ----------
-        fn: function to evaluate
-        cases: list of tuples [(parameter, [parameter values]), ... ]
-            or dictionary
-
-    Returns
-    -------
-        x: list of arrays, one for each return object of fn,
-            each with ndim == len(cases) """
-    cases = parse_cases(cases)
-    fn_args, fn_inputs = zip(*cases)
-
-    cfgs = itertools.product(*fn_inputs)
-    shp_inputs = [len(inputs) for inputs in fn_inputs]
-    coos = itertools.product(*(range(i) for i in shp_inputs))
-    first_run = True
-    p = multiprocessing.Pool(processes=processes)
-    fx = [p.apply_async(fn, kwds=dict(zip(fn_args, cfg))) for cfg in cfgs]
-    for res, coo in progbar(zip(fx, coos),
-                            total=np.prod(shp_inputs), disable=progbars < 1):
-        res = res.get()
-        if first_run:
-            multires = isinstance(res, (tuple, list))
-            if multires:
-                x = [np.empty(shape=shp_inputs, dtype=type(y)) for y in res]
-            else:
-                x = np.empty(shape=shp_inputs, dtype=type(res))
-            first_run = False
-        if multires:
-            for sx, y in zip(x, res):
-                sx[coo] = y
-        else:
-            x[coo] = res
-    return x
-
-
 def config_runner(fn, fn_args, configs, constants=None, split=False,
                   progbars=0, parallel=False, processes=None, progbar_opts={}):
-
+    """
+    Evaluate a function in many different configurations, optionally in
+    parallel and or with live progress.
+    """
     # Prepare Function
     if constants is not None:
         fn = functools.partial(fn, **dict(constants))

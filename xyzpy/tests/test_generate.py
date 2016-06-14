@@ -6,6 +6,7 @@ import numpy as np
 from numpy.testing import assert_allclose
 
 from ..generate import (
+    progbar,
     case_runner,
     config_runner,
     xr_case_runner,
@@ -48,6 +49,16 @@ def foo_t2(a, b):
     return [b + a + 0.1*i for i in range(10)], a % 2 == 0
 
 
+class TestProgbar:
+    def test_normal(self):
+        for i in progbar(range(10)):
+            pass
+
+    def test_overide_ascii(self):
+        for i in progbar(range(10), ascii=False):
+            pass
+
+
 class TestCaseRunner:
     def test_simple(self):
         cases = [('a', [1, 2]),
@@ -58,6 +69,12 @@ class TestCaseRunner:
               np.array([10, 20, 30]).reshape((1, 3, 1)) +
               np.array([100, 200, 300, 400]).reshape((1, 1, 4)))
         assert_allclose(x, xn)
+
+    def test_progbars(self):
+        cases = [('a', [1, 2]),
+                 ('b', [10, 20, 30]),
+                 ('c', [100, 200, 300, 400])]
+        case_runner(foo1, cases, progbars=3)
 
     def test_dict(self):
         cases = OrderedDict((('a', [1, 2]),
@@ -193,12 +210,19 @@ class TestConfigRunner:
         xs = config_runner(foo1, ('a', 'b', 'c'), configs)
         assert xs == (111, 222, 333)
 
+    def test_progbar(self):
+        configs = ((1, 10, 100),
+                   (2, 20, 200),
+                   (3, 30, 300))
+        xs = config_runner(foo1, ('a', 'b', 'c'), configs, progbars=1)
+        assert xs == (111, 222, 333)
+
     def test_constants(self):
         configs = ((1,),
                    (2,),
                    (3,))
         xs = config_runner(foo1, ('a', 'b', 'c'), configs,
-                           constants={'b':10, 'c':100})
+                           constants={'b': 10, 'c': 100})
         assert xs == (111, 112, 113)
 
     def test_parallel(self):
@@ -216,9 +240,8 @@ class TestConfigRunner:
         assert a == (111, 222, 333)
         assert b == (False, True, False)
 
-
     def test_single_args(self):
         configs = (1, 2, 3)
         xs = config_runner(foo1, 'a', configs,
-                           constants={'b':10, 'c':100})
+                           constants={'b': 10, 'c': 100})
         assert xs == (111, 112, 113)
