@@ -103,73 +103,83 @@ def mplot(x, y_i, fignum=1, logx=False, logy=False,
 
 
 def xmlineplot(ds, y_coo, x_coo, z_coo=None,
+               add_to_fig=None,
+               new_axes_loc=[0.4, 0.6, 0.30, 0.25],
+               add_to_axes=None,
+               figsize=(8, 6),
+               subplot=None,
+               fignum=1,
+               title=None,
+               padding=0.0,
+
                color=[None],
                colormap="viridis",
                colormap_log=False,
                colormap_reverse=False,
-               legend=None,
-               legend_loc=0,
-               legend_ncol=1,
+
                markers=None,
                line_styles=None,
                line_widths=None,
-               fignum=1,
-               font="Arial",
+               zorders=None,
+
+               legend=None,
+               legend_loc=0,
+               legend_ncol=1,
+
                xlabel=None,
                xlabel_pad=10,
                xlims=None,
                xticks=None,
+               xticklabels_hide=False,
                logx=False,
+
                ylabel=None,
                ylabel_pad=10,
                ylims=None,
                yticks=None,
+               yticklabels_hide=False,
                logy=False,
+
                zlabel=None,
-               padding=0.0,
+               zticks=None,
+
                vlines=None,
                hlines=None,
-               zticks=None,
-               title=None,
                gridlines=True,
+               font="Arial",
                fontsize_title=20,
                fontsize_ticks=16,
                fontsize_xlabel=20,
                fontsize_ylabel=20,
                fontsize_zlabel=20,
                fontsize_legend=18,
-               add_to_fig=None,
-               new_axes_loc=[0.4, 0.6, 0.30, 0.25],
-               add_to_axes=None,
-               zorder=3,
-               figsize=(8, 6),
-               subplot=None,
                ):
     """ Function for automatically plotting multiple sets of data
     using matplotlib and xarray. """
 
     # TODO: set custom line and marker for single line
-    # TODO: hide ticklabels but not ticks and gridlines.
     # TODO: fallback fonts
     # TODO: homogenise options with plotly, mplot etc
     # TODO: docs
-    # TODO: set colors explicitly.
-    # TODO: set canvas size, side by side plots etc.
     # TODO: annotations, arbitrary text
 
     import matplotlib as mpl
     import matplotlib.pyplot as plt
     mpl.rc("font", family=font)
 
+    # Add a new set of axes to an existing plot
     if add_to_fig is not None and subplot is None:
         fig = add_to_fig
         axes = fig.add_axes(new_axes_loc)
+    # Add lines to an existing set of axes
     elif add_to_axes is not None:
         fig = add_to_axes
         axes = fig.get_axes()[0]
     elif subplot is not None:
+        # Add new axes as subplot to exissting subplot
         if add_to_fig is not None:
             fig = add_to_fig
+        #
         else:
             fig = plt.figure(fignum, figsize=figsize, dpi=100)
         axes = fig.add_subplot(subplot)
@@ -177,46 +187,54 @@ def xmlineplot(ds, y_coo, x_coo, z_coo=None,
         fig = plt.figure(fignum, figsize=figsize, dpi=100)
         axes = fig.add_axes([0.15, 0.15, 0.8, 0.75])
     axes.set_title("" if title is None else title, fontsize=fontsize_title)
-    axes.tick_params(labelsize=fontsize_ticks)
 
+    # Color lines
+    if color is True:
+        cols = calc_colors(ds, z_coo, plotly=False, colormap=colormap,
+                           log_scale=colormap_log, reverse=colormap_reverse)
+    else:
+        cols = icycle(color)
+
+    # Decide on using markers, and set custom markers and line-styles
     markers = (len(ds[y_coo]) <= 50) if markers is None else markers
+    mrkrs = icycle(mpl_markers()) if markers else repeat(None)
+    lines = repeat("-") if line_styles is None else icycle(line_styles)
+
+    # Set custom names for each line ("ztick")
+    if zticks is not None:
+        zticks = iter(zticks)
+    elif z_coo is not None:
+        zticks = iter(str(z) for z in ds[z_coo].data)
+    else:
+        zticks = iter([None])
+
+    if line_widths is not None:
+        lws = icycle(line_widths)
+    else:
+        lws = icycle([1.3])
+
+    # What order lines appear over one another
+    if zorders is not None:
+        zorders = icycle(zorders)
+    else:
+        zorders = icycle([3])
 
     if z_coo is not None:
-
-        # Color lines
-        if color is True:
-            cols = calc_colors(ds, z_coo,
-                               plotly=False,
-                               colormap=colormap,
-                               log_scale=colormap_log,
-                               reverse=colormap_reverse)
-        else:
-            cols = icycle(color)
-
-        # Decide on using markers, and set custom markers and line-styles
-        mrkrs = icycle(mpl_markers()) if markers else repeat(None)
-        lines = repeat("-") if line_styles is None else icycle(line_styles)
-
-        # Set custom names for each line ("ztick")
-        custom_zticks = zticks is not None
-        if custom_zticks:
-            zticks = iter(zticks)
-
-        if line_widths is not None:
-            lws = icycle(line_widths)
-        else:
-            lws = icycle([1.3])
-
         # Cycle through lines and plot
         for z, col, mrkr, ln in zip(ds[z_coo].data, cols, mrkrs, lines):
+            # Select data for current z coord - flatten for singlet dimensions
             sds = ds.loc[{z_coo: z}]
             x = sds[x_coo].data.flatten()
             y = sds[y_coo].data.flatten()
+
+            # Trim out missing data
             nans = np.logical_not(np.isnan(x) | np.isnan(y))
             x, y = x[nans], y[nans]
-            label = next(zticks) if custom_zticks else str(z)
+
+            # add line to axes, with options cycled through
             axes.plot(x, y, ln, c=col, lw=next(lws), marker=mrkr,
-                      label=label, zorder=zorder)
+                      label=next(zticks), zorder=next(zorders))
+
         # Add a legend
         if legend or not (legend is False or len(ds[z_coo]) > 10):
             lgnd = axes.legend(title=(z_coo if zlabel is None else zlabel),
@@ -227,9 +245,9 @@ def xmlineplot(ds, y_coo, x_coo, z_coo=None,
         # Plot single line
         x = ds[x_coo].data.flatten()
         y = ds[y_coo].data.flatten()
-        # line_styles
-        # marker
-        axes.plot(x, y, lw=1.3, zorder=3, marker=("." if markers else None))
+        axes.plot(x, y, next(lines), lw=next(lws), zorder=next(zorders),
+                  c=next(cols), label=next(zticks),
+                  marker=("." if markers else None))
 
     # Set axis scale-type and names
     axes.set_xscale("log" if logx else "linear")
@@ -260,6 +278,11 @@ def xmlineplot(ds, y_coo, x_coo, z_coo=None,
     if yticks is not None:
         axes.set_yticks(yticks)
         axes.get_yaxis().set_major_formatter(mpl.ticker.ScalarFormatter())
+    if xticklabels_hide:
+        axes.get_xaxis().set_major_formatter(mpl.ticker.NullFormatter())
+    if yticklabels_hide:
+        axes.get_yaxis().set_major_formatter(mpl.ticker.NullFormatter())
+    axes.tick_params(labelsize=fontsize_ticks)
 
     # Add grid and any custom lines
     if gridlines:

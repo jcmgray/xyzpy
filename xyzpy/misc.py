@@ -10,6 +10,12 @@ from .generate import progbar
 from .plot import ilineplot
 
 
+def sub_split(a, tolist=False):
+    """ Split a multi-nested python list at the lowest dimension """
+    return (b.astype(type(b.item(0)), copy=False).T
+            for b in np.array(a, dtype=object, copy=False).T)
+
+
 def resample(x, y, n=100, **kwargs):
     ix = np.linspace(x[0], x[-1], n)
     iy = PchipInterpolator(x, y, **kwargs)(ix)
