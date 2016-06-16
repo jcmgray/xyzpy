@@ -14,7 +14,7 @@ import xarray as xr
 import tqdm
 
 
-def progbar(it, nb=False, **kwargs):
+def progbar(it=None, nb=False, **kwargs):
     """
     Turn any iterable into a progress bar, with notebook version.
     """
@@ -280,12 +280,34 @@ def minimal_covering_coords(cases):
     for x in zip(*cases):
         try:
             yield sorted(list(set(x)))
-        except TypeError:
+        except TypeError:  # unsortable
             yield list(set(x))
 
 
-def cases_to_ds(results, fn_args, cases, var_names,
-                var_dims=None, var_coords={}):
+def all_missing_ds(coords, var_names, var_dims, var_types):
+    """
+    Make a dataset whose data is all missing.
+    """
+    # Blank dataset with appropirate coordinates
+    ds = xr.Dataset(coords=coords)
+
+    # go through var_names, adding np.nan in correct shape and type
+    for vname, dims, vtype in zip(var_names, var_dims, var_types):
+        shape = tuple(ds[d].size for d in dims)
+        if vtype == int or vtype == float:
+            # Warn about casting?
+            nodata = np.tile(np.nan, shape)
+        elif vtype == complex:
+            nodata = np.tile(np.nan + np.nan*1.0j, shape)
+        else:
+            nodata = np.tile(np.nan, shape).astype(object)
+        ds[vname] = (dims, nodata)
+
+    return ds
+
+
+def cases_to_ds(results, fn_args, cases, var_names, var_dims=None,
+                var_coords={}, add_to_ds=None):
     """
     Take a list of results and configurations that generate them and turn it
     into a `xarray.Dataset`.
@@ -324,31 +346,23 @@ def cases_to_ds(results, fn_args, cases, var_names,
         if var_dims is not None:
             var_dims = (var_dims,)
 
-    # Allow single given dimensions to represent all result variables
-    var_dims = (itertools.cycle(var_dims) if var_dims is not None else
-                itertools.repeat(tuple()))
+    if add_to_ds is None:
+        # Allow single given dimensions to represent all result variables
+        var_dims = (itertools.cycle(var_dims) if var_dims is not None else
+                    itertools.repeat(tuple()))
 
-    # Find minimal covering set of coordinates for fn_args
-    c_coords = dict(zip(fn_args, minimal_covering_coords(cases)))
+        # Find minimal covering set of coordinates for fn_args
+        case_coords = dict(zip(fn_args, minimal_covering_coords(cases)))
 
-    # Add dimensions from cases and var_coords
-    ds = xr.Dataset(coords={**c_coords, **dict(var_coords)})
-    shape_c_coords = tuple(ds[dim].size for dim in fn_args)
-
-    vtypes = (np.asarray(x).dtype for x in results[0])
-
-    # go through var_names, adding np.nan in correct shape and type
-    for vname, dims, vtype in zip(var_names, var_dims, vtypes):
-        vdims = tuple(fn_args) + tuple(dims)
-        shape = shape_c_coords + tuple(ds[d].size for d in dims)
-        if vtype == int or vtype == float:
-            # Warn about casting?
-            nodata = np.tile(np.nan, shape)
-        elif vtype == complex:
-            nodata = np.tile(np.nan + np.nan * 1.0j, shape)
-        else:
-            nodata = np.tile(np.nan, shape).astype(object)
-        ds[vname] = (vdims, nodata)
+        # Create new, 'all missing' dataset if required
+        ds = all_missing_ds(coords={**case_coords, **dict(var_coords)},
+                            var_names=var_names,
+                            var_dims=(tuple(fn_args) + tuple(next(var_dims))
+                                      for i in range(len(var_names))),
+                            var_types=(np.asarray(x).dtype
+                                       for x in results[0]))
+    else:
+        ds = add_to_ds
 
     #  go through cases, overwriting nan with results
     for res, cfg in zip(results, cases):
@@ -359,7 +373,7 @@ def cases_to_ds(results, fn_args, cases, var_names,
 
 
 def case_runner_to_ds(fn, fn_args, cases, var_names, var_dims=None,
-                      var_coords={}, **case_runner_settings):
+                      var_coords={}, add_to_ds=None, **case_runner_settings):
     """
     Combination of `case_runner` and `cases_to_ds`. Takes a function and list
     of argument configurations and produces a `xarray.Dataset`.
@@ -383,6 +397,7 @@ def case_runner_to_ds(fn, fn_args, cases, var_names, var_dims=None,
 
     # Convert to xarray.Dataset
     ds = cases_to_ds(results, fn_args, cases, var_names=var_names,
-                     var_dims=var_dims, var_coords=var_coords)
+                     var_dims=var_dims, var_coords=var_coords,
+                     add_to_ds=add_to_ds)
 
     return ds

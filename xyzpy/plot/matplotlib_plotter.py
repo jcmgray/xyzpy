@@ -157,7 +157,6 @@ def xmlineplot(ds, y_coo, x_coo, z_coo=None,
     """ Function for automatically plotting multiple sets of data
     using matplotlib and xarray. """
 
-    # TODO: set custom line and marker for single line
     # TODO: fallback fonts
     # TODO: homogenise options with plotly, mplot etc
     # TODO: docs
