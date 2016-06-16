@@ -15,7 +15,9 @@ import tqdm
 
 
 def progbar(it, nb=False, **kwargs):
-    """ Turn any iterable into a progress bar, with notebook version. """
+    """
+    Turn any iterable into a progress bar, with notebook version.
+    """
     defaults = {'ascii': True, 'smoothing': 0}
     # Overide defaults with custom kwargs
     settings = {**defaults, **kwargs}
@@ -30,7 +32,9 @@ def progbar(it, nb=False, **kwargs):
 # --------------------------------------------------------------------------- #
 
 def parse_combos(combos):
-    """ Turn dicts and single tuples into proper form for combo runners. """
+    """
+    Turn dicts and single tuples into proper form for combo runners.
+    """
     if isinstance(combos, dict):
         combos = tuple(combos.items())
     elif isinstance(combos[0], str):
@@ -121,30 +125,30 @@ def combo_runner(fn, combos, constants=None, split=False, progbars=0,
 
     # Evaluate combos in parallel
     if parallel or (processes is not None and processes > 1):
-        p = multiprocessing.Pool(processes=processes)
+        mp = multiprocessing.Pool(processes=processes)
 
         # Submit jobs in parallel and in nested structure
         def submit_jobs(fn, combos, _l=0):
             arg, inputs = combos[0]
             for x in inputs:
                 if len(combos) == 1:
-                    yield p.apply_async(fn, kwds={arg: x})
+                    yield mp.apply_async(fn, kwds={arg: x})
                 else:
                     sub_fn = functools.partial(fn, **{arg: x})
                     yield tuple(submit_jobs(sub_fn, combos[1:], _l+1))
 
         # Run through nested structure retrieving results
-        def get_outputs(futs, _l=0):
+        def get_results(futs, _l=0):
             for fut in progbar(futs, disable=_l >= progbars,
                                desc=fn_args[_l], **progbar_opts):
                 if _l == len(fn_args) - 1:
                     y = fut.get()
                     yield y if split else (y,)
                 else:
-                    yield tuple(zip(*get_outputs(fut, _l+1)))
+                    yield tuple(zip(*get_results(fut, _l+1)))
 
         futures = tuple(submit_jobs(fn, combos))
-        outputs = tuple(zip(*get_outputs(futures)))
+        results = tuple(zip(*get_results(futures)))
 
     # Evaluate combos sequentially
     else:
@@ -158,14 +162,14 @@ def combo_runner(fn, combos, constants=None, split=False, progbars=0,
                     sub_fn = functools.partial(fn, **{arg: x})
                     yield tuple(zip(*get_ouputs_seq(sub_fn, combos[1:], _l+1)))
 
-        outputs = tuple(zip(*get_ouputs_seq(fn, combos)))
+        results = tuple(zip(*get_ouputs_seq(fn, combos)))
 
     # Make sure left progress bars are not writter over
     if progbars > 0:
         for i in range(progbars):
             print()
 
-    return outputs if split else outputs[0]
+    return results if split else results[0]
 
 
 def combos_to_ds(results, combos, var_names, var_dims=None, var_coords={}):
@@ -253,19 +257,19 @@ def case_runner(fn, fn_args, cases, constants=None, split=False,
 
     # Evaluate configurations in parallel
     if parallel or (processes is not None and processes > 1):
-        p = multiprocessing.Pool(processes=processes)
-        fut = tuple(p.apply_async(fn, kwds=dict(zip(fn_args, c)))
+        mp = multiprocessing.Pool(processes=processes)
+        fut = tuple(mp.apply_async(fn, kwds=dict(zip(fn_args, c)))
                     for c in cases)
-        xs = tuple(x.get() for x in progbar(fut, total=len(cases),
-                                            disable=progbars < 1))
+        results = tuple(x.get() for x in progbar(fut, total=len(cases),
+                                                 disable=progbars < 1))
 
     # Evaluate configurations sequentially
     else:
-        xs = tuple(fn(**{arg: y for arg, y in zip(fn_args, cnfg)})
-                   for cnfg in progbar(cases, total=len(cases),
-                                       disable=progbars < 1))
+        results = tuple(fn(**{arg: y for arg, y in zip(fn_args, cnfg)})
+                        for cnfg in progbar(cases, total=len(cases),
+                                            disable=progbars < 1))
 
-    return xs if not split else tuple(zip(*xs))
+    return results if not split else tuple(zip(*results))
 
 
 def minimal_covering_coords(cases):

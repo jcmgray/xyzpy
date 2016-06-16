@@ -5,7 +5,9 @@ import xarray as xr
 
 
 def xrsmoosh(*dss, accept_new=False):
-    """ Aggregates xarray Datasets and DataArrays """
+    """
+    Aggregates xarray Datasets and DataArrays
+    """
     # TODO: rename --> aggregate, look into, part_align -> concat.
     ds = dss[0]
     for new_ds in dss[1:]:
