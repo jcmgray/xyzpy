@@ -274,14 +274,6 @@ class TestComboRunnerToDS:
         assert_allclose(ds['array2'].sel(a=2, b=30).data,
                         32 - np.arange(5) * 0.1j)
 
-    def test_add_to_ds(self):
-        # TODO
-        pass
-
-    def test_add_to_ds_array(self):
-        # TODO
-        pass
-
 
 # --------------------------------------------------------------------------- #
 # CASE_RUNNER tests                                                           #
@@ -400,8 +392,8 @@ class TestCasesToDS:
         ds = xr.Dataset(coords={'a': [1, 2],
                                 'b': [10, 20],
                                 't': [0.1, 0.2, 0.3]})
-        ds['x'] = (('a', 'b'), [[[11.1, 11.2, 11.3], [21.1, 21.2, 21.3]],
-                                [[12.1, 12.2, 12.3], [0, 0, 0]]])
+        ds['x'] = (('a', 'b', 't'), [[[11.1, 11.2, 11.3], [21.1, 21.2, 21.3]],
+                                     [[12.1, 12.2, 12.3], [0, 0, 0]]])
         assert_allclose(ds['x'].sel(a=2, b=20).data, [0, 0, 0])
         cases_to_ds(results=[[[22.1, 22.2, 22.3]]],
                     fn_args=['a', 'b'],
@@ -409,7 +401,7 @@ class TestCasesToDS:
                     var_names=['x'],
                     var_dims=['t'],
                     add_to_ds=ds)
-        assert_allclose(ds['x'].sel(a=2, b=20).data == 22
+        assert_allclose(ds['x'].sel(a=2, b=20).data, [22.1, 22.2, 22.3])
 
 
 class TestCaseRunnerToDS:

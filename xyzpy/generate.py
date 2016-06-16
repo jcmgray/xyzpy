@@ -291,17 +291,19 @@ def all_missing_ds(coords, var_names, var_dims, var_types):
     # Blank dataset with appropirate coordinates
     ds = xr.Dataset(coords=coords)
 
-    # go through var_names, adding np.nan in correct shape and type
-    for vname, dims, vtype in zip(var_names, var_dims, var_types):
-        shape = tuple(ds[d].size for d in dims)
-        if vtype == int or vtype == float:
-            # Warn about casting?
+    for v_name, v_dims, v_type in zip(var_names, var_dims, var_types):
+
+        shape = tuple(ds[d].size for d in v_dims)
+
+        if v_type == int or v_type == float:
+            # Warn about upcasting int to float?
             nodata = np.tile(np.nan, shape)
-        elif vtype == complex:
+        elif v_type == complex:
             nodata = np.tile(np.nan + np.nan*1.0j, shape)
         else:
             nodata = np.tile(np.nan, shape).astype(object)
-        ds[vname] = (dims, nodata)
+
+        ds[v_name] = (v_dims, nodata)
 
     return ds
 
