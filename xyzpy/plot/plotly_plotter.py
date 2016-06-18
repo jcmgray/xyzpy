@@ -17,7 +17,7 @@ def ishow(figs, nb=True, **kwargs):
     if isinstance(figs, (list, tuple)):
         fig_main = figs[0]
         for fig in figs[1:]:
-            fig_main['data'] += fig['data']
+            fig_main["data"] += fig["data"]
     else:
         fig_main = figs
     if nb:
@@ -94,6 +94,30 @@ def ihist(xs, nb=True, go_dict={}, ly_dict={}, return_fig=False,
                         "ticks": "inside"},
               "yaxis": {"showline": True, "mirror": "ticks",
                         "ticks": "inside"}, **ly_dict}
+    fig = {"data": traces, "layout": layout}
+    if return_fig:
+        return fig
+    ishow(fig, nb=nb, **kwargs)
+
+
+def plot_matrix(a, colormap="Greys", nb=True, return_fig=False, **kwargs):
+    from plotly.graph_objs import Heatmap
+    traces = [Heatmap({"z": -abs(a),
+                       "colorscale": colormap,
+                       "showscale": False})]
+    layout = {"height": 500, "width": 500,
+              "xaxis": {"autorange": True,
+                        "zeroline": False,
+                        "showline": False,
+                        "autotick": True,
+                        "ticks": "",
+                        "showticklabels": False},
+              "yaxis": {"autorange": True,
+                        "zeroline": False,
+                        "showline": False,
+                        "autotick": True,
+                        "ticks": "",
+                        "showticklabels": False}}
     fig = {"data": traces, "layout": layout}
     if return_fig:
         return fig

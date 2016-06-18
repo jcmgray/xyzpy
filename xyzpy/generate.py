@@ -223,6 +223,7 @@ def combos_to_ds(results, combos, var_names, var_dims=None, var_coords={}):
 
 def combo_runner_to_ds(fn, combos, var_names, var_dims=None, var_coords={},
                        **combo_runner_settings):
+    # TODO: constants --> attributes
 
     # Set split based on output var_names
     split = (False if isinstance(var_names, str) else
