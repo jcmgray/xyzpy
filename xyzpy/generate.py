@@ -2,7 +2,7 @@
 Generate datasets from function and parameter lists
 """
 
-# TODO: add to existing dataset
+# TODO: combos add to existing dataset
 # TODO: find NaNs in xarray and perform cases
 
 import functools
@@ -128,46 +128,50 @@ def combo_runner(fn, combos, constants=None, split=False, progbars=0,
         mp = multiprocessing.Pool(processes=processes)
 
         # Submit jobs in parallel and in nested structure
-        def submit_jobs(fn, combos, _l=0):
+        def submit_jobs(fn, combos):
             arg, inputs = combos[0]
             for x in inputs:
                 if len(combos) == 1:
                     yield mp.apply_async(fn, kwds={arg: x})
                 else:
                     sub_fn = functools.partial(fn, **{arg: x})
-                    yield tuple(submit_jobs(sub_fn, combos[1:], _l+1))
+                    yield tuple(submit_jobs(sub_fn, combos[1:]))
 
         # Run through nested structure retrieving results
-        def get_results(futs, _l=0):
-            for fut in progbar(futs, disable=_l >= progbars,
+        def get_results(futs, _l=0, _pl=0):
+            len1 = (len(futs) == 1)
+            for fut in progbar(futs, disable=(_pl >= progbars or len1),
                                desc=fn_args[_l], **progbar_opts):
                 if _l == len(fn_args) - 1:
                     y = fut.get()
                     yield y if split else (y,)
                 else:
-                    yield tuple(zip(*get_results(fut, _l+1)))
+                    _npl = _pl if len1 else _pl+1
+                    yield tuple(zip(*get_results(fut, _l + 1, _npl)))
 
         futures = tuple(submit_jobs(fn, combos))
         results = tuple(zip(*get_results(futures)))
 
     # Evaluate combos sequentially
     else:
-        def get_ouputs_seq(fn, combos, _l=0):
+        def get_ouputs_seq(fn, combos, _pl=0):
             arg, inputs = combos[0]
-            for x in progbar(inputs, disable=_l >= progbars,
+            len1 = (len(inputs) == 1)
+            for x in progbar(inputs, disable=(_pl >= progbars or len1),
                              desc=arg, **progbar_opts):
                 if len(combos) == 1:
                     yield fn(**{arg: x}) if split else [fn(**{arg: x})]
                 else:
                     sub_fn = functools.partial(fn, **{arg: x})
-                    yield tuple(zip(*get_ouputs_seq(sub_fn, combos[1:], _l+1)))
+                    _npl = (_pl if len1 else _pl+1)
+                    yield tuple(zip(*get_ouputs_seq(sub_fn, combos[1:], _npl)))
 
         results = tuple(zip(*get_ouputs_seq(fn, combos)))
 
-    # Make sure left progress bars are not writter over
-    if progbars > 0:
-        for i in range(progbars):
-            print()
+    # # Make sure left progress bars are not writter over
+    # if progbars > 0:
+    #     for i in range(progbars):
+    #         print()
 
     return results if split else results[0]
 
