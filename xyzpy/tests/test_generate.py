@@ -177,11 +177,11 @@ class TestCombosToDS:
         assert ds['sum'].data.dtype == int
 
     def test_add_to_ds(self):
-        # TODO
+        # TODO -------------------------------------------------------------- #
         pass
 
     def test_add_to_ds_array(self):
-        # TODO
+        # TODO -------------------------------------------------------------- #
         pass
 
 
@@ -273,6 +273,14 @@ class TestComboRunnerToDS:
                         32 + np.arange(5) * 0.1j)
         assert_allclose(ds['array2'].sel(a=2, b=30).data,
                         32 - np.arange(5) * 0.1j)
+
+    def test_constants_to_attrs(self):
+        ds = combo_runner_to_ds(foo3_scalar,
+                                combos=[('a', [1, 2, 3]),
+                                        ('c', [100, 200, 300])],
+                                constants={'b': 20},
+                                var_names='x')
+        assert ds.attrs['b'] == 20
 
 
 # --------------------------------------------------------------------------- #

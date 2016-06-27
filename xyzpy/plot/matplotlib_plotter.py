@@ -1,9 +1,9 @@
 """
 Functions for plotting datasets nicely.
 """
+# TODO: no border on markers.
 # TODO: unify options
 # TODO: matplotlib style hlines, vlines
-# TODO: logcolor
 # TODO: names
 # TODO: modularise, with mian fig func, xarray handler, and basic plotter
 # TODO: mshow?

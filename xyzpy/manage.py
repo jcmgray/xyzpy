@@ -23,7 +23,7 @@ def xrsmoosh(*dss, accept_new=False):
 
 
 def xrload(file_name, engine="h5netcdf", load_to_mem=True,
-           create_new=True):
+           create_new=False):
     """ Loads a xarray dataset. """
     try:
         try:

@@ -1,3 +1,8 @@
+"""
+Helper functions for generating color spectrums.
+"""
+# TODO: custom color plots using mpl.linearColor ...
+
 from math import log
 
 

@@ -2,8 +2,10 @@
 Generate datasets from function and parameter lists
 """
 
-# TODO: combos add to existing dataset
-# TODO: find NaNs in xarray and perform cases
+# TODO: combos add to existing dataset. ------------------------------------- #
+# TODO: find NaNs in xarray and perform cases. ------------------------------ #
+# TODO: pause / finish early interactive commands. -------------------------- #
+# TODO: save to ds every case. ---------------------------------------------- #
 
 import functools
 import itertools
@@ -14,13 +16,13 @@ import xarray as xr
 import tqdm
 
 
-def progbar(it=None, nb=False, **kwargs):
+def progbar(it=None, nb=False, **tqdm_settings):
     """
     Turn any iterable into a progress bar, with notebook version.
     """
     defaults = {'ascii': True, 'smoothing': 0}
-    # Overide defaults with custom kwargs
-    settings = {**defaults, **kwargs}
+    # Overide defaults with custom tqdm_settings
+    settings = {**defaults, **tqdm_settings}
     if nb:  # pragma: no cover
         return tqdm.tqdm_notebook(it, **settings)
     else:
@@ -35,13 +37,9 @@ def parse_combos(combos):
     """
     Turn dicts and single tuples into proper form for combo runners.
     """
-    if isinstance(combos, dict):
-        combos = tuple(combos.items())
-    elif isinstance(combos[0], str):
-        combos = (combos,)
-    else:
-        combos = tuple(combos)
-    return combos
+    return (tuple(combos.items()) if isinstance(combos, dict) else
+            (combos,) if isinstance(combos[0], str) else
+            tuple(combos))
 
 
 def combo_runner(fn, combos, constants=None, split=False, progbars=0,
@@ -176,7 +174,8 @@ def combo_runner(fn, combos, constants=None, split=False, progbars=0,
     return results if split else results[0]
 
 
-def combos_to_ds(results, combos, var_names, var_dims=None, var_coords={}):
+def combos_to_ds(results, combos, var_names, var_dims=None, var_coords={},
+                 constants=None):
     """
     Convert the output of combo_runner into a `xarray.Dataset`
 
@@ -212,7 +211,12 @@ def combos_to_ds(results, combos, var_names, var_dims=None, var_coords={}):
                 itertools.repeat(tuple()))
 
     # Set dataset coordinates
-    ds = xr.Dataset(coords={**dict(combos), **dict(var_coords)})
+    ds = xr.Dataset(coords={**dict(combos), **dict(var_coords)},
+                    attrs=constants)
+
+    # TODO: add_to_ds
+    # check if all coords are available
+    # check if all values to be set are nan, or overwite is set.
 
     # Set Dataset dataarrays
     for vdata, vname, vdims in zip(results, var_names, var_dims):
@@ -222,20 +226,23 @@ def combos_to_ds(results, combos, var_names, var_dims=None, var_coords={}):
 
 
 def combo_runner_to_ds(fn, combos, var_names, var_dims=None, var_coords={},
-                       **combo_runner_settings):
-    # TODO: constants --> attributes
-
+                       constants=None, **combo_runner_settings):
+    """
+    Evalute combos and output to a Dataset.
+    """
     # Set split based on output var_names
     split = (False if isinstance(var_names, str) else
              False if len(var_names) == 1 else
              True)
 
     # Generate data for all combos
-    results = combo_runner(fn, combos, split=split, **combo_runner_settings)
+    results = combo_runner(fn, combos, split=split, constants=constants,
+                           **combo_runner_settings)
 
     # Convert to dataset
     ds = combos_to_ds(results=results, combos=combos, var_names=var_names,
-                      var_dims=var_dims, var_coords=var_coords)
+                      var_dims=var_dims, var_coords=var_coords,
+                      constants=constants)
 
     return ds
 
@@ -369,6 +376,7 @@ def cases_to_ds(results, fn_args, cases, var_names, var_dims=None,
                             var_types=(np.asarray(x).dtype
                                        for x in results[0]))
     else:
+        # TODO: check value is nan, or overwrite options is set ------------- #
         ds = add_to_ds
 
     #  go through cases, overwriting nan with results

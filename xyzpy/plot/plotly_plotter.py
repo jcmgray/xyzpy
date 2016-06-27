@@ -6,6 +6,7 @@ Functions for plotting datasets nicely.
 # TODO: names
 # TODO: reverse color
 # TODO: logarithmic color
+# TODO: not working currently?
 
 from itertools import repeat
 import numpy as np
