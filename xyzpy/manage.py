@@ -64,10 +64,9 @@ def xrload(file_name, engine="h5netcdf", load_to_mem=True, create_new=False):
     return ds
 
 
-def xrsmoosh(*dss, accept_new=False):
-    """
-    Aggregates xarray Datasets and DataArrays
-    """
+def aggregate(*dss, accept_new=False):
+    """ Aggregates xarray Datasets and DataArrays """
+    # TODO: overwrite option, rather than accept_new, raise error if not
     # TODO: rename --> aggregate, look into, part_align -> concat.
     # TODO: check if result var is all non-nan and could be all same dtype
 
@@ -82,6 +81,9 @@ def xrsmoosh(*dss, accept_new=False):
         # Fill NaNs one way or the other w.r.t. accept_new
         ds = new_ds.fillna(ds) if accept_new else ds.fillna(new_ds)
     return ds
+
+
+xrsmoosh = aggregate
 
 
 def xrgroupby_to_dim(ds, dim):

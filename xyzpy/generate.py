@@ -1,6 +1,4 @@
-"""
-Generate datasets from function and parameter lists
-"""
+""" Generate datasets from function and parameter lists """
 
 # TODO: combos add to existing dataset. ------------------------------------- #
 # TODO: pause / finish early interactive commands. -------------------------- #
@@ -42,8 +40,7 @@ def parse_combos(combos):
 
 def combo_runner(fn, combos, constants=None, split=False, progbars=0,
                  parallel=False, processes=None, progbar_opts={}):
-    """
-    Take a function fn and analyse it over all combinations of named
+    """ Take a function fn and analyse it over all combinations of named
     variables' values, optionally showing progress and in parallel.
 
     Parameters
@@ -110,7 +107,6 @@ def combo_runner(fn, combos, constants=None, split=False, progbars=0,
             module, this places some restrictions of what functions can be
             used (needs to be picklable/importable).
     """
-
     # Prepare combos
     combos = parse_combos(combos)
     fn_args, _ = zip(*combos)
@@ -169,8 +165,7 @@ def combo_runner(fn, combos, constants=None, split=False, progbars=0,
 
 def combos_to_ds(results, combos, var_names, var_dims=None, var_coords={},
                  constants=None):
-    """
-    Convert the output of combo_runner into a `xarray.Dataset`
+    """ Convert the output of combo_runner into a `xarray.Dataset`
 
     Parameters
     ----------
@@ -220,25 +215,20 @@ def combos_to_ds(results, combos, var_names, var_dims=None, var_coords={},
 
 def combo_runner_to_ds(fn, combos, var_names, var_dims=None, var_coords={},
                        constants=None, **combo_runner_settings):
-    """
-    Evalute combos and output to a Dataset.
-    """
+    """ Evalute combos and output to a Dataset. """
     # Set split based on output var_names
     split = (False if isinstance(var_names, str) else
              False if len(var_names) == 1 else
              True)
-
     # Generate data for all combos
     results = combo_runner(fn, combos, split=split, constants=constants,
                            **combo_runner_settings)
-
     # Convert to dataset
     ds = combos_to_ds(results, combos,
                       var_names=var_names,
                       var_dims=var_dims,
                       var_coords=var_coords,
                       constants=constants)
-
     return ds
 
 
@@ -248,9 +238,24 @@ def combo_runner_to_ds(fn, combos, var_names, var_dims=None, var_coords={},
 
 def case_runner(fn, fn_args, cases, constants=None, split=False,
                 progbars=0, parallel=False, processes=None, progbar_opts={}):
-    """
-    Evaluate a function in many different configurations, optionally in
+    """ Evaluate a function in many different configurations, optionally in
     parallel and or with live progress.
+
+    Parameters
+    ----------
+        fn: function with which to evalute cases with
+        fn_args: names of case arguments that fn takes
+        cases: list settings that fn_args take
+        constants: constant fn args that won't be iterated over
+        split: whether to split fn's output into multiple lists
+        progbars: whether to show (in this case only 1) progbar
+        parallel: whether to evaluate cases in parallel
+        processes: how any processes to use for parallel processing
+        progbar_opts: options to send to progbar
+
+    Returns
+    -------
+        results: list of fn output for each case
     """
 
     # Prepare Function
@@ -280,10 +285,8 @@ def case_runner(fn, fn_args, cases, constants=None, split=False,
 
 
 def minimal_covering_coords(cases):
-    """
-    Take a list of cases and find the minimal covering set of coordinates
-    with which to index all cases. Sort the coords if possible.
-    """
+    """ Take a list of cases and find the minimal covering set of coordinates
+    with which to index all cases. Sort the coords if possible. """
     for x in zip(*cases):
         try:
             yield sorted(list(set(x)))
@@ -292,16 +295,11 @@ def minimal_covering_coords(cases):
 
 
 def all_missing_ds(coords, var_names, var_dims, var_types):
-    """
-    Make a dataset whose data is all missing.
-    """
+    """ Make a dataset whose data is all missing. """
     # Blank dataset with appropirate coordinates
     ds = xr.Dataset(coords=coords)
-
     for v_name, v_dims, v_type in zip(var_names, var_dims, var_types):
-
         shape = tuple(ds[d].size for d in v_dims)
-
         if v_type == int or v_type == float:
             # Warn about upcasting int to float?
             nodata = np.tile(np.nan, shape)
@@ -309,16 +307,13 @@ def all_missing_ds(coords, var_names, var_dims, var_types):
             nodata = np.tile(np.nan + np.nan*1.0j, shape)
         else:
             nodata = np.tile(None, shape).astype(object)
-
         ds[v_name] = (v_dims, nodata)
-
     return ds
 
 
 def cases_to_ds(results, fn_args, cases, var_names, var_dims=None,
-                var_coords={}, add_to_ds=None):
-    """
-    Take a list of results and configurations that generate them and turn it
+                var_coords={}, add_to_ds=None, overwrite=False):
+    """ Take a list of results and configurations that generate them and turn it
     into a `xarray.Dataset`.
 
     Parameters
@@ -371,19 +366,22 @@ def cases_to_ds(results, fn_args, cases, var_names, var_dims=None,
                             var_types=(np.asarray(x).dtype
                                        for x in results[0]))
     else:
-        # TODO: check value is nan, or overwrite options is set ------------- #
         ds = add_to_ds
 
     #  go through cases, overwriting nan with results
     for res, cfg in zip(results, cases):
         for vname, x in zip(var_names, res):
+            if not overwrite:
+                if not ds[vname].loc[dict(zip(fn_args, cfg))].isnull().all():
+                    raise ValueError("Existing data and `overwrite` = False")
             ds[vname].loc[dict(zip(fn_args, cfg))] = np.asarray(x)
 
     return ds
 
 
 def case_runner_to_ds(fn, fn_args, cases, var_names, var_dims=None,
-                      var_coords={}, add_to_ds=None, **case_runner_settings):
+                      var_coords={}, add_to_ds=None, overwrite=False,
+                      **case_runner_settings):
     """ Combination of `case_runner` and `cases_to_ds`. Takes a function and
     list of argument configurations and produces a `xarray.Dataset`.
 
@@ -400,7 +398,8 @@ def case_runner_to_ds(fn, fn_args, cases, var_names, var_dims=None,
     Returns
     -------
         ds: dataset with minimal covering coordinates and all cases
-            evaluated. """
+            evaluated.
+    """
     # Generate results
     results = case_runner(fn, fn_args, cases, **case_runner_settings)
     # Convert to xarray.Dataset
@@ -408,7 +407,8 @@ def case_runner_to_ds(fn, fn_args, cases, var_names, var_dims=None,
                      var_names=var_names,
                      var_dims=var_dims,
                      var_coords=var_coords,
-                     add_to_ds=add_to_ds)
+                     add_to_ds=add_to_ds,
+                     overwrite=overwrite)
     return ds
 
 
@@ -426,7 +426,8 @@ def find_missing_cases(ds, var_dims=None):
 
     Returns
     -------
-        (m_fn_args, m_cases): function arguments and missing cases. """
+        (m_fn_args, m_cases): function arguments and missing cases.
+    """
     # Parse var_dims
     var_dims = (() if var_dims is None else
                 (var_dims,) if isinstance(var_dims, str) else
@@ -444,3 +445,16 @@ def find_missing_cases(ds, var_dims=None):
                 yield case
 
     return fn_args, tuple(gen_missing_list())
+
+
+def fill_missing_cases(ds, fn, var_names, var_dims=None, var_coords={},
+                       **case_runner_settings):
+    # Find missing cases
+    fn_args, missing_cases = find_missing_cases(ds, var_dims)
+    # Evaluate and add to Dataset
+    case_runner_to_ds(fn, fn_args, missing_cases,
+                      var_names=var_names,
+                      var_dims=var_dims,
+                      var_coords=var_coords,
+                      add_to_ds=ds,
+                      **case_runner_settings)
