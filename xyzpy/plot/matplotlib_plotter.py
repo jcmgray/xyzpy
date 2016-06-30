@@ -7,6 +7,7 @@ Functions for plotting datasets nicely.
 # TODO: names
 # TODO: modularise, with mian fig func, xarray handler, and basic plotter
 # TODO: mshow?
+# TODO: custom xtick labels
 
 from itertools import cycle as icycle
 from collections import OrderedDict

@@ -11,6 +11,8 @@ setup(name='xyzpy',
           'xarray>=0.7.0',
           'plotly>=1.9.0',
           'matplotlib>=1.5.0',
+          'h5py',
+          'h5netcdf',
           ],
       classifiers=[
           'Development Status :: 3 - Alpha',

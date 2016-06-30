@@ -4,27 +4,47 @@ import numpy as np
 import xarray as xr
 
 
-def xrsmoosh(*dss, accept_new=False):
-    """
-    Aggregates xarray Datasets and DataArrays
-    """
-    # TODO: rename --> aggregate, look into, part_align -> concat.
-    ds = dss[0]
-    for new_ds in dss[1:]:
-        # First make sure both datasets have the same variables
-        for data_var in new_ds.data_vars:
-            if data_var not in ds.data_vars:
-                ds[data_var] = np.nan
-        # Expand both to have same dimensions, padding with NaN
-        ds, new_ds = xr.align(ds, new_ds, join="outer")
-        # Fill NaNs one way or the other w.r.t. accept_new
-        ds = new_ds.fillna(ds) if accept_new else ds.fillna(new_ds)
-    return ds
+def auto_add_extension(file_name, engine):
+    if "." not in file_name:
+        extension = ".h5" if engine == "h5netcdf" else ".nc"
+        file_name += extension
+    return file_name
 
 
-def xrload(file_name, engine="h5netcdf", load_to_mem=True,
-           create_new=False):
-    """ Loads a xarray dataset. """
+def xrsave(ds, file_name, engine="h5netcdf"):
+    """
+    Saves a xarray dataset.
+
+    Parameters
+    ----------
+        ds: Dataset to save
+        file_name: name of file to save to
+        engine: engine used to save file
+
+    Returns
+    -------
+        None
+    """
+    file_name = auto_add_extension(file_name, engine)
+    ds.to_netcdf(file_name, engine=engine)
+
+
+def xrload(file_name, engine="h5netcdf", load_to_mem=True, create_new=False):
+    """
+    Loads a xarray dataset.
+
+    Parameters
+    ----------
+        file_name: name of file
+        engine: engine used to load file
+        load_to_mem: once opened, load from disk to memory
+        create_new: if no file exists make a blank one
+
+    Returns
+    -------
+        ds: loaded Dataset
+    """
+    file_name = auto_add_extension(file_name, engine)
     try:
         try:
             ds = xr.open_dataset(file_name, engine=engine)
@@ -44,10 +64,24 @@ def xrload(file_name, engine="h5netcdf", load_to_mem=True,
     return ds
 
 
-def xrsave(ds, file_name, engine="h5netcdf"):
-    """ Saves a xarray dataset. """
-    # TODO: look for "." and append .xyz if not found
-    ds.to_netcdf(file_name, engine=engine)
+def xrsmoosh(*dss, accept_new=False):
+    """
+    Aggregates xarray Datasets and DataArrays
+    """
+    # TODO: rename --> aggregate, look into, part_align -> concat.
+    # TODO: check if result var is all non-nan and could be all same dtype
+
+    ds = dss[0]
+    for new_ds in dss[1:]:
+        # First make sure both datasets have the same variables
+        for data_var in new_ds.data_vars:
+            if data_var not in ds.data_vars:
+                ds[data_var] = np.nan
+        # Expand both to have same dimensions, padding with NaN
+        ds, new_ds = xr.align(ds, new_ds, join="outer")
+        # Fill NaNs one way or the other w.r.t. accept_new
+        ds = new_ds.fillna(ds) if accept_new else ds.fillna(new_ds)
+    return ds
 
 
 def xrgroupby_to_dim(ds, dim):
