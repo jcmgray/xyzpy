@@ -3,9 +3,9 @@ Generate datasets from function and parameter lists
 """
 
 # TODO: combos add to existing dataset. ------------------------------------- #
-# TODO: find NaNs in xarray and perform cases. ------------------------------ #
 # TODO: pause / finish early interactive commands. -------------------------- #
 # TODO: save to ds every case. ---------------------------------------------- #
+# TODO: automatically count the number of progbars (i.e. no. of len > 1 coos) #
 
 import functools
 import itertools
@@ -17,9 +17,7 @@ import tqdm
 
 
 def progbar(it=None, nb=False, **tqdm_settings):
-    """
-    Turn any iterable into a progress bar, with notebook version.
-    """
+    """ Turn any iterable into a progress bar, with notebook version. """
     defaults = {'ascii': True, 'smoothing': 0}
     # Overide defaults with custom tqdm_settings
     settings = {**defaults, **tqdm_settings}
@@ -166,11 +164,6 @@ def combo_runner(fn, combos, constants=None, split=False, progbars=0,
 
         results = tuple(zip(*get_ouputs_seq(fn, combos)))
 
-    # # Make sure left progress bars are not writter over
-    # if progbars > 0:
-    #     for i in range(progbars):
-    #         print()
-
     return results if split else results[0]
 
 
@@ -240,8 +233,10 @@ def combo_runner_to_ds(fn, combos, var_names, var_dims=None, var_coords={},
                            **combo_runner_settings)
 
     # Convert to dataset
-    ds = combos_to_ds(results=results, combos=combos, var_names=var_names,
-                      var_dims=var_dims, var_coords=var_coords,
+    ds = combos_to_ds(results, combos,
+                      var_names=var_names,
+                      var_dims=var_dims,
+                      var_coords=var_coords,
                       constants=constants)
 
     return ds
@@ -313,7 +308,7 @@ def all_missing_ds(coords, var_names, var_dims, var_types):
         elif v_type == complex:
             nodata = np.tile(np.nan + np.nan*1.0j, shape)
         else:
-            nodata = np.tile(np.nan, shape).astype(object)
+            nodata = np.tile(None, shape).astype(object)
 
         ds[v_name] = (v_dims, nodata)
 
@@ -389,9 +384,8 @@ def cases_to_ds(results, fn_args, cases, var_names, var_dims=None,
 
 def case_runner_to_ds(fn, fn_args, cases, var_names, var_dims=None,
                       var_coords={}, add_to_ds=None, **case_runner_settings):
-    """
-    Combination of `case_runner` and `cases_to_ds`. Takes a function and list
-    of argument configurations and produces a `xarray.Dataset`.
+    """ Combination of `case_runner` and `cases_to_ds`. Takes a function and
+    list of argument configurations and produces a `xarray.Dataset`.
 
     Parameters
     ----------
@@ -405,14 +399,48 @@ def case_runner_to_ds(fn, fn_args, cases, var_names, var_dims=None,
 
     Returns
     -------
-        ds: dataset with minimal covering coordinates and all cases evaluted
-    """
+        ds: dataset with minimal covering coordinates and all cases
+            evaluated. """
     # Generate results
     results = case_runner(fn, fn_args, cases, **case_runner_settings)
-
     # Convert to xarray.Dataset
-    ds = cases_to_ds(results, fn_args, cases, var_names=var_names,
-                     var_dims=var_dims, var_coords=var_coords,
+    ds = cases_to_ds(results, fn_args, cases,
+                     var_names=var_names,
+                     var_dims=var_dims,
+                     var_coords=var_coords,
                      add_to_ds=add_to_ds)
-
     return ds
+
+
+# --------------------------------------------------------------------------- #
+# Update or add new values                                                    #
+# --------------------------------------------------------------------------- #
+
+def find_missing_cases(ds, var_dims=None):
+    """ Find all cases in a dataset with missing data.
+
+    Parameters
+    ----------
+        ds: Dataset in which to find missing data
+        var_dims: internal variable dimensions (i.e. to ignore)
+
+    Returns
+    -------
+        (m_fn_args, m_cases): function arguments and missing cases. """
+    # Parse var_dims
+    var_dims = (() if var_dims is None else
+                (var_dims,) if isinstance(var_dims, str) else
+                var_dims)
+    # Find all configurations
+    fn_args = tuple(coo for coo in ds.coords if coo not in var_dims)
+    var_names = tuple(ds.data_vars)
+    all_cases = itertools.product(*(ds[arg].data for arg in fn_args))
+
+    # Only return those corresponding to all missing data
+    def gen_missing_list():
+        for case in all_cases:
+            sub_ds = ds.loc[dict(zip(fn_args, case))]
+            if all(sub_ds[v].isnull().all() for v in var_names):
+                yield case
+
+    return fn_args, tuple(gen_missing_list())

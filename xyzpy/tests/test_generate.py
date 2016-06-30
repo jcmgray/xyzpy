@@ -14,6 +14,7 @@ from ..generate import (
     case_runner,
     cases_to_ds,
     case_runner_to_ds,
+    find_missing_cases,
 )
 
 
@@ -423,8 +424,8 @@ class TestCaseRunnerToDS:
         assert_allclose(ds['c'].data, [100, 300])
         assert ds['sum'].loc[{'a': 1, 'b': 20, 'c': 300}].data == 321
         assert ds['sum'].loc[{'a': 3, 'b': 20, 'c': 100}].data == 123
-        assert np.isnan(ds['sum'].loc[{'a': 1, 'b': 20, 'c': 100}].data)
-        assert np.isnan(ds['sum'].loc[{'a': 3, 'b': 20, 'c': 300}].data)
+        assert ds['sum'].loc[{'a': 1, 'b': 20, 'c': 100}].isnull()
+        assert ds['sum'].loc[{'a': 3, 'b': 20, 'c': 300}].isnull()
 
     def test_multires(self):
         cases = [(1, 20, 300),
@@ -438,13 +439,13 @@ class TestCaseRunnerToDS:
         assert_allclose(ds['c'].data, [100, 300])
         assert ds['sum'].loc[{'a': 1, 'b': 20, 'c': 300}].data == 321
         assert ds['sum'].loc[{'a': 3, 'b': 20, 'c': 100}].data == 123
-        assert np.isnan(ds['sum'].loc[{'a': 1, 'b': 20, 'c': 100}].data)
-        assert np.isnan(ds['sum'].loc[{'a': 3, 'b': 20, 'c': 300}].data)
+        assert ds['sum'].loc[{'a': 1, 'b': 20, 'c': 100}].isnull()
+        assert ds['sum'].loc[{'a': 3, 'b': 20, 'c': 300}].isnull()
         assert ds['a_even'].data.dtype == object
         assert bool(ds['a_even'].sel(a=1, b=20, c=300).data) is False
         assert bool(ds['a_even'].sel(a=3, b=20, c=100).data) is False
-        assert np.isnan(ds['a_even'].loc[{'a': 1, 'b': 20, 'c': 100}].data)
-        assert np.isnan(ds['a_even'].loc[{'a': 3, 'b': 20, 'c': 300}].data)
+        assert ds['a_even'].loc[{'a': 1, 'b': 20, 'c': 100}].isnull()
+        assert ds['a_even'].loc[{'a': 3, 'b': 20, 'c': 300}].isnull()
 
     def test_array_return(self):
         ds = case_runner_to_ds(fn=foo2_array, fn_args=['a', 'b'],
@@ -453,7 +454,7 @@ class TestCaseRunnerToDS:
                                var_dims=['time'],
                                var_coords={'time': np.arange(10) / 10})
         assert ds.x.data.dtype == float
-        assert np.isnan(ds.x.sel(a=2, b=50, time=0.7).data)
+        assert ds.x.sel(a=2, b=50, time=0.7).isnull()
         assert ds.x.sel(a=4, b=50, time=0.3).data == 54.3
 
     def test_multi_array_return(self):
@@ -481,14 +482,14 @@ class TestCaseRunnerToDS:
                                 var_dims=[['time']],
                                 var_coords={'time':
                                             ['a', 'b', 'c', 'd', 'e']})
-        assert not np.logical_not(np.isnan(ds1['x'].data)).all()
-        assert not np.logical_not(np.isnan(ds1['y'].data)).all()
-        assert not np.logical_not(np.isnan(ds2['x'].data)).all()
-        assert not np.logical_not(np.isnan(ds2['y'].data)).all()
+        assert not np.logical_not(ds1['x'].isnull()).all()
+        assert not np.logical_not(ds1['y'].isnull()).all()
+        assert not np.logical_not(ds2['x'].isnull()).all()
+        assert not np.logical_not(ds2['y'].isnull()).all()
         ds1, ds2 = xr.align(ds1, ds2, join='outer')
         fds = ds1.fillna(ds2)
-        assert np.logical_not(np.isnan(fds['x'].data)).all()
-        assert np.logical_not(np.isnan(fds['y'].data)).all()
+        assert np.logical_not(fds['x'].isnull()).all()
+        assert np.logical_not(fds['y'].isnull()).all()
 
     def test_align_and_fillna_complex(self):
         ds1 = case_runner_to_ds(foo2_zarray1_zarray2, fn_args=['a', 'b'],
@@ -515,3 +516,59 @@ class TestCaseRunnerToDS:
         fds = ds1.fillna(ds2)
         assert np.logical_not(np.isnan(fds['x'].data)).all()
         assert np.logical_not(np.isnan(fds['y'].data)).all()
+
+
+class TestFindMissingCases:
+    def test_simple(self):
+        ds = xr.Dataset(coords={'a': [1, 2, 3], 'b': [40, 50]})
+        ds['x'] = (('a', 'b'), np.array([[0.1, np.nan],
+                                         [np.nan, 0.2],
+                                         [np.nan, np.nan]]))
+        # Target cases and settings
+        t_cases = ((1, 50), (2, 40), (3, 40), (3, 50))
+        t_configs = tuple(dict(zip(['a', 'b'], t_case)) for t_case in t_cases)
+        # Missing cases and settings
+        m_args, m_cases = find_missing_cases(ds)
+        m_configs = tuple(dict(zip(m_args, m_case)) for m_case in m_cases)
+        # Assert same set of coordinates
+        assert all(t_config in m_configs for t_config in t_configs)
+        assert all(m_config in t_configs for m_config in m_configs)
+
+    def test_multires(self):
+        ds = xr.Dataset(coords={'a': [1, 2, 3], 'b': [40, 50]})
+        ds['x'] = (('a', 'b'), np.array([[0.1, np.nan],
+                                         [np.nan, 0.2],
+                                         [np.nan, np.nan]]))
+        ds['y'] = (('a', 'b'), np.array([['a', None],
+                                         [None, 'b'],
+                                         [None, None]]))
+        # Target cases and settings
+        t_cases = ((1, 50), (2, 40), (3, 40), (3, 50))
+        t_configs = tuple(dict(zip(['a', 'b'], t_case)) for t_case in t_cases)
+        # Missing cases and settings
+        m_args, m_cases = find_missing_cases(ds)
+        m_configs = tuple(dict(zip(m_args, m_case)) for m_case in m_cases)
+        # Assert same set of coordinates
+        assert set(m_args) == {'a', 'b'}
+        assert all(t_config in m_configs for t_config in t_configs)
+        assert all(m_config in t_configs for m_config in m_configs)
+
+    def test_var_dims_leave(self):
+        ds = xr.Dataset(coords={'a': [1, 2, 3], 'b': [40, 50],
+                                't': [0.1, 0.2, 0.3]})
+        ds['x'] = (('a', 'b'), np.array([[0.1, np.nan],
+                                         [np.nan, 0.2],
+                                         [np.nan, np.nan]]))
+        ds['y'] = (('a', 'b', 't'), np.array([[[0.2]*3, [np.nan]*3],
+                                              [[np.nan]*3, [0.4]*3],
+                                              [[np.nan]*3, [np.nan]*3]]))
+        # Target cases and settings
+        t_cases = ((1, 50), (2, 40), (3, 40), (3, 50))
+        t_configs = tuple(dict(zip(['a', 'b'], t_case)) for t_case in t_cases)
+        # Missing cases and settings
+        m_args, m_cases = find_missing_cases(ds, var_dims='t')
+        m_configs = tuple(dict(zip(m_args, m_case)) for m_case in m_cases)
+        # Assert same set of coordinates
+        assert set(m_args) == {'a', 'b'}
+        assert all(t_config in m_configs for t_config in t_configs)
+        assert all(m_config in t_configs for m_config in m_configs)
