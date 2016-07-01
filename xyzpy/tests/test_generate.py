@@ -543,6 +543,10 @@ class TestCaseRunnerToDS:
         assert np.logical_not(np.isnan(fds['y'].data)).all()
 
 
+# --------------------------------------------------------------------------- #
+# Finding and filling missing data                                            #
+# --------------------------------------------------------------------------- #
+
 class TestFindMissingCases:
     def test_simple(self):
         ds = xr.Dataset(coords={'a': [1, 2, 3], 'b': [40, 50]})
@@ -610,13 +614,48 @@ class TestFillMissingCases:
         assert_allclose(ds.x.data, [[641, 651], [642, 652], [643, 653]])
 
     def test_multires(self):
-        # TODO -------------------------------------------------------------- #
-        pass
+        ds = xr.Dataset(coords={'a': [1, 2, 3], 'b': [40, 50]})
+        ds['x'] = (('a', 'b'), np.array([[641, np.nan],
+                                         [np.nan, 652],
+                                         [np.nan, np.nan]]))
+        ds['even'] = (('a', 'b'), np.array([[False, None],
+                                            [None, True],
+                                            [None, None]]))
+        fill_missing_cases(ds, fn=foo3_float_bool, constants={'c': 600},
+                           var_names=['x', 'even'])
+        assert_allclose(ds.x.data, [[641, 651],
+                                    [642, 652],
+                                    [643, 653]])
+        assert(ds.even.data.tolist() == [[False, False],
+                                         [True, True],
+                                         [False, False]])
 
     def test_array_return(self):
-        # TODO -------------------------------------------------------------- #
-        pass
+        ds = xr.Dataset(coords={'a': [1, 2, 3], 'b': [40, 50],
+                                't': [0.0, 0.1, 0.2, 0.3, 0.4]})
+        ds['z1'] = (('a', 'b', 't'),
+                    np.array([[41 + 0.1j*np.arange(5), [np.nan]*5],
+                              [[np.nan]*5, 52 + 0.1j*np.arange(5)],
+                              [[np.nan]*5, [np.nan]*5]]))
+        ds['z2'] = (('a', 'b', 't'),
+                    np.array([[41 - 0.1j*np.arange(5), [np.nan]*5],
+                              [[np.nan]*5, 52 - 0.1j*np.arange(5)],
+                              [[np.nan]*5, [np.nan]*5]]))
+        settings = {'var_names': ['z1', 'z2'], 'var_dims': 't',
+                    'var_coords': {'t': [0.0, 0.1, 0.2, 0.3, 0.4]}}
+        fill_missing_cases(ds, foo2_zarray1_zarray2, **settings)
+        dst = combo_runner_to_ds(foo2_zarray1_zarray2,
+                                 combos=[('a', [1, 2, 3]),
+                                         ('b', [40, 50])], **settings)
+        assert dst.equals(ds)
 
     def test_float_coords(self):
-        # TODO -------------------------------------------------------------- #
-        pass
+        ds = xr.Dataset(coords={'a': [1.1, 2.1, 3.1], 'b': [40.01, 50.01]})
+        ds['x'] = (('a', 'b'), np.array([[641.11, np.nan],
+                                         [np.nan, 652.11],
+                                         [np.nan, np.nan]]))
+        fill_missing_cases(ds, fn=foo3_scalar, constants={'c': 600},
+                           var_names='x')
+        assert_allclose(ds.x.data, [[641.11, 651.11],
+                                    [642.11, 652.11],
+                                    [643.11, 653.11]])

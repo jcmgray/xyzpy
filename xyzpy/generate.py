@@ -1,14 +1,13 @@
 """ Generate datasets from function and parameter lists """
 
-# TODO: combos add to existing dataset. ------------------------------------- #
-# TODO: pause / finish early interactive commands. -------------------------- #
-# TODO: save to ds every case. ---------------------------------------------- #
 # TODO: automatically count the number of progbars (i.e. no. of len > 1 coos) #
+# TODO: combos add to existing dataset. ------------------------------------- #
+# TODO: save to ds every case. For case_runner only?------------------------- #
+# TODO: pause / finish early interactive commands. -------------------------- #
 
 import functools
 import itertools
 import multiprocessing
-
 import numpy as np
 import xarray as xr
 import tqdm
@@ -30,9 +29,7 @@ def progbar(it=None, nb=False, **tqdm_settings):
 # --------------------------------------------------------------------------- #
 
 def parse_combos(combos):
-    """
-    Turn dicts and single tuples into proper form for combo runners.
-    """
+    """ Turn dicts and single tuples into proper form for combo runners. """
     return (tuple(combos.items()) if isinstance(combos, dict) else
             (combos,) if isinstance(combos[0], str) else
             tuple(combos))
@@ -374,7 +371,11 @@ def cases_to_ds(results, fn_args, cases, var_names, var_dims=None,
             if not overwrite:
                 if not ds[vname].loc[dict(zip(fn_args, cfg))].isnull().all():
                     raise ValueError("Existing data and `overwrite` = False")
-            ds[vname].loc[dict(zip(fn_args, cfg))] = np.asarray(x)
+            try:
+                len(x)
+                ds[vname].loc[dict(zip(fn_args, cfg))] = np.asarray(x)
+            except TypeError:
+                ds[vname].loc[dict(zip(fn_args, cfg))] = x
 
     return ds
 
