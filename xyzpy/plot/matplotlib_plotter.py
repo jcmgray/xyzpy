@@ -20,42 +20,39 @@ from .color import calc_colors
 # Plots with matplotlib only                                                 #
 # -------------------------------------------------------------------------- #
 
-def mpl_markers():
-    marker_dict = OrderedDict([
-        ("o", "circle"),
-        ("x", "x"),
-        ("D", "diamond"),
-        ("+", "plus"),
-        ("s", "square"),
-        (".", "point"),
-        ("^", "triangle_up"),
-        ("3", "tri_left"),
-        (">", "triangle_right"),
-        ("d", "thin_diamond"),
-        ("*", "star"),
-        ("v", "triangle_down"),
-        ("|", "vline"),
-        ("1", "tri_down"),
-        ("p", "pentagon"),
-        (",", "pixel"),
-        ("2", "tri_up"),
-        ("<", "triangle_left"),
-        ("h", "hexagon1"),
-        ("4", "tri_right"),
-        (0, "tickleft"),
-        (2, "tickup"),
-        (3, "tickdown"),
-        (4, "caretleft"),
-        ("_", "hline"),
-        (5, "caretright"),
-        ("H", "hexagon2"),
-        (1, "tickright"),
-        (6, "caretup"),
-        ("8", "octagon"),
-        (7, "caretdown"),
-    ])
-    marker_keys = [*marker_dict.keys()]
-    return marker_keys
+_MPL_MARKER_DICT = OrderedDict([
+    ('o', 'circle'),
+    ('x', 'x'),
+    ('D', 'diamond'),
+    ('+', 'plus'),
+    ('s', 'square'),
+    ('.', 'point'),
+    ('^', 'triangle_up'),
+    ('3', 'tri_left'),
+    ('>', 'triangle_right'),
+    ('d', 'thin_diamond'),
+    ('*', 'star'),
+    ('v', 'triangle_down'),
+    ('|', 'vline'),
+    ('1', 'tri_down'),
+    ('p', 'pentagon'),
+    (',', 'pixel'),
+    ('2', 'tri_up'),
+    ('<', 'triangle_left'),
+    ('h', 'hexagon1'),
+    ('4', 'tri_right'),
+    (0, 'tickleft'),
+    (2, 'tickup'),
+    (3, 'tickdown'),
+    (4, 'caretleft'),
+    ('_', 'hline'),
+    (5, 'caretright'),
+    ('H', 'hexagon2'),
+    (1, 'tickright'),
+    (6, 'caretup'),
+    ('8', 'octagon'),
+    (7, 'caretdown')])
+_MPL_MARKERS = [*_MPL_MARKER_DICT.keys()]
 
 
 def mplot(x, y_i, fignum=1, logx=False, logy=False,
@@ -63,8 +60,8 @@ def mplot(x, y_i, fignum=1, logx=False, logy=False,
           color=False, colormap="viridis", **kwargs):
     """ Function for automatically plotting multiple sets of data
     using matplot lib. """
-
-    # TODO: homogenise options with xmlineplot
+    # TODO: automatically process data into Dataset then send to xmlineplot * #
+    # TODO: homogenise options with xmlineplot ****************************** #
 
     import matplotlib.pyplot as plt
     y_i = np.array(np.squeeze(y_i), ndmin=2)
@@ -75,7 +72,7 @@ def mplot(x, y_i, fignum=1, logx=False, logy=False,
     axes = fig.add_axes([0.1, 0.1, 0.85, 0.8])
 
     if markers:
-        mrkrs = icycle(mpl_markers())
+        mrkrs = icycle(_MPL_MARKERS)
     else:
         repeat(None)
 
@@ -197,7 +194,7 @@ def xmlineplot(ds, y_coo, x_coo, z_coo=None,
 
     # Decide on using markers, and set custom markers and line-styles
     markers = (len(ds[y_coo]) <= 50) if markers is None else markers
-    mrkrs = icycle(mpl_markers()) if markers else repeat(None)
+    mrkrs = icycle(_MPL_MARKERS) if markers else repeat(None)
     lines = repeat("-") if line_styles is None else icycle(line_styles)
 
     # Set custom names for each line ("ztick")
