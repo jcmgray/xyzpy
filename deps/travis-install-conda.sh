@@ -12,6 +12,7 @@ if [ ! -d "$HOME/conda/bin" ]; then
   conda update -q conda
   conda info -a
   conda create -q -n test-environment python=$TRAVIS_PYTHON_VERSION numpy scipy xarray matplotlib h5py coverage pytest pytest-cov
+  source activate test-environment
   pip install tqdm plotly h5netcdf coveralls
 else
   export PATH="$HOME/conda/bin:$PATH"
