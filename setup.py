@@ -8,11 +8,12 @@ setup(name='xyzpy',
       install_requires=[
           'numpy>=1.10.0',
           'scipy>=0.16.0'
-          'xarray>=0.7.0',
-          'plotly>=1.9.0',
-          'matplotlib>=1.5.0',
           'h5py>=2.6.0',
+          'matplotlib>=1.5.0',
+          'xarray>=0.7.0',
           'h5netcdf>=0.2.2',
+          'plotly>=1.9.0',
+          'tqdm>=4.7.6',
           ],
       classifiers=[
           'Development Status :: 3 - Alpha',

@@ -1,5 +1,8 @@
 """ Manage datasets --- loading, saving, merging etc. """
 
+# TODO: Only aggregate Null data -------------------------------------------- #
+# TODO: add singlet dimensions (for all or given vars) ---------------------- #
+
 import numpy as np
 import xarray as xr
 

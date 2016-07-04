@@ -1,0 +1,21 @@
+language: python
+python:
+  - 3.5
+
+cache:
+  directories:
+    - $HOME/conda
+
+before_install:
+  - bash deps/travis-install-conda.sh
+  - export PATH="$HOME/conda/bin:$PATH"
+  - source activate test-environment
+
+install:
+  - pip install .
+
+script:
+  - py.test
+
+after_success:
+  - coveralls
