@@ -6,7 +6,7 @@ Functions for plotting datasets nicely.
 # TODO: matplotlib style hlines, vlines
 # TODO: names
 # TODO: modularise, with mian fig func, xarray handler, and basic plotter
-# TODO: mshow?
+# TODO: mshow? Remove any auto, context sensitive behaviour (use backend etc.)
 # TODO: custom xtick labels
 
 from itertools import cycle as icycle
