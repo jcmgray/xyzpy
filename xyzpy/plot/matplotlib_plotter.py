@@ -6,7 +6,6 @@ Functions for plotting datasets nicely.
 # TODO: unify options with plotly plotters                                    #
 # TODO: matplotlib style hlines, vlines                                       #
 # TODO: refactor function names (lineplot, array_lineplot)                    #
-# TODO: modularise, with mian fig func, xarray handler, and basic plotter     #
 # TODO: mshow? Remove any auto, context sensitive (use backend etc.)          #
 # TODO: custom xtick labels                                                   #
 # TODO: hlines and vlines style                                               #
