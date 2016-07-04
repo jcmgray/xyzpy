@@ -1,18 +1,26 @@
 """
 Functions for plotting datasets nicely.
 """
-# TODO: no border on markers.
-# TODO: unify options
-# TODO: matplotlib style hlines, vlines
-# TODO: names
-# TODO: modularise, with mian fig func, xarray handler, and basic plotter
-# TODO: mshow? Remove any auto, context sensitive behaviour (use backend etc.)
-# TODO: custom xtick labels
+# TODO: error bars                                                            #
+# TODO: no border on markers.                                                 #
+# TODO: unify options with plotly plotters                                    #
+# TODO: matplotlib style hlines, vlines                                       #
+# TODO: refactor function names (lineplot, array_lineplot)                    #
+# TODO: modularise, with mian fig func, xarray handler, and basic plotter     #
+# TODO: mshow? Remove any auto, context sensitive (use backend etc.)          #
+# TODO: custom xtick labels                                                   #
+# TODO: hlines and vlines style                                               #
+# TODO: fallback fonts                                                        #
+# TODO: homogenise options with plotly                                        #
+# TODO: annotations, arbitrary text                                           #
+# TODO: docs                                                                  #
+# TODO: mpl heatmap                                                           #
+# TODO: detect zeros in plotting coordinates and adjust padding auto          #
 
-from itertools import cycle as icycle
-from collections import OrderedDict
-from itertools import repeat
+import itertools
+import collections
 import numpy as np
+import xarray as xr
 from .color import calc_colors
 
 
@@ -20,7 +28,7 @@ from .color import calc_colors
 # Plots with matplotlib only                                                 #
 # -------------------------------------------------------------------------- #
 
-_MPL_MARKER_DICT = OrderedDict([
+_MPL_MARKER_DICT = collections.OrderedDict([
     ('o', 'circle'),
     ('x', 'x'),
     ('D', 'diamond'),
@@ -55,111 +63,64 @@ _MPL_MARKER_DICT = OrderedDict([
 _MPL_MARKERS = [*_MPL_MARKER_DICT.keys()]
 
 
-def mplot(x, y_i, fignum=1, logx=False, logy=False,
-          xlims=None, ylims=None, markers=True,
-          color=False, colormap="viridis", **kwargs):
-    """ Function for automatically plotting multiple sets of data
-    using matplot lib. """
-    # TODO: automatically process data into Dataset then send to xmlineplot * #
-    # TODO: homogenise options with xmlineplot ****************************** #
-
-    import matplotlib.pyplot as plt
-    y_i = np.array(np.squeeze(y_i), ndmin=2)
-    if np.size(x) == y_i.shape[0]:
-        y_i = np.transpose(y_i)
-    n_y = y_i.shape[0]
-    fig = plt.figure(fignum, figsize=(8, 6), dpi=100)
-    axes = fig.add_axes([0.1, 0.1, 0.85, 0.8])
-
-    if markers:
-        mrkrs = icycle(_MPL_MARKERS)
-    else:
-        repeat(None)
-
-    if color:
-        from matplotlib import cm
-        cmap = getattr(cm, colormap)
-        cns = np.linspace(0, 1, n_y)
-        cols = [cmap(cn, 1) for cn in cns]
-    else:
-        cols = repeat(None)
-
-    for y, col, mrkr in zip(y_i, cols, mrkrs):
-        axes.plot(x, y, ".-", c=col, marker=mrkr, **kwargs)
-    xlims = (np.min(x), np.max(x)) if xlims is None else xlims
-    ylims = (np.min(y_i), np.max(y_i)) if ylims is None else ylims
-    axes.set_xlim(xlims)
-    axes.set_ylim(ylims)
-    axes.set_xscale("log" if logx else "linear")
-    axes.set_yscale("log" if logy else "linear")
-    return fig
-
-
 # -------------------------------------------------------------------------- #
 # Plots with matplotlib and xarray                                           #
 # -------------------------------------------------------------------------- #
 
-
-def xmlineplot(ds, y_coo, x_coo, z_coo=None,
-               add_to_fig=None,
-               new_axes_loc=[0.4, 0.6, 0.30, 0.25],
-               add_to_axes=None,
-               figsize=(8, 6),
-               subplot=None,
-               fignum=1,
-               title=None,
-               padding=0.0,
-
-               color=[None],
-               colormap="viridis",
-               colormap_log=False,
-               colormap_reverse=False,
-
-               markers=None,
-               line_styles=None,
-               line_widths=None,
-               zorders=None,
-
-               legend=None,
-               legend_loc=0,
-               legend_ncol=1,
-
-               xlabel=None,
-               xlabel_pad=10,
-               xlims=None,
-               xticks=None,
-               xticklabels_hide=False,
-               logx=False,
-
-               ylabel=None,
-               ylabel_pad=10,
-               ylims=None,
-               yticks=None,
-               yticklabels_hide=False,
-               logy=False,
-
-               zlabel=None,
-               zticks=None,
-
-               vlines=None,
-               hlines=None,
-               gridlines=True,
-               font="Arial",
-               fontsize_title=20,
-               fontsize_ticks=16,
-               fontsize_xlabel=20,
-               fontsize_ylabel=20,
-               fontsize_zlabel=20,
-               fontsize_legend=18,
-               ):
-    """ Function for automatically plotting multiple sets of data
-    using matplotlib and xarray. """
-
-    # TODO: fallback fonts
-    # TODO: homogenise options with plotly, mplot etc
-    # TODO: docs
-    # TODO: annotations, arbitrary text
-
+def lineplot(ds, y_coo, x_coo, z_coo=None,
+             # Figure options
+             add_to_axes=None,  # add to existing axes
+             add_to_fig=None,  # add plot to an exisitng figure
+             new_axes_loc=[0.4, 0.6, 0.30, 0.25],  # overlay axes position
+             figsize=(8, 6),  # absolute figure size
+             subplot=None,  # make plot in subplot
+             fignum=1,
+             title=None,
+             # Line coloring options
+             color=[None],
+             colormap="viridis",
+             colormap_log=False,
+             colormap_reverse=False,
+             # Legend options
+             legend=None,
+             legend_loc=0,
+             legend_ncol=1,  # number of columns in the legend
+             zlabel=None,  # 'z-title' i.e. legend title
+             zticks=None,  # 'z-ticks' i.e. legend labels
+             # Line markers, styles and positions
+             markers=None,
+             line_styles=None,
+             line_widths=None,
+             zorders=None,  # draw order
+             # x-axis options
+             xlabel=None,
+             xlabel_pad=10,  # distance between label and axes line
+             xlims=None,
+             xticks=None,
+             xticklabels_hide=False,  # hide labels but not actual ticks
+             logx=False,
+             # y-axis options
+             ylabel=None,
+             ylabel_pad=10,  # distance between label and axes line
+             ylims=None,
+             yticks=None,
+             yticklabels_hide=False,  # hide labels but not actual ticks
+             logy=False,
+             # Misc Options
+             padding=0.0,  # plot range padding
+             vlines=None,
+             hlines=None,
+             gridlines=True,
+             font="Arial",
+             fontsize_title=20,
+             fontsize_ticks=16,
+             fontsize_xlabel=20,
+             fontsize_ylabel=20,
+             fontsize_zlabel=20,
+             fontsize_legend=18,
+             ):
+    """ Take a data set and plot one of its variables as a function of two
+    coordinates using matplotlib. """
     import matplotlib as mpl
     import matplotlib.pyplot as plt
     mpl.rc("font", family=font)
@@ -190,12 +151,14 @@ def xmlineplot(ds, y_coo, x_coo, z_coo=None,
         cols = calc_colors(ds, z_coo, plotly=False, colormap=colormap,
                            log_scale=colormap_log, reverse=colormap_reverse)
     else:
-        cols = icycle(color)
+        cols = itertools.cycle(color)
 
     # Decide on using markers, and set custom markers and line-styles
     markers = (len(ds[y_coo]) <= 50) if markers is None else markers
-    mrkrs = icycle(_MPL_MARKERS) if markers else repeat(None)
-    lines = repeat("-") if line_styles is None else icycle(line_styles)
+    mrkrs = (itertools.cycle(_MPL_MARKERS) if markers else
+             itertools.repeat(None))
+    lines = (itertools.repeat("-") if line_styles is None else
+             itertools.cycle(line_styles))
 
     # Set custom names for each line ("ztick")
     if zticks is not None:
@@ -206,15 +169,15 @@ def xmlineplot(ds, y_coo, x_coo, z_coo=None,
         zticks = iter([None])
 
     if line_widths is not None:
-        lws = icycle(line_widths)
+        lws = itertools.cycle(line_widths)
     else:
-        lws = icycle([1.3])
+        lws = itertools.cycle([1.3])
 
     # What order lines appear over one another
     if zorders is not None:
-        zorders = icycle(zorders)
+        zorders = itertools.cycle(zorders)
     else:
-        zorders = icycle([3])
+        zorders = itertools.cycle([3])
 
     if z_coo is not None:
         # Cycle through lines and plot
@@ -292,3 +255,21 @@ def xmlineplot(ds, y_coo, x_coo, z_coo=None,
             axes.axhline(y)
 
     return fig
+
+
+xmlineplot = lineplot
+
+
+def xyz_lineplot(x, y_z, **kwargs):
+    """ Take some x-coordinates and an array, convert them to a Dataset
+    treating as multiple lines, then send to lineplot. """
+    # Infer dimensions to coords mapping
+    y_z = np.array(np.squeeze(y_z), ndmin=2)
+    if np.size(x) == y_z.shape[0]:
+        y_z = np.transpose(y_z)
+    n_y = y_z.shape[0]
+    # Turn into dataset
+    ds = xr.Dataset(coords={'x': x, 'z': np.arange(n_y)})
+    ds['y'] = (('z', 'x'), y_z)
+    # Plot dataset
+    return lineplot(ds, 'y', 'x', 'z', **kwargs)
