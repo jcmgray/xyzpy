@@ -89,6 +89,19 @@ def aggregate(*dss, accept_new=False):
 xrsmoosh = aggregate
 
 
+def auto_xyz_ds(x, y_z):
+    """ Automatically turn an array into a `xarray` dataset """
+    # Infer dimensions to coords mapping
+    y_z = np.array(np.squeeze(y_z), ndmin=2)
+    if np.size(x) == y_z.shape[0]:
+        y_z = np.transpose(y_z)
+    n_y = y_z.shape[0]
+    # Turn into dataset
+    ds = xr.Dataset(coords={'x': x, 'z': np.arange(n_y)})
+    ds['y'] = (('z', 'x'), y_z)
+    return ds
+
+
 def xrgroupby_to_dim(ds, dim):
     """ Convert a grouped coordinate to dimension. """
     def gen_ds():

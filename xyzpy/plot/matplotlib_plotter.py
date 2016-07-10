@@ -19,7 +19,7 @@ Functions for plotting datasets nicely.
 import itertools
 import collections
 import numpy as np
-import xarray as xr
+from ..manage import auto_xyz_ds
 from .color import calc_colors
 
 
@@ -76,7 +76,7 @@ def lineplot(ds, y_coo, x_coo, z_coo=None,
              fignum=1,
              title=None,
              # Line coloring options
-             color=[None],
+             colors=[None],
              colormap="viridis",
              colormap_log=False,
              colormap_reverse=False,
@@ -97,15 +97,15 @@ def lineplot(ds, y_coo, x_coo, z_coo=None,
              xlims=None,
              xticks=None,
              xticklabels_hide=False,  # hide labels but not actual ticks
-             logx=False,
+             xlog=False,
              # y-axis options
              ylabel=None,
              ylabel_pad=10,  # distance between label and axes line
              ylims=None,
              yticks=None,
              yticklabels_hide=False,  # hide labels but not actual ticks
-             logy=False,
-             # Misc Options
+             ylog=False,
+             # Misc options
              padding=0.0,  # plot range padding
              vlines=None,
              hlines=None,
@@ -146,11 +146,13 @@ def lineplot(ds, y_coo, x_coo, z_coo=None,
     axes.set_title("" if title is None else title, fontsize=fontsize_title)
 
     # Color lines
-    if color is True:
+    if colors is True:
         cols = calc_colors(ds, z_coo, plotly=False, colormap=colormap,
                            log_scale=colormap_log, reverse=colormap_reverse)
+    elif colors is False:
+        cols = itertools.cycle([None])
     else:
-        cols = itertools.cycle(color)
+        cols = itertools.cycle(colors)
 
     # Decide on using markers, and set custom markers and line-styles
     markers = (len(ds[y_coo]) <= 50) if markers is None else markers
@@ -209,8 +211,8 @@ def lineplot(ds, y_coo, x_coo, z_coo=None,
                   marker=("." if markers else None))
 
     # Set axis scale-type and names
-    axes.set_xscale("log" if logx else "linear")
-    axes.set_yscale("log" if logy else "linear")
+    axes.set_xscale("log" if xlog else "linear")
+    axes.set_yscale("log" if ylog else "linear")
     axes.set_xlabel(x_coo if xlabel is None else xlabel,
                     fontsize=fontsize_xlabel)
     axes.xaxis.labelpad = xlabel_pad
@@ -245,7 +247,7 @@ def lineplot(ds, y_coo, x_coo, z_coo=None,
 
     # Add grid and any custom lines
     if gridlines:
-        axes.grid(True, color="0.666")
+        axes.grid(True, colors="0.666")
     if vlines is not None:
         for x in vlines:
             axes.axvline(x)
@@ -259,16 +261,9 @@ def lineplot(ds, y_coo, x_coo, z_coo=None,
 xmlineplot = lineplot
 
 
-def xyz_lineplot(x, y_z, **kwargs):
+def xyz_lineplot(x, y_z, **lineplot_opts):
     """ Take some x-coordinates and an array, convert them to a Dataset
     treating as multiple lines, then send to lineplot. """
-    # Infer dimensions to coords mapping
-    y_z = np.array(np.squeeze(y_z), ndmin=2)
-    if np.size(x) == y_z.shape[0]:
-        y_z = np.transpose(y_z)
-    n_y = y_z.shape[0]
-    # Turn into dataset
-    ds = xr.Dataset(coords={'x': x, 'z': np.arange(n_y)})
-    ds['y'] = (('z', 'x'), y_z)
+    ds = auto_xyz_ds(x, y_z)
     # Plot dataset
-    return lineplot(ds, 'y', 'x', 'z', **kwargs)
+    return lineplot(ds, 'y', 'x', 'z', **lineplot_opts)

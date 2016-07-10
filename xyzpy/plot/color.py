@@ -1,6 +1,7 @@
 """
 Helper functions for generating color spectrums.
 """
+# TODO: take list of custom colors and convert to right format
 # TODO: custom color plots using mpl.linearColor ...
 
 from math import log

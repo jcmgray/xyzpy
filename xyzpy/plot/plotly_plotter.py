@@ -9,7 +9,7 @@ Functions for plotting datasets nicely.
 # TODO: not working currently?                                                #
 
 import itertools
-import numpy as np
+from ..manage import auto_xyz_ds
 from .color import calc_colors
 
 
@@ -30,42 +30,145 @@ def ishow(figs, nb=True, **kwargs):
     plot(fig_main, **kwargs)
 
 
-# -------------------------------------------------------------------------- #
-# Plots with plotly only                                                     #
-# -------------------------------------------------------------------------- #
+# --------------------------------------------------------------------------  #
+# Line Plots                                                                  #
+# --------------------------------------------------------------------------  #
 
-def iplot(x, y_i, logx=False, logy=False, color=False, colormap="viridis",
-          return_fig=False, nb=True, go_dict={}, ly_dict={}, **kwargs):
-    """ Multi line plot with plotly. """
+def ilineplot(ds, y_coo, x_coo, z_coo=None,
+              return_fig=False,
+              nb=True,
+              # Line coloring options
+              colors=False,
+              colormap="viridis",
+              colormap_log=False,
+              colormap_reverse=False,
+              # Legend options
+              legend=None,
+              # x-axis options
+              xlims=None,
+              xlog=False,
+              # y-axis options
+              ylims=None,
+              ylog=False,
+              # Misc options
+              vlines=[],
+              hlines=[],
+              go_dict={},
+              ly_dict={},
+              **kwargs):
+    """ Take a dataset and plot onse of its variables as a function of two
+    coordinates using plotly. """
+    # TODO: list of colors, send to calc_colors
+    # TODO: mouse scroll zoom
+
     from plotly.graph_objs import Scatter
-    y_i = np.array(np.squeeze(y_i), ndmin=2)
-    if np.size(x) == y_i.shape[0]:
-        y_i = np.transpose(y_i)
-    n_y = y_i.shape[0]
-    if color:
-        import matplotlib.cm as cm
-        cmap = getattr(cm, colormap)
-        cns = np.linspace(0, 1, n_y)
-        cols = ["rgba" + str(cmap(cn)) for cn in cns]
+
+    if z_coo is None:
+        traces = [Scatter({'x': ds[x_coo].data,
+                           'y': ds[y_coo].data.flatten(),
+                           **go_dict})]
     else:
-        cols = itertools.repeat(None)
-    traces = [Scatter({"x": x, "y": y, "line": {"color": col},
-                       "marker": {"color": col},  **go_dict})
-              for y, col in zip(y_i, cols)]
-    layout = {"width": 750, "height": 600, "showlegend": False,
-              "xaxis": {"showline": True, "mirror": "ticks",
-                        "ticks": "inside",
-                        "type": "log" if logx else "linear"},
-              "yaxis": {"showline": True, "mirror": "ticks",
-                        "ticks": "inside",
-                        "type": "log" if logy else "linear"}, **ly_dict}
+        cols = (calc_colors(ds, z_coo,
+                            colormap=colormap,
+                            log_scale=colormap_log,
+                            reverse=colormap_reverse) if colors else
+                itertools.repeat(None))
+        traces = [Scatter({'x': ds.loc[{z_coo: z}][x_coo].data.flatten(),
+                           'y': ds.loc[{z_coo: z}][y_coo].data.flatten(),
+                           'name': str(z),
+                           'line': {'color': col},
+                           'marker': {'color': col},
+                           **go_dict})
+                  for z, col in zip(ds[z_coo].data, cols)]
+
+    lines = ([{'type': 'line',
+               'layer': 'below',
+               'line': {'color': 'rgb(128, 128, 128)',
+                        'width': 1.5,
+                        'dash': 'dot'},
+               'xref': 'x', 'x0': lx, 'x1': lx,
+               'yref': 'paper', 'y0': 0, 'y1': 1} for lx in vlines] +
+             [{'type': 'line',
+               'layer': 'below',
+               'line': {'color': 'rgb(128, 128, 128)',
+                        'width': 1.5,
+                        'dash': 'dot'},
+               'yref': 'y', 'y0': ly, 'y1': ly,
+               'xref': 'paper', 'x0': 0, 'x1': 1} for ly in hlines])
+
+    layout = {'width': 750,
+              'height': 600,
+              'xaxis': {'showline': True,
+                        'title': x_coo,
+                        'mirror': 'ticks',
+                        'ticks': 'inside',
+                        'range': xlims if xlims is not None else None,
+                        'type': 'log' if xlog else 'linear'},
+              'yaxis': {'showline': True,
+                        'title': y_coo,
+                        'range': ylims if ylims is not None else None,
+                        'mirror': 'ticks',
+                        'ticks': 'inside',
+                        'type': 'log' if ylog else 'linear'},
+              'showlegend': legend or not (legend is False or z_coo is None or
+                                           len(ds[z_coo]) > 20),
+              'shapes': lines,
+              **ly_dict}
+
+    fig = {'data': traces, 'layout': layout}
+    if return_fig:
+        return fig
+    ishow(fig, nb=nb, **kwargs)
+
+
+def xyz_ilineplot(x, y_z, **ilineplot_opts):
+    """ Take some x-coordinates and an array, convert them to a Dataset
+    treating as multiple lines, then send to ilineplot. """
+    ds = auto_xyz_ds(x, y_z)
+    return ilineplot(ds, 'y', 'x', 'z', **ilineplot_opts)
+
+
+# --------------------------------------------------------------------------- #
+# Other types of plot                                                         #
+# --------------------------------------------------------------------------- #
+
+def iheatmap(ds, data_name, x_coo, y_coo,
+             colormap="Portland",
+             go_dict={}, ly_dict={},
+             nb=True,
+             return_fig=False,
+             **kwargs):
+    """ Automatic 2D-Heatmap plot using plotly. """
+    from plotly.graph_objs import Heatmap
+    traces = [Heatmap({"z": (ds[data_name]
+                             .dropna(x_coo, how="all")
+                             .dropna(y_coo, how="all")
+                             .squeeze()
+                             .transpose(y_coo, x_coo)
+                             .data),
+                       "x": ds.coords[x_coo].data,
+                       "y": ds.coords[y_coo].data,
+                       "colorscale": colormap,
+                       "colorbar": {"title": data_name},
+                       **go_dict})]
+    layout = {"height": 600,
+              "width": 650,
+              "xaxis": {"showline": True,
+                        "mirror": "ticks",
+                        "ticks": "outside",
+                        "title": x_coo},
+              "yaxis": {"showline": True,
+                        "mirror": "ticks",
+                        "ticks": "outside",
+                        "title": y_coo},
+              **ly_dict}
     fig = {"data": traces, "layout": layout}
     if return_fig:
         return fig
     ishow(fig, nb=nb, **kwargs)
 
 
-def iscatter(x, y, cols=None, logx=False, logy=False, nb=True,
+def iscatter(x, y, cols=None, xlog=False, ylog=False, nb=True,
              return_fig=False, ly_dict={}, **kwargs):
     from plotly.graph_objs import Scatter, Marker
     mkr = Marker({"color": cols, "opacity": 0.9,
@@ -74,10 +177,10 @@ def iscatter(x, y, cols=None, logx=False, logy=False, nb=True,
     layout = {"width": 700, "height": 700, "showlegend": False,
               "xaxis": {"showline": True, "mirror": "ticks",
                         "ticks": "inside",
-                        "type": "log" if logx else "linear"},
+                        "type": "log" if xlog else "linear"},
               "yaxis": {"showline": True, "mirror": "ticks",
                         "ticks": "inside",
-                        "type": "log" if logy else "linear"}, **ly_dict}
+                        "type": "log" if ylog else "linear"}, **ly_dict}
     fig = {"data": traces, "layout": layout}
     if return_fig:
         return fig
@@ -118,103 +221,6 @@ def plot_matrix(a, colormap="Greys", nb=True, return_fig=False, **kwargs):
                         "autotick": True,
                         "ticks": "",
                         "showticklabels": False}}
-    fig = {"data": traces, "layout": layout}
-    if return_fig:
-        return fig
-    ishow(fig, nb=nb, **kwargs)
-
-
-# -------------------------------------------------------------------------- #
-# Plots with plotly and xarray                                               #
-# -------------------------------------------------------------------------- #
-
-def iheatmap(ds, data_name, x_coo, y_coo, colormap="Portland",
-             go_dict={}, ly_dict={}, nb=True, return_fig=False,
-             **kwargs):
-    """ Automatic 2D-Heatmap plot using plotly. """
-    from plotly.graph_objs import Heatmap
-    traces = [Heatmap({"z": (ds[data_name]
-                             .dropna(x_coo, how="all")
-                             .dropna(y_coo, how="all")
-                             .squeeze()
-                             .transpose(y_coo, x_coo)
-                             .data),
-                       "x": ds.coords[x_coo].data,
-                       "y": ds.coords[y_coo].data,
-                       "colorscale": colormap,
-                       "colorbar": {"title": data_name},
-                       **go_dict})]
-    layout = {"height": 600,
-              "width": 650,
-              "xaxis": {"showline": True,
-                        "mirror": "ticks",
-                        "ticks": "outside",
-                        "title": x_coo},
-              "yaxis": {"showline": True,
-                        "mirror": "ticks",
-                        "ticks": "outside",
-                        "title": y_coo},
-              **ly_dict}
-    fig = {"data": traces, "layout": layout}
-    if return_fig:
-        return fig
-    ishow(fig, nb=nb, **kwargs)
-
-
-def ilineplot(ds, y_coo, x_coo, z_coo=None,
-              logx=False,
-              logy=False,
-              erry=None,
-              errx=None,
-              nb=True,
-              color=False,
-              colormap="viridis",
-              colormap_reverse=False,
-              colormap_log=False,
-              legend=None,
-              traces=[],
-              go_dict={},
-              ly_dict={},
-              return_fig=False,
-              **kwargs):
-    # TODO: add hlines, vlines, xlims, ylims, title
-
-    from plotly.graph_objs import Scatter
-
-    if z_coo is None:
-        traces = [Scatter({"x": ds[x_coo].data,
-                           "y": ds[y_coo].data.flatten(),
-                           **go_dict})]
-    else:
-        cols = (calc_colors(ds, z_coo,
-                            colormap=colormap,
-                            log_scale=colormap_log,
-                            reverse=colormap_reverse) if color else
-                itertools.repeat(None))
-        traces = [Scatter({"x": ds.loc[{z_coo: z}][x_coo].data.flatten(),
-                           "y": ds.loc[{z_coo: z}][y_coo].data.flatten(),
-                           "name": str(z),
-                           "line": {"color": col},
-                           "marker": {"color": col},
-                           **go_dict})
-                  for z, col in zip(ds[z_coo].data, cols)]
-
-    layout = {"width": 750,
-              "height": 600,
-              "xaxis": {"showline": True,
-                        "title": x_coo,
-                        "mirror": "ticks",
-                        "ticks": "inside",
-                        "type": "log" if logx else "linear"},
-              "yaxis": {"showline": True,
-                        "title": y_coo,
-                        "mirror": "ticks",
-                        "ticks": "inside",
-                        "type": "log" if logy else "linear"},
-              "showlegend": legend or not (legend is False or z_coo is None or
-                                           len(ds[z_coo]) > 20),
-              **ly_dict}
-
     fig = {"data": traces, "layout": layout}
     if return_fig:
         return fig
