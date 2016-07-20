@@ -1,16 +1,12 @@
 """
 Functions for plotting datasets nicely.
 """
-# TODO: error bars                                                            #
-# TODO: no border on markers.                                                 #
 # TODO: unify options with plotly plotters                                    #
-# TODO: matplotlib style hlines, vlines                                       #
+# TODO: error bars
 # TODO: refactor function names (lineplot, array_lineplot)                    #
 # TODO: mshow? Remove any auto, context sensitive (use backend etc.)          #
 # TODO: custom xtick labels                                                   #
 # TODO: hlines and vlines style                                               #
-# TODO: fallback fonts                                                        #
-# TODO: homogenise options with plotly                                        #
 # TODO: annotations, arbitrary text                                           #
 # TODO: docs                                                                  #
 # TODO: mpl heatmap                                                           #
@@ -77,7 +73,7 @@ def lineplot(ds, y_coo, x_coo, z_coo=None,
              title=None,
              # Line coloring options
              colors=[None],
-             colormap="viridis",
+             colormap="xyz",
              colormap_log=False,
              colormap_reverse=False,
              # Legend options
@@ -86,11 +82,6 @@ def lineplot(ds, y_coo, x_coo, z_coo=None,
              legend_ncol=1,  # number of columns in the legend
              zlabel=None,  # 'z-title' i.e. legend title
              zticks=None,  # 'z-ticks' i.e. legend labels
-             # Line markers, styles and positions
-             markers=None,
-             line_styles=None,
-             line_widths=None,
-             zorders=None,  # draw order
              # x-axis options
              xlabel=None,
              xlabel_pad=10,  # distance between label and axes line
@@ -105,12 +96,17 @@ def lineplot(ds, y_coo, x_coo, z_coo=None,
              yticks=None,
              yticklabels_hide=False,  # hide labels but not actual ticks
              ylog=False,
+             # Line markers, styles and positions
+             markers=None,
+             line_styles=None,
+             line_widths=None,
+             zorders=None,  # draw order
              # Misc options
              padding=0.0,  # plot range padding
              vlines=None,
              hlines=None,
              gridlines=True,
-             font="Arial",
+             font=['Source Sans Pro', 'PT Sans', 'Liberation Sans', 'Arial'],
              fontsize_title=20,
              fontsize_ticks=16,
              fontsize_xlabel=20,
@@ -193,8 +189,13 @@ def lineplot(ds, y_coo, x_coo, z_coo=None,
             x, y = x[nans], y[nans]
 
             # add line to axes, with options cycled through
-            axes.plot(x, y, ln, c=col, lw=next(lws), marker=mrkr,
-                      label=next(zticks), zorder=next(zorders))
+            axes.plot(x, y, ln,
+                      c=col,
+                      lw=next(lws),
+                      marker=mrkr,
+                      markeredgecolor=col,
+                      label=next(zticks),
+                      zorder=next(zorders))
 
         # Add a legend
         if legend or not (legend is False or len(ds[z_coo]) > 10):
@@ -206,9 +207,14 @@ def lineplot(ds, y_coo, x_coo, z_coo=None,
         # Plot single line
         x = ds[x_coo].data.flatten()
         y = ds[y_coo].data.flatten()
-        axes.plot(x, y, next(lines), lw=next(lws), zorder=next(zorders),
-                  c=next(cols), label=next(zticks),
-                  marker=("." if markers else None))
+        col = next(cols)
+        axes.plot(x, y, next(lines),
+                  lw=next(lws),
+                  c=col,
+                  marker=("." if markers else None),
+                  markeredgecolor=col,
+                  label=next(zticks),
+                  zorder=next(zorders))
 
     # Set axis scale-type and names
     axes.set_xscale("log" if xlog else "linear")
@@ -247,7 +253,7 @@ def lineplot(ds, y_coo, x_coo, z_coo=None,
 
     # Add grid and any custom lines
     if gridlines:
-        axes.grid(True, colors="0.666")
+        axes.grid(True, color="0.666")
     if vlines is not None:
         for x in vlines:
             axes.axvline(x)

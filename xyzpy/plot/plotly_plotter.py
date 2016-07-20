@@ -55,6 +55,12 @@ def ilineplot(ds, y_coo, x_coo, z_coo=None,
               hlines=[],
               go_dict={},
               ly_dict={},
+              # TODO padding
+              # TODO markers
+              # TODO linewidths
+              # TODO linestyles
+              # TODO gridlines
+              # TODO font and labels
               **kwargs):
     """ Take a dataset and plot onse of its variables as a function of two
     coordinates using plotly. """
@@ -69,6 +75,7 @@ def ilineplot(ds, y_coo, x_coo, z_coo=None,
                            **go_dict})]
     else:
         cols = (calc_colors(ds, z_coo,
+                            plotly=True,
                             colormap=colormap,
                             log_scale=colormap_log,
                             reverse=colormap_reverse) if colors else
@@ -84,14 +91,14 @@ def ilineplot(ds, y_coo, x_coo, z_coo=None,
     lines = ([{'type': 'line',
                'layer': 'below',
                'line': {'color': 'rgb(128, 128, 128)',
-                        'width': 1.5,
+                        'width': 1.0,
                         'dash': 'dot'},
                'xref': 'x', 'x0': lx, 'x1': lx,
                'yref': 'paper', 'y0': 0, 'y1': 1} for lx in vlines] +
              [{'type': 'line',
                'layer': 'below',
                'line': {'color': 'rgb(128, 128, 128)',
-                        'width': 1.5,
+                        'width': 1.0,
                         'dash': 'dot'},
                'yref': 'y', 'y0': ly, 'y1': ly,
                'xref': 'paper', 'x0': 0, 'x1': 1} for ly in hlines])
