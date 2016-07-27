@@ -33,9 +33,8 @@ def ds2():
     return ds
 
 
-class TestXRSmoosh:
+class TestAggregate:
     def test_simple(self, ds1, ds2):
-        # TODO -------------------------------------------------------------- #
         fds = xrsmoosh(ds1, ds2)
         assert fds['x'].dtype == complex
         assert fds['x'].dtype == complex
@@ -46,10 +45,18 @@ class TestXRSmoosh:
         assert np.isnan(fds.loc[{'a': 2, 'b': "l5"}]['x'].data)
         assert np.isnan(fds.loc[{'a': 5, 'b': "l1"}]['x'].data)
 
+    def test_no_overwrite(self):
+        # TODO ************************************************************** #
+        pass
+
+    def test_overwrite(self):
+        # TODO ************************************************************** #
+        pass
+
 
 class TestSaveAndLoad:
     def test_simple(self, ds1, tmpdir):
-        # TODO -------------------------------------------------------------- #
+        # TODO ************************************************************** #
         pass
         # xrsave(ds1, "test.h5")
         # dsl = xrload("test.h5")

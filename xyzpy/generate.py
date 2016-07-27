@@ -1,5 +1,6 @@
 """ Generate datasets from function and parameter lists """
 
+# TODO: allow combo_runner_to_ds to use output vars as coords
 # TODO: automatically count the number of progbars (i.e. no. of len > 1 coos) #
 # TODO: combos add to existing dataset. ------------------------------------- #
 # TODO: save to ds every case. For case_runner only?------------------------- #
@@ -20,8 +21,7 @@ def progbar(it=None, nb=False, **tqdm_settings):
     settings = {**defaults, **tqdm_settings}
     if nb:  # pragma: no cover
         return tqdm.tqdm_notebook(it, **settings)
-    else:
-        return tqdm.tqdm(it, **settings)
+    return tqdm.tqdm(it, **settings)
 
 
 # --------------------------------------------------------------------------- #
@@ -30,9 +30,11 @@ def progbar(it=None, nb=False, **tqdm_settings):
 
 def parse_combos(combos):
     """ Turn dicts and single tuples into proper form for combo runners. """
-    return (tuple(combos.items()) if isinstance(combos, dict) else
-            (combos,) if isinstance(combos[0], str) else
-            tuple(combos))
+    if isinstance(combos, dict):
+        return tuple(combos.items())
+    elif isinstance(combos[0], str):
+        return (combos,)
+    return tuple(combos)
 
 
 def combo_runner(fn, combos, constants=None, split=False, progbars=0,
@@ -450,6 +452,20 @@ def find_missing_cases(ds, var_dims=None):
 
 def fill_missing_cases(ds, fn, var_names, var_dims=None, var_coords={},
                        **case_runner_settings):
+    """ Take a dataset and function etc. and fill its missing data in
+
+    Parameters
+    ----------
+        ds: Dataset to analyse and fill
+        fn: function to use to fill missing cases
+        var_names: output variable names of function
+        var_dims: output varialbe named dimensions of function
+        var_coords: dictionary of coords for output dims
+        **case_runner_settings: settings sent to `case_runner`
+    Returns
+    -------
+        None: (filling performed in-place)
+    """
     # Find missing cases
     fn_args, missing_cases = find_missing_cases(ds, var_dims)
     # Evaluate and add to Dataset

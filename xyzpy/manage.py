@@ -73,6 +73,9 @@ def aggregate(*dss, accept_new=False):
     # TODO: rename --> aggregate, look into, part_align -> concat.
     # TODO: check if result var is all non-nan and could be all same dtype
 
+    if accept_new:
+        dss = tuple(reversed(dss))
+
     ds = dss[0]
     for new_ds in dss[1:]:
         # First make sure both datasets have the same variables
@@ -80,9 +83,10 @@ def aggregate(*dss, accept_new=False):
             if data_var not in ds.data_vars:
                 ds[data_var] = np.nan
         # Expand both to have same dimensions, padding with NaN
-        ds, new_ds = xr.align(ds, new_ds, join="outer")
+        ds, _ = xr.align(ds, new_ds, join="outer")
+        # assert all(ds.loc[new_ds.coords].isnull())
         # Fill NaNs one way or the other w.r.t. accept_new
-        ds = new_ds.fillna(ds) if accept_new else ds.fillna(new_ds)
+        ds = ds.fillna(new_ds)
     return ds
 
 
