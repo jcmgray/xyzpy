@@ -255,10 +255,12 @@ class TestComboRunnerToDS:
 
     def test_double_array_return_with_no_given_dimensions(self):
         ds = combo_runner_to_ds(foo2_array_array,
-                                combos=[('a', [1, 2]), ('b', [30, 40])],
+                                combos=[('a', [1, 2]),
+                                        ('b', [30, 40])],
                                 var_names=['array1', 'array2'],
                                 var_dims=[['auto']])
-        assert ds['auto'].data.dtype == int
+        assert (ds['auto'].data.dtype == int or
+                ds['auto'].data.dtype == np.int64)
         assert_allclose(ds['auto'].data, [0, 1, 2, 3, 4])
 
     def test_complex_output(self):

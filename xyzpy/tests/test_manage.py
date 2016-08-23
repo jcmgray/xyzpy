@@ -1,35 +1,43 @@
-from pytest import fixture, mark
+from pytest import fixture, raises
 import numpy as np
 import xarray as xr
 
 from ..manage import (
     aggregate,
-    xrsave,
-    xrload,
+    # xrload,
+    # xrsave,
 )
 
 
 @fixture
 def ds1():
-    data1 = np.random.randn(3, 4) + 1.0j * np.random.randn(3, 4)
-    data2 = np.asarray([True, False, True, False])
     ds = xr.Dataset()
     ds.coords['b'] = ['l1', 'l2', 'l4']
     ds.coords['a'] = [1, 2, 3, 4]
-    ds['x'] = (('b', 'a'), data1)
-    ds['isodd'] = ('a', data2)
+    ds['x'] = (('b', 'a'),
+               np.random.randn(3, 4) + 1.0j * np.random.randn(3, 4))
+    ds['isodd'] = ('a', np.asarray([True, False, True, False]))
     return ds
 
 
 @fixture
 def ds2():
-    data1 = np.random.randn(2, 3) + 1.0j * np.random.randn(2, 3)
-    data2 = np.asarray([True, False, True])
     ds = xr.Dataset()
     ds.coords['b'] = ['l3', 'l5']
     ds.coords['a'] = [3, 4, 5]
-    ds['x'] = (('b', 'a'), data1)
-    ds['isodd'] = ('a', data2)
+    ds['x'] = (('b', 'a'),
+               np.random.randn(2, 3) + 1.0j * np.random.randn(2, 3))
+    ds['isodd'] = ('a', np.asarray([True, False, True]))
+    return ds
+
+
+@fixture
+def ds3():
+    ds = xr.Dataset()
+    ds.coords['b'] = ['l5']
+    ds.coords['a'] = [4]
+    ds['x'] = (('b', 'a'), [[123. + 456.0j]])
+    ds['isodd'] = ('a', np.asarray([True]))
     return ds
 
 
@@ -45,13 +53,16 @@ class TestAggregate:
         assert np.isnan(fds.loc[{'a': 2, 'b': "l5"}]['x'].data)
         assert np.isnan(fds.loc[{'a': 5, 'b': "l1"}]['x'].data)
 
-    def test_no_overwrite(self):
-        # TODO ************************************************************** #
-        pass
+    def test_no_overwrite(self, ds2, ds3):
+        with raises(ValueError):
+            aggregate(ds2, ds3)
 
     def test_overwrite(self):
         # TODO ************************************************************** #
         pass
+
+    # TODO: test type maintained when var does not exist in first dataset
+    # TODO: test accept_newer
 
 
 class TestSaveAndLoad:

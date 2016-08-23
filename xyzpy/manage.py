@@ -5,6 +5,7 @@
 
 import numpy as np
 import xarray as xr
+from xarray.ufuncs import logical_not
 
 
 def _auto_add_extension(file_name, engine):
@@ -66,26 +67,47 @@ def xrload(file_name, engine="h5netcdf", load_to_mem=True, create_new=False):
     return ds
 
 
-def aggregate(*dss, accept_new=False):
-    """ Aggregates xarray Datasets and DataArrays """
-    # TODO: overwrite option, rather than accept_new, raise error if not
-    # TODO: rename --> aggregate, look into, part_align -> concat.
+def are_conflicting(ds1, ds2):
+    """ Check whether two (aligned) datasets have any conflicting values. """
+    both_not_null = logical_not(ds1.isnull() | ds2.isnull())
+    return not ds1.where(both_not_null).equals(ds2.where(both_not_null))
+
+
+def aggregate(*dss, overwrite=False, accept_newer=False):
+    """ Aggregates xarray Datasets and DataArrays
+
+    Parameters
+    ----------
+        *dss:
+        overwrite:
+        accept_newer:
+
+    Returns
+    -------
+        ds: singlet Dataset containing data from all `dss`
+    """
     # TODO: check if result var is all non-nan and could be all same dtype
 
-    if accept_new:
-        dss = tuple(reversed(dss))
+    dss = iter(dss)
+    ds = next(dss)
 
-    ds = dss[0]
-    for new_ds in dss[1:]:
-        # First make sure both datasets have the same variables
-        for data_var in new_ds.data_vars:
-            if data_var not in ds.data_vars:
-                ds[data_var] = np.nan
-        # Expand both to have same dimensions, padding with NaN
-        ds, _ = xr.align(ds, new_ds, join="outer")
-        # assert all(ds.loc[new_ds.coords].isnull())
-        # Fill NaNs one way or the other w.r.t. accept_new
-        ds = ds.fillna(new_ds)
+    for new_ds in dss:
+        # Expand both to have same coordinates, padding with NaN
+        ds, new_ds = xr.align(ds, new_ds, join="outer")
+
+        # Check no data-loss will occur if overwrite not set
+        if not overwrite and are_conflicting(ds, new_ds):
+            raise ValueError("Conflicting values in datasets. "
+                             "Consider setting `overwrite=True`.")
+
+        # Fill out missing values in initial dataset
+        ds = new_ds.fillna(ds) if accept_newer else ds.fillna(new_ds)
+
+        # Add completely missing data_variables
+        for var_name in new_ds.data_vars:
+            if var_name not in ds.data_vars:
+                ds[var_name] = new_ds[var_name]
+
     return ds
 
 
