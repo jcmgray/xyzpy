@@ -3,7 +3,7 @@ import numpy as np
 import xarray as xr
 
 from ..manage import (
-    xrsmoosh,
+    aggregate,
     xrsave,
     xrload,
 )
@@ -35,7 +35,7 @@ def ds2():
 
 class TestAggregate:
     def test_simple(self, ds1, ds2):
-        fds = xrsmoosh(ds1, ds2)
+        fds = aggregate(ds1, ds2)
         assert fds['x'].dtype == complex
         assert fds['x'].dtype == complex
         assert (fds.loc[{'a': 3, 'b': "l2"}]['x'].data ==

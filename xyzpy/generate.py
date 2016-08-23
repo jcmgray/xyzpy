@@ -5,6 +5,7 @@
 # TODO: combos add to existing dataset. ------------------------------------- #
 # TODO: save to ds every case. For case_runner only?------------------------- #
 # TODO: pause / finish early interactive commands. -------------------------- #
+# TODO: function for printing ranges of runs done.
 
 import functools
 import itertools

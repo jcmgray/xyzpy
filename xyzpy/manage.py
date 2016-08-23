@@ -7,7 +7,7 @@ import numpy as np
 import xarray as xr
 
 
-def auto_add_extension(file_name, engine):
+def _auto_add_extension(file_name, engine):
     if "." not in file_name:
         extension = ".h5" if engine == "h5netcdf" else ".nc"
         file_name += extension
@@ -15,8 +15,7 @@ def auto_add_extension(file_name, engine):
 
 
 def xrsave(ds, file_name, engine="h5netcdf"):
-    """
-    Saves a xarray dataset.
+    """ Saves a xarray dataset.
 
     Parameters
     ----------
@@ -28,7 +27,7 @@ def xrsave(ds, file_name, engine="h5netcdf"):
     -------
         None
     """
-    file_name = auto_add_extension(file_name, engine)
+    file_name = _auto_add_extension(file_name, engine)
     ds.to_netcdf(file_name, engine=engine)
 
 
@@ -47,7 +46,7 @@ def xrload(file_name, engine="h5netcdf", load_to_mem=True, create_new=False):
     -------
         ds: loaded Dataset
     """
-    file_name = auto_add_extension(file_name, engine)
+    file_name = _auto_add_extension(file_name, engine)
     try:
         try:
             ds = xr.open_dataset(file_name, engine=engine)
@@ -115,4 +114,4 @@ def xrgroupby_to_dim(ds, dim):
             d, = xr.broadcast(d)
             yield d
 
-    return xrsmoosh(*gen_ds())
+    return aggregate(*gen_ds())
