@@ -1,11 +1,10 @@
 """ Manage datasets --- loading, saving, merging etc. """
 
-# TODO: Only aggregate Null data -------------------------------------------- #
 # TODO: add singlet dimensions (for all or given vars) ---------------------- #
 
 import numpy as np
 import xarray as xr
-from xarray.ufuncs import logical_not
+import xarray.ufuncs as xrufuncs
 
 
 def _auto_add_extension(file_name, engine):
@@ -67,48 +66,55 @@ def xrload(file_name, engine="h5netcdf", load_to_mem=True, create_new=False):
     return ds
 
 
-def are_conflicting(ds1, ds2):
+def nonnull_compatible(first, second):
     """ Check whether two (aligned) datasets have any conflicting values. """
-    both_not_null = logical_not(ds1.isnull() | ds2.isnull())
-    return not ds1.where(both_not_null).equals(ds2.where(both_not_null))
+    # TODO assert common coordinates are aligned?
+    both_not_null = xrufuncs.logical_not(first.isnull() | second.isnull())
+    return first.where(both_not_null).equals(second.where(both_not_null))
 
 
-def aggregate(*dss, overwrite=False, accept_newer=False):
+def aggregate(*datasets, overwrite=False, accept_newer=False):
     """ Aggregates xarray Datasets and DataArrays
 
     Parameters
     ----------
-        *dss:
-        overwrite:
-        accept_newer:
+        *datasets: sequence of datasets to combine
+        overwrite: whether to overwrite conflicting values
+        accept_newer: if overwriting whether to accept newer values, i.e.
+            to prefer values in latter datasets.
 
     Returns
     -------
-        ds: singlet Dataset containing data from all `dss`
+        ds: single Dataset containing data from all `datasets`
     """
-    # TODO: check if result var is all non-nan and could be all same dtype
 
-    dss = iter(dss)
-    ds = next(dss)
+    datasets = iter(datasets)
+    ds1 = next(datasets)
 
-    for new_ds in dss:
-        # Expand both to have same coordinates, padding with NaN
-        ds, new_ds = xr.align(ds, new_ds, join="outer")
+    for ds2 in datasets:
+        # Expand both to have same coordinates, padding with nan
+        ds1, ds2 = (xr.align(ds1, ds2, join='outer') if accept_newer else
+                    xr.align(ds2, ds1, join='outer'))
 
         # Check no data-loss will occur if overwrite not set
-        if not overwrite and are_conflicting(ds, new_ds):
+        if not overwrite and not nonnull_compatible(ds1, ds2):
             raise ValueError("Conflicting values in datasets. "
                              "Consider setting `overwrite=True`.")
 
-        # Fill out missing values in initial dataset
-        ds = new_ds.fillna(ds) if accept_newer else ds.fillna(new_ds)
+        # Fill out missing values in initial dataset for common variables
+        common_vars = (var for var in ds1.data_vars if var in ds2.data_vars)
+        for var in common_vars:
+            ds1[var] = ds1[var].fillna(ds2[var])
 
         # Add completely missing data_variables
-        for var_name in new_ds.data_vars:
-            if var_name not in ds.data_vars:
-                ds[var_name] = new_ds[var_name]
+        new_vars = (var for var in ds2.data_vars if var not in ds1.data_vars)
+        for var in new_vars:
+            ds1[var] = ds2[var]
 
-    return ds
+        # TODO: check if result var is all non-nan and could be all same dtype
+        # TODO:     - only really makes sense for int currently? and string?
+
+    return ds1
 
 
 xrsmoosh = aggregate

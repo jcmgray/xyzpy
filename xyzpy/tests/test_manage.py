@@ -11,34 +11,63 @@ from ..manage import (
 
 @fixture
 def ds1():
-    ds = xr.Dataset()
-    ds.coords['b'] = ['l1', 'l2', 'l4']
-    ds.coords['a'] = [1, 2, 3, 4]
-    ds['x'] = (('b', 'a'),
-               np.random.randn(3, 4) + 1.0j * np.random.randn(3, 4))
-    ds['isodd'] = ('a', np.asarray([True, False, True, False]))
-    return ds
+    return xr.Dataset(
+            coords={
+                'b': ['l1', 'l2', 'l4'],
+                'a': [1, 2, 3, 4]},
+            data_vars={
+                'x': (('b', 'a'),
+                      np.random.randn(3, 4) + 1.0j * np.random.randn(3, 4)),
+                'isodd': ('a', np.asarray([True, False, True, False]))})
 
 
 @fixture
 def ds2():
-    ds = xr.Dataset()
-    ds.coords['b'] = ['l3', 'l5']
-    ds.coords['a'] = [3, 4, 5]
-    ds['x'] = (('b', 'a'),
-               np.random.randn(2, 3) + 1.0j * np.random.randn(2, 3))
-    ds['isodd'] = ('a', np.asarray([True, False, True]))
-    return ds
+    return xr.Dataset(
+        coords={
+            'b': ['l3', 'l5'],
+            'a': [3, 4, 5]},
+        data_vars={
+            'x': (('b', 'a'),
+                  np.random.randn(2, 3) + 1.0j * np.random.randn(2, 3)),
+            'isodd': ('a', np.asarray([True, False, True]))})
 
 
 @fixture
 def ds3():
-    ds = xr.Dataset()
-    ds.coords['b'] = ['l5']
-    ds.coords['a'] = [4]
-    ds['x'] = (('b', 'a'), [[123. + 456.0j]])
-    ds['isodd'] = ('a', np.asarray([True]))
-    return ds
+    return xr.Dataset(
+        coords={
+            'b': ['l5'],
+            'a': [4]},
+        data_vars={
+            'x': (('b', 'a'), [[123. + 456.0j]]),
+            'isodd': ('a', np.asarray([True]))})
+
+
+class TestNonnullCompatible:
+    def test_compatible_no_coo_overlap(self):
+        # TODO ************************************************************** #
+        pass
+
+    def test_compatible_coo_overlap(self):
+        # TODO ************************************************************** #
+        pass
+
+    def test_not_compatible(self):
+        # TODO ************************************************************** #
+        pass
+
+    def test_different_data_vars(self):
+        # TODO ************************************************************** #
+        pass
+
+    def test_overlapping_but_with_equal_values(self):
+        # TODO ************************************************************** #
+        pass
+
+    def test_overlapping_but_with_equal_values_float(self):
+        # TODO ************************************************************** #
+        pass
 
 
 class TestAggregate:
@@ -61,8 +90,17 @@ class TestAggregate:
         # TODO ************************************************************** #
         pass
 
-    # TODO: test type maintained when var does not exist in first dataset
-    # TODO: test accept_newer
+    def test_accept_newer(self):
+        # TODO ************************************************************** #
+        pass
+
+    def test_dataarrays(self):
+        # TODO ************************************************************** #
+        pass
+
+    def test_type_propagation_new_variables(self):
+        # TODO ************************************************************** #
+        pass
 
 
 class TestSaveAndLoad:
