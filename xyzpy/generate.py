@@ -6,6 +6,9 @@
 # TODO: save to ds every case. For case_runner only?------------------------- #
 # TODO: pause / finish early interactive commands. -------------------------- #
 # TODO: function for printing ranges of runs done.
+# TODO: logging
+# TODO: catch attribute error from multiprocessing unimportable functions
+# TODO: proper docs
 
 import functools
 import itertools
@@ -164,7 +167,7 @@ def combo_runner(fn, combos, constants=None, split=False, progbars=0,
 
 
 def combos_to_ds(results, combos, var_names, var_dims=None, var_coords={},
-                 constants=None):
+                 constants=None, attrs=None):
     """ Convert the output of combo_runner into a `xarray.Dataset`
 
     Parameters
@@ -199,8 +202,7 @@ def combos_to_ds(results, combos, var_names, var_dims=None, var_coords={},
                 itertools.repeat(tuple()))
 
     # Set dataset coordinates
-    ds = xr.Dataset(coords={**dict(combos), **dict(var_coords)},
-                    attrs=constants)
+    ds = xr.Dataset(coords={**dict(combos), **dict(var_coords)}, attrs=attrs)
 
     # TODO: add_to_ds
     # check if all coords are available
@@ -210,11 +212,17 @@ def combos_to_ds(results, combos, var_names, var_dims=None, var_coords={},
     for vdata, vname, vdims in zip(results, var_names, var_dims):
         ds[vname] = (tuple(fn_args) + tuple(vdims), np.asarray(vdata))
 
+    # Add non-coordinate constants to attrs
+    if constants is not None:
+        for constant, value in constants.items():
+            if constant not in ds.coords:
+                ds.attrs[constant] = value
+
     return ds
 
 
 def combo_runner_to_ds(fn, combos, var_names, var_dims=None, var_coords={},
-                       constants=None, **combo_runner_settings):
+                       constants=None, attrs=None, **combo_runner_settings):
     """ Evalute combos and output to a Dataset. """
     # Set split based on output var_names
     split = (False if isinstance(var_names, str) else
@@ -228,7 +236,8 @@ def combo_runner_to_ds(fn, combos, var_names, var_dims=None, var_coords={},
                       var_names=var_names,
                       var_dims=var_dims,
                       var_coords=var_coords,
-                      constants=constants)
+                      constants=constants,
+                      attrs=attrs)
     return ds
 
 

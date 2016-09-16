@@ -73,6 +73,10 @@ def foo2_zarray1_zarray2(a, b):
             [b + a - 0.1j * i for i in range(5)])
 
 
+def foo_array_input(a, t):
+    return tuple(a * x for x in t)
+
+
 # --------------------------------------------------------------------------- #
 # COMBO_RUNNER tests                                                          #
 # --------------------------------------------------------------------------- #
@@ -285,6 +289,15 @@ class TestComboRunnerToDS:
                                 constants={'b': 20},
                                 var_names='x')
         assert ds.attrs['b'] == 20
+
+    def test_const_array_to_coord(self):
+        ds = combo_runner_to_ds(foo_array_input,
+                                combos=[('a', [1, 2, 3])],
+                                constants={'t': [10, 20, 30]},
+                                var_names=['x'],
+                                var_dims=[['t']])
+        assert 't' in ds.coords
+        assert 't' not in ds.attrs
 
 
 # --------------------------------------------------------------------------- #
