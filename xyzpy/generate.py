@@ -42,7 +42,7 @@ def parse_combos(combos):
 
 
 def combo_runner(fn, combos, constants=None, split=False, progbars=0,
-                 parallel=False, processes=None, progbar_opts={}):
+                 parallel=False, processes=None, progbar_opts=None):
     """ Take a function fn and analyse it over all combinations of named
     variables' values, optionally showing progress and in parallel.
 
@@ -118,6 +118,9 @@ def combo_runner(fn, combos, constants=None, split=False, progbars=0,
     if constants is not None:
         fn = functools.partial(fn, **dict(constants))
 
+    if progbar_opts is None:
+        progbar_opts = dict()
+
     # Evaluate combos in parallel
     if parallel or (processes is not None and processes > 1):
         mp = multiprocessing.Pool(processes=processes)
@@ -166,7 +169,7 @@ def combo_runner(fn, combos, constants=None, split=False, progbars=0,
     return results if split else results[0]
 
 
-def combos_to_ds(results, combos, var_names, var_dims=None, var_coords={},
+def combos_to_ds(results, combos, var_names, var_dims=None, var_coords=None,
                  constants=None, attrs=None):
     """ Convert the output of combo_runner into a `xarray.Dataset`
 
@@ -201,6 +204,9 @@ def combos_to_ds(results, combos, var_names, var_dims=None, var_coords={},
     var_dims = (itertools.cycle(var_dims) if var_dims is not None else
                 itertools.repeat(tuple()))
 
+    if var_coords is None:
+        var_coords = dict()
+
     # Set dataset coordinates
     ds = xr.Dataset(coords={**dict(combos), **dict(var_coords)}, attrs=attrs)
 
@@ -221,9 +227,12 @@ def combos_to_ds(results, combos, var_names, var_dims=None, var_coords={},
     return ds
 
 
-def combo_runner_to_ds(fn, combos, var_names, var_dims=None, var_coords={},
+def combo_runner_to_ds(fn, combos, var_names, var_dims=None, var_coords=None,
                        constants=None, attrs=None, **combo_runner_settings):
     """ Evalute combos and output to a Dataset. """
+    if var_coords is None:
+        var_coords = dict()
+
     # Set split based on output var_names
     split = (False if isinstance(var_names, str) else
              False if len(var_names) == 1 else
@@ -246,7 +255,7 @@ def combo_runner_to_ds(fn, combos, var_names, var_dims=None, var_coords={},
 # --------------------------------------------------------------------------- #
 
 def case_runner(fn, fn_args, cases, constants=None, split=False,
-                progbars=0, parallel=False, processes=None, progbar_opts={}):
+                progbars=0, parallel=False, processes=None, progbar_opts=None):
     """ Evaluate a function in many different configurations, optionally in
     parallel and or with live progress.
 
@@ -275,6 +284,9 @@ def case_runner(fn, fn_args, cases, constants=None, split=False,
     if isinstance(fn_args, str):
         fn_args = (fn_args,)
         cases = tuple((c,) for c in cases)
+
+    if progbar_opts is None:
+        progbar_opts = dict()
 
     # Evaluate configurations in parallel
     if parallel or (processes is not None and processes > 1):
@@ -321,7 +333,7 @@ def all_missing_ds(coords, var_names, var_dims, var_types):
 
 
 def cases_to_ds(results, fn_args, cases, var_names, var_dims=None,
-                var_coords={}, add_to_ds=None, overwrite=False):
+                var_coords=None, add_to_ds=None, overwrite=False):
     """ Take a list of results and configurations that generate them and turn it
     into a `xarray.Dataset`.
 
@@ -346,7 +358,6 @@ def cases_to_ds(results, fn_args, cases, var_names, var_dims=None,
         1. Many data types have to be converted to object in order for the
             missing values to be represented by NaNs.
     """
-
     # Prepare fn_args/cases var_names/results
     if isinstance(fn_args, str):
         fn_args = (fn_args,)
@@ -358,6 +369,9 @@ def cases_to_ds(results, fn_args, cases, var_names, var_dims=None,
         results = tuple((r,) for r in results)
         if var_dims is not None:
             var_dims = (var_dims,)
+
+    if var_coords is None:
+        var_coords = dict()
 
     if add_to_ds is None:
         # Allow single given dimensions to represent all result variables
@@ -393,7 +407,7 @@ def cases_to_ds(results, fn_args, cases, var_names, var_dims=None,
 
 
 def case_runner_to_ds(fn, fn_args, cases, var_names, var_dims=None,
-                      var_coords={}, add_to_ds=None, overwrite=False,
+                      var_coords=None, add_to_ds=None, overwrite=False,
                       **case_runner_settings):
     """ Combination of `case_runner` and `cases_to_ds`. Takes a function and
     list of argument configurations and produces a `xarray.Dataset`.
@@ -413,6 +427,9 @@ def case_runner_to_ds(fn, fn_args, cases, var_names, var_dims=None,
         ds: dataset with minimal covering coordinates and all cases
             evaluated.
     """
+    if var_coords is None:
+        var_coords = dict()
+
     # Generate results
     results = case_runner(fn, fn_args, cases, **case_runner_settings)
     # Convert to xarray.Dataset
@@ -460,7 +477,7 @@ def find_missing_cases(ds, var_dims=None):
     return fn_args, tuple(gen_missing_list())
 
 
-def fill_missing_cases(ds, fn, var_names, var_dims=None, var_coords={},
+def fill_missing_cases(ds, fn, var_names, var_dims=None, var_coords=None,
                        **case_runner_settings):
     """ Take a dataset and function etc. and fill its missing data in
 
@@ -476,6 +493,9 @@ def fill_missing_cases(ds, fn, var_names, var_dims=None, var_coords={},
     -------
         None: (filling performed in-place)
     """
+    if var_coords is None:
+        var_coords = dict()
+
     # Find missing cases
     fn_args, missing_cases = find_missing_cases(ds, var_dims)
     # Evaluate and add to Dataset
