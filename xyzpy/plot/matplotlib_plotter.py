@@ -11,6 +11,7 @@ Functions for plotting datasets nicely.
 # TODO: docs                                                                  #
 # TODO: mpl heatmap                                                           #
 # TODO: detect zeros in plotting coordinates and adjust padding auto          #
+# TODO: outward ticks                                                         #
 
 import itertools
 import collections
@@ -253,6 +254,7 @@ def lineplot(ds, y_coo, x_coo, z_coo=None,
 
     # Add grid and any custom lines
     if gridlines:
+        axes.set_axisbelow(True)  # ensures gridlines below everything else
         axes.grid(True, color="0.666")
     if vlines is not None:
         for x in vlines:
