@@ -9,6 +9,7 @@ Functions for plotting datasets nicely.
 # TODO: not working currently?                                                #
 
 import itertools
+import numpy as np
 from ..manage import auto_xyz_ds
 from .color import calc_colors
 
@@ -80,13 +81,26 @@ def ilineplot(ds, y_coo, x_coo, z_coo=None,
                             log_scale=colormap_log,
                             reverse=colormap_reverse) if colors else
                 itertools.repeat(None))
-        traces = [Scatter({'x': ds.loc[{z_coo: z}][x_coo].data.flatten(),
-                           'y': ds.loc[{z_coo: z}][y_coo].data.flatten(),
-                           'name': str(z),
-                           'line': {'color': col},
-                           'marker': {'color': col},
-                           **go_dict})
-                  for z, col in zip(ds[z_coo].data, cols)]
+
+        def gen_traces():
+            for z, col in zip(ds[z_coo].data, cols):
+                # Select data for current z coord - flatten for singletons
+                sds = ds.loc[{z_coo: z}]
+                x = sds[x_coo].data.flatten()
+                y = sds[y_coo].data.flatten()
+
+                # Trim out missing data
+                nans = np.logical_not(np.isnan(x) | np.isnan(y))
+                x, y = x[nans], y[nans]
+
+                yield Scatter({'x': x,
+                               'y': y,
+                               'name': str(z),
+                               'line': {'color': col},
+                               'marker': {'color': col},
+                               **go_dict})
+
+        traces = [*gen_traces()]
 
     lines = ([{'type': 'line',
                'layer': 'below',
