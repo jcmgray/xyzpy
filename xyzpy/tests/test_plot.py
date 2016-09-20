@@ -27,7 +27,7 @@ def dataset_3d():
 # TESTS                                                                       #
 # --------------------------------------------------------------------------- #
 
-class TestXmlineplot:
+class TestLinePlot:
     @needs_display
     def test_works_at_all(self, dataset_3d):
         ds = dataset_3d

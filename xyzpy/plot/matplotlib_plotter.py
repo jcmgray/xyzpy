@@ -142,19 +142,33 @@ def lineplot(ds, y_coo, x_coo, z_coo=None,
         axes = fig.add_axes([0.15, 0.15, 0.8, 0.75])
     axes.set_title("" if title is None else title, fontsize=fontsize_title)
 
+    # Work out whether to iterate over multiple lines
+    if z_coo is not None:
+        z_vals = ds[z_coo].data
+    else:
+        z_vals = (None,)
+
     # Color lines
     if colors is True:
-        cols = calc_colors(ds, z_coo, plotly=False, colormap=colormap,
-                           log_scale=colormap_log, reverse=colormap_reverse)
+        cols = iter(calc_colors(ds, z_coo, plotly=False,
+                                colormap=colormap,
+                                log_scale=colormap_log,
+                                reverse=colormap_reverse))
     elif colors is False:
-        cols = itertools.cycle([None])
+        cols = itertools.repeat(None)
     else:
         cols = itertools.cycle(colors)
 
     # Decide on using markers, and set custom markers and line-styles
     markers = (len(ds[y_coo]) <= 50) if markers is None else markers
-    mrkrs = (itertools.cycle(_MPL_MARKERS) if markers else
-             itertools.repeat(None))
+    if markers:
+        if len(z_vals) > 1:
+            mrkrs = itertools.cycle(_MPL_MARKERS)
+        else:
+            mrkrs = iter('.')
+    else:
+        itertools.repeat(None)
+
     lines = (itertools.repeat("-") if line_styles is None else
              itertools.cycle(line_styles))
 
@@ -162,10 +176,11 @@ def lineplot(ds, y_coo, x_coo, z_coo=None,
     if zticks is not None:
         zticks = iter(zticks)
     elif z_coo is not None:
-        zticks = iter(str(z) for z in ds[z_coo].data)
+        zticks = iter(str(z) for z in z_vals)
     else:
-        zticks = iter([None])
+        zticks = itertools.repeat(None)
 
+    # Set custom widths for each line
     if line_widths is not None:
         lws = itertools.cycle(line_widths)
     else:
@@ -177,45 +192,36 @@ def lineplot(ds, y_coo, x_coo, z_coo=None,
     else:
         zorders = itertools.cycle([3])
 
-    if z_coo is not None:
-        # Cycle through lines and plot
-        for z, col, mrkr, ln in zip(ds[z_coo].data, cols, mrkrs, lines):
-            # Select data for current z coord - flatten for singlet dimensions
-            sds = ds.loc[{z_coo: z}]
-            x = sds[x_coo].data.flatten()
-            y = sds[y_coo].data.flatten()
+    # Cycle through lines and plot
+    for z in z_vals:
+        # Select data for current z coord - flatten for singlet dimensions
+        sds = ds.loc[{z_coo: z}] if z is not None else ds
+        x = sds[x_coo].data.flatten()
+        y = sds[y_coo].data.flatten()
 
-            # Trim out missing data
-            nans = np.logical_not(np.isnan(x) | np.isnan(y))
-            x, y = x[nans], y[nans]
+        # Trim out missing data
+        notnull = ~np.isnan(x) & ~np.isnan(y)
+        x, y = x[notnull], y[notnull]
 
-            # add line to axes, with options cycled through
-            axes.plot(x, y, ln,
-                      c=col,
-                      lw=next(lws),
-                      marker=mrkr,
-                      markeredgecolor=col,
-                      label=next(zticks),
-                      zorder=next(zorders))
-
-        # Add a legend
-        if legend or not (legend is False or len(ds[z_coo]) > 10):
-            lgnd = axes.legend(title=(z_coo if zlabel is None else zlabel),
-                               loc=legend_loc, fontsize=fontsize_legend,
-                               frameon=False, ncol=legend_ncol)
-            lgnd.get_title().set_fontsize(fontsize_zlabel)
-    else:
-        # Plot single line
-        x = ds[x_coo].data.flatten()
-        y = ds[y_coo].data.flatten()
+        # Styling
         col = next(cols)
+
+        # add line to axes, with options cycled through
         axes.plot(x, y, next(lines),
-                  lw=next(lws),
                   c=col,
-                  marker=("." if markers else None),
+                  lw=next(lws),
+                  marker=next(mrkrs),
                   markeredgecolor=col,
                   label=next(zticks),
                   zorder=next(zorders))
+
+    # Add a legend
+    auto_no_legend = (legend is False or len(z_vals) > 10 or len(z_vals) == 1)
+    if legend or not auto_no_legend:
+        lgnd = axes.legend(title=(z_coo if zlabel is None else zlabel),
+                           loc=legend_loc, fontsize=fontsize_legend,
+                           frameon=False, ncol=legend_ncol)
+        lgnd.get_title().set_fontsize(fontsize_zlabel)
 
     # Set axis scale-type and names
     axes.set_xscale("log" if xlog else "linear")
@@ -230,12 +236,12 @@ def lineplot(ds, y_coo, x_coo, z_coo=None,
     # Set plot range
     if xlims is None:
         xmax, xmin = ds[x_coo].max(), ds[x_coo].min()
-        xrange = xmax - xmin
-        xlims = (xmin - padding * xrange, xmax + padding * xrange)
+        xrnge = xmax - xmin
+        xlims = (xmin - padding * xrnge, xmax + padding * xrnge)
     if ylims is None:
         ymax, ymin = ds[y_coo].max(), ds[y_coo].min()
-        yrange = ymax - ymin
-        ylims = (ymin - padding * yrange, ymax + padding * yrange)
+        yrnge = ymax - ymin
+        ylims = (ymin - padding * yrnge, ymax + padding * yrnge)
     axes.set_xlim(xlims)
     axes.set_ylim(ylims)
 
@@ -250,7 +256,7 @@ def lineplot(ds, y_coo, x_coo, z_coo=None,
         axes.get_xaxis().set_major_formatter(mpl.ticker.NullFormatter())
     if yticklabels_hide:
         axes.get_yaxis().set_major_formatter(mpl.ticker.NullFormatter())
-    axes.tick_params(labelsize=fontsize_ticks)
+    axes.tick_params(labelsize=fontsize_ticks, direction='out')
 
     # Add grid and any custom lines
     if gridlines:
@@ -258,15 +264,12 @@ def lineplot(ds, y_coo, x_coo, z_coo=None,
         axes.grid(True, color="0.666")
     if vlines is not None:
         for x in vlines:
-            axes.axvline(x)
+            axes.axvline(x, color="0.5", linestyle="dashed")
     if hlines is not None:
         for y in hlines:
-            axes.axhline(y)
+            axes.axhline(y, color="0.5", linestyle="dashed")
 
     return fig
-
-
-xmlineplot = lineplot
 
 
 def xyz_lineplot(x, y_z, **lineplot_opts):
