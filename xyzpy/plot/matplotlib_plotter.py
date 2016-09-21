@@ -2,16 +2,13 @@
 Functions for plotting datasets nicely.
 """
 # TODO: unify options with plotly plotters                                    #
-# TODO: error bars
-# TODO: refactor function names (lineplot, array_lineplot)                    #
+# TODO: error bars                                                            #
 # TODO: mshow? Remove any auto, context sensitive (use backend etc.)          #
 # TODO: custom xtick labels                                                   #
-# TODO: hlines and vlines style                                               #
 # TODO: annotations, arbitrary text                                           #
 # TODO: docs                                                                  #
 # TODO: mpl heatmap                                                           #
 # TODO: detect zeros in plotting coordinates and adjust padding auto          #
-# TODO: outward ticks                                                         #
 
 import itertools
 import collections
@@ -160,7 +157,7 @@ def lineplot(ds, y_coo, x_coo, z_coo=None,
         cols = itertools.cycle(colors)
 
     # Decide on using markers, and set custom markers and line-styles
-    markers = (len(ds[y_coo]) <= 50) if markers is None else markers
+    markers = (len(ds[y_coo]) <= 51) if markers is None else markers
     if markers:
         if len(z_vals) > 1:
             mrkrs = itertools.cycle(_MPL_MARKERS)

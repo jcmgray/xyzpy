@@ -38,22 +38,31 @@ def ishow(figs, nb=True, **kwargs):
 def ilineplot(ds, y_coo, x_coo, z_coo=None,
               return_fig=False,
               nb=True,
+              title=None,
               # Line coloring options
               colors=False,
-              colormap="viridis",
+              colormap="xyz",
               colormap_log=False,
               colormap_reverse=False,
               # Legend options
               legend=None,
+              legend_ncol=None,  # TODO: unused
+              zlabel=None,  # TODO: unused
               # x-axis options
+              xlabel=None,
               xlims=None,
               xlog=False,
               # y-axis options
+              ylabel=None,
               ylims=None,
               ylog=False,
+              # Line markers, styles and positions
+              markers=None,
               # Misc options
               vlines=[],
               hlines=[],
+              font='Source Sans Pro',
+              fontsize_legend=18,
               go_dict={},
               ly_dict={},
               # TODO padding
@@ -70,37 +79,61 @@ def ilineplot(ds, y_coo, x_coo, z_coo=None,
 
     from plotly.graph_objs import Scatter
 
-    if z_coo is None:
-        traces = [Scatter({'x': ds[x_coo].data,
-                           'y': ds[y_coo].data.flatten(),
-                           **go_dict})]
+    # Work out whether to iterate over multiple lines
+    if z_coo is not None:
+        z_vals = ds[z_coo].data
     else:
-        cols = (calc_colors(ds, z_coo,
-                            plotly=True,
-                            colormap=colormap,
-                            log_scale=colormap_log,
-                            reverse=colormap_reverse) if colors else
-                itertools.repeat(None))
+        z_vals = (None,)
 
-        def gen_traces():
-            for z, col in zip(ds[z_coo].data, cols):
-                # Select data for current z coord - flatten for singletons
-                sds = ds.loc[{z_coo: z}]
-                x = sds[x_coo].data.flatten()
-                y = sds[y_coo].data.flatten()
+    # Color lines
+    if colors is True:
+        cols = iter(calc_colors(ds, z_coo, plotly=True,
+                                colormap=colormap,
+                                log_scale=colormap_log,
+                                reverse=colormap_reverse))
+    elif colors is False:
+        cols = itertools.repeat(None)
+    else:
+        cols = itertools.cycle(colors)
 
-                # Trim out missing data
-                nans = np.logical_not(np.isnan(x) | np.isnan(y))
-                x, y = x[nans], y[nans]
+    # Decide on using markers, and set custom markers and line-styles
+    markers = (len(ds[y_coo]) <= 51) if markers is None else markers
+    if markers:
+        if len(z_vals) > 1:
+            mrkrs = itertools.cycle(range(44))
+        else:
+            mrkrs = iter([None])
+    else:
+        mrkrs = itertools.repeat(None)
 
-                yield Scatter({'x': x,
-                               'y': y,
-                               'name': str(z),
-                               'line': {'color': col},
-                               'marker': {'color': col},
-                               **go_dict})
+    def gen_traces():
+        for z in z_vals:
+            # Select data for current z coord - flatten for singletons
+            sds = ds.loc[{z_coo: z}] if z is not None else ds
+            x = sds[x_coo].data.flatten()
+            y = sds[y_coo].data.flatten()
 
-        traces = [*gen_traces()]
+            # Trim out missing data
+            notnull = ~np.isnan(x) & ~np.isnan(y)
+            x, y = x[notnull], y[notnull]
+
+            col = next(cols)
+
+            yield Scatter({
+                'x': x,
+                'y': y,
+                'name': str(z),
+                'mode': 'lines+markers' if markers else 'lines',
+                'marker': {
+                    'color': col,
+                    'symbol': next(mrkrs),
+                    'line': {
+                        'color': col,
+                    },
+                },
+                **go_dict})
+
+    traces = list(gen_traces())
 
     lines = ([{'type': 'line',
                'layer': 'below',
@@ -117,24 +150,40 @@ def ilineplot(ds, y_coo, x_coo, z_coo=None,
                'yref': 'y', 'y0': ly, 'y1': ly,
                'xref': 'paper', 'x0': 0, 'x1': 1} for ly in hlines])
 
-    layout = {'width': 750,
-              'height': 600,
-              'xaxis': {'showline': True,
-                        'title': x_coo,
-                        'mirror': 'ticks',
-                        'ticks': 'inside',
-                        'range': xlims if xlims is not None else None,
-                        'type': 'log' if xlog else 'linear'},
-              'yaxis': {'showline': True,
-                        'title': y_coo,
-                        'range': ylims if ylims is not None else None,
-                        'mirror': 'ticks',
-                        'ticks': 'inside',
-                        'type': 'log' if ylog else 'linear'},
-              'showlegend': legend or not (legend is False or z_coo is None or
-                                           len(ds[z_coo]) > 20),
-              'shapes': lines,
-              **ly_dict}
+    auto_no_legend = (legend is False or len(z_vals) > 10 or len(z_vals) == 1)
+
+    layout = {
+        'title': title,
+        'width': 750,
+        'height': 600,
+        'xaxis': {
+            'showline': True,
+            'title': x_coo if xlabel is None else xlabel,
+            'mirror': 'ticks',
+            'ticks': 'inside',
+            'range': xlims if xlims is not None else None,
+            'type': 'log' if xlog else 'linear'
+        },
+        'yaxis': {
+            'showline': True,
+            'title': y_coo if ylabel is None else ylabel,
+            'range': ylims if ylims is not None else None,
+            'mirror': 'ticks',
+            'ticks': 'inside',
+            'type': 'log' if ylog else 'linear'
+        },
+        'showlegend': legend or not auto_no_legend,
+        'legend': {
+            'font': {
+                'size': fontsize_legend,
+            },
+        },
+        'shapes': lines,
+        'font': {
+            'family': font,
+        },
+        **ly_dict
+        }
 
     fig = {'data': traces, 'layout': layout}
     if return_fig:
