@@ -14,7 +14,8 @@ import itertools
 import collections
 import numpy as np
 from ..manage import auto_xyz_ds
-from .color import calc_colors
+from .color import calc_colors, convert_colors
+from .plotting_help import _process_plot_range
 
 
 # -------------------------------------------------------------------------- #
@@ -100,7 +101,7 @@ def lineplot(ds, y_coo, x_coo, z_coo=None,
              line_widths=None,        # iterable of line-widths
              zorders=None,            # draw order
              # Misc options
-             padding=0.0,             # plot range padding
+             padding=None,            # plot range padding (as fraction)
              vlines=None,             # iterable of vertical lines to plot
              hlines=None,             # iterable of horizontal lines to plot
              gridlines=True,
@@ -111,6 +112,7 @@ def lineplot(ds, y_coo, x_coo, z_coo=None,
              fontsize_ytitle=20,
              fontsize_ztitle=20,
              fontsize_legend=18,
+             return_fig=False,
              ):
     """ Take a data set and plot one of its variables as a function of two
     coordinates using matplotlib. """
@@ -127,7 +129,7 @@ def lineplot(ds, y_coo, x_coo, z_coo=None,
         fig = add_to_axes
         axes = fig.get_axes()[0]
     elif subplot is not None:
-        # Add new axes as subplot to exissting subplot
+        # Add new axes as subplot to existing subplot
         if add_to_fig is not None:
             fig = add_to_fig
         #
@@ -152,9 +154,17 @@ def lineplot(ds, y_coo, x_coo, z_coo=None,
                                 log_scale=colormap_log,
                                 reverse=colormap_reverse))
     elif colors:
-        cols = itertools.cycle(colors)
+        cols = itertools.cycle(convert_colors(colors, outformat='MATPLOTLIB'))
     else:
         cols = itertools.repeat(None)
+
+    # Set custom names for each line ("ztick")
+    if zlabels is not None:
+        zlabels = iter(zlabels)
+    elif z_coo is not None:
+        zlabels = iter(str(z) for z in z_vals)
+    else:
+        zlabels = itertools.repeat(None)
 
     # Decide on using markers, and set custom markers and line-styles
     markers = (len(ds[y_coo]) <= 51) if markers is None else markers
@@ -164,18 +174,10 @@ def lineplot(ds, y_coo, x_coo, z_coo=None,
         else:
             mrkrs = iter('.')
     else:
-        itertools.repeat(None)
+        mrkrs = itertools.repeat(None)
 
     lines = (itertools.repeat("-") if line_styles is None else
              itertools.cycle(line_styles))
-
-    # Set custom names for each line ("ztick")
-    if zlabels is not None:
-        zlabels = iter(zlabels)
-    elif z_coo is not None:
-        zlabels = iter(str(z) for z in z_vals)
-    else:
-        zlabels = itertools.repeat(None)
 
     # Set custom widths for each line
     if line_widths is not None:
@@ -189,18 +191,17 @@ def lineplot(ds, y_coo, x_coo, z_coo=None,
     else:
         zorders = itertools.cycle([3])
 
-    # Cycle through lines and plot
-    for z in z_vals:
-        # Select data for current z coord - flatten for singlet dimensions
-        sds = ds.loc[{z_coo: z}] if z is not None else ds
-        x = sds[x_coo].data.flatten()
-        y = sds[y_coo].data.flatten()
+    def gen_xy():
+        for z in z_vals:
+            # Select data for current z coord - flatten for singletons
+            sds = ds.loc[{z_coo: z}] if z is not None else ds
+            x = sds[x_coo].data.flatten()
+            y = sds[y_coo].data.flatten()
+            # Trim out missing data
+            notnull = ~np.isnan(x) & ~np.isnan(y)
+            yield x[notnull], y[notnull]
 
-        # Trim out missing data
-        notnull = ~np.isnan(x) & ~np.isnan(y)
-        x, y = x[notnull], y[notnull]
-
-        # Styling
+    for x, y in gen_xy():
         col = next(cols)
 
         # add line to axes, with options cycled through
@@ -231,16 +232,11 @@ def lineplot(ds, y_coo, x_coo, z_coo=None,
     axes.yaxis.labelpad = ytitle_pad
 
     # Set plot range
-    if xlims is None:
-        xmax, xmin = ds[x_coo].max(), ds[x_coo].min()
-        xrnge = xmax - xmin
-        xlims = (xmin - padding * xrnge, xmax + padding * xrnge)
-    if ylims is None:
-        ymax, ymin = ds[y_coo].max(), ds[y_coo].min()
-        yrnge = ymax - ymin
-        ylims = (ymin - padding * yrnge, ymax + padding * yrnge)
-    axes.set_xlim(xlims)
-    axes.set_ylim(ylims)
+    xlims, ylims = _process_plot_range(xlims, ylims, ds, x_coo, y_coo, padding)
+    if xlims:
+        axes.set_xlim(xlims)
+    if ylims:
+        axes.set_ylim(ylims)
 
     # Set custom axis tick marks
     if xticks is not None:
@@ -266,7 +262,9 @@ def lineplot(ds, y_coo, x_coo, z_coo=None,
         for y in hlines:
             axes.axhline(y, color="0.5", linestyle="dashed")
 
-    return fig
+    if return_fig:
+        plt.close(fig)
+        return fig
 
 
 def xyz_lineplot(x, y_z, **lineplot_opts):

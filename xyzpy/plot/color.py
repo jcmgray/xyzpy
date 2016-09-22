@@ -1,12 +1,31 @@
 """
 Helper functions for generating color spectrums.
 """
-# TODO: take list of custom colors and convert to right format
 
 from math import log
+import itertools
 import numpy as np
 import matplotlib.cm as cm
 from matplotlib.colors import LinearSegmentedColormap
+
+
+def _COLORS_MATPLOTLIB_TO_PLOTLY(cols):
+    for col in cols:
+        if len(col) == 3:  # append alpha value
+            col = itertools.chain(col, (1,))
+        yield "rgba" + str(tuple(int(255*rgb) for rgb in col))
+
+
+_conversion_methods = {
+    ('MATPLOTLIB', 'PLOTLY'): _COLORS_MATPLOTLIB_TO_PLOTLY}
+
+
+def convert_colors(cols, outformat, informat='MATPLOTLIB'):
+    """Convert lists of colors between formats
+    """
+    if informat == outformat:
+        return cols
+    return _conversion_methods[(informat, outformat)](cols)
 
 
 def _xyz_colormaps(name):
@@ -75,9 +94,9 @@ def calc_colors(ds, z_coo, colormap="viridis",
         list of colors corresponding to each line in `z_coo`.
     """
     try:
-        cmap = getattr(cm, colormap)
-    except AttributeError:
         cmap = _xyz_colormaps(colormap)
+    except KeyError:
+        cmap = getattr(cm, colormap)
 
     try:
         zmin, zmax = ds[z_coo].values.min(), ds[z_coo].values.max()
@@ -86,15 +105,11 @@ def calc_colors(ds, z_coo, colormap="viridis",
         # Relative place in range according to function
         rvals = [1 - (f(z)-f(zmin))/(f(zmax)-f(zmin))
                  for z in ds[z_coo].values]
-    except TypeError:  # no relaitve coloring possible e.g. for strings
+    except TypeError:  # no relative coloring possible e.g. for strings
         rvals = np.linspace(0, 1.0, ds[z_coo].size)
 
     # Map to mpl colormap, reversing if required
     cols = [cmap(1 - rval if reverse else rval) for rval in rvals]
-
-    # Add string modifier if using for plotly
-    if plotly:
-        cols = ["rgba" + str(tuple(int(255*rgb) for rgb in col))
-                for col in cols]
+    cols = convert_colors(cols, 'PLOTLY' if plotly else 'MATPLOTLIB')
 
     return cols

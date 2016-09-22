@@ -1,17 +1,14 @@
 """
 Functions for plotting datasets nicely.
 """
-# TODO: unify options with xmlinplot                                          #
-# TODO: plotly hlines, vlines                                                 #
+# TODO: unify all options with lineplot                                       #
 # TODO: names                                                                 #
-# TODO: reverse color                                                         #
-# TODO: logarithmic color                                                     #
-# TODO: not working currently?                                                #
 
 import itertools
 import numpy as np
 from ..manage import auto_xyz_ds
-from .color import calc_colors
+from .color import calc_colors, convert_colors
+from .plotting_help import _process_plot_range
 
 
 def ishow(figs, nb=True, **kwargs):
@@ -36,7 +33,6 @@ def ishow(figs, nb=True, **kwargs):
 # --------------------------------------------------------------------------  #
 
 def ilineplot(ds, y_coo, x_coo, z_coo=None,
-              return_fig=False,
               figsize=(8, 6),          # absolute figure size
               nb=True,
               title=None,
@@ -49,6 +45,7 @@ def ilineplot(ds, y_coo, x_coo, z_coo=None,
               legend=None,
               legend_ncol=None,       # XXX: unused
               ztitle=None,            # XXX: unused
+              zlabels=None,           # legend labels
               # x-axis options
               xtitle=None,
               xlims=None,
@@ -59,9 +56,12 @@ def ilineplot(ds, y_coo, x_coo, z_coo=None,
               ylog=False,
               # Line markers, styles and positions
               markers=None,
+              # TODO linewidths
+              # TODO linestyles
               # Misc options
-              vlines=[],
-              hlines=[],
+              padding=None,
+              vlines=None,
+              hlines=None,
               gridlines=True,
               font='Source Sans Pro',
               fontsize_title=20,
@@ -70,10 +70,7 @@ def ilineplot(ds, y_coo, x_coo, z_coo=None,
               fontsize_ytitle=20,
               fontsize_ztitle=20,     # XXX: unused by plotly
               fontsize_legend=18,
-              # TODO padding
-              # TODO linewidths
-              # TODO linestyles
-              # TODO style gridlines
+              return_fig=False,
               **kwargs):
     """ Take a dataset and plot onse of its variables as a function of two
     coordinates using plotly. """
@@ -94,38 +91,44 @@ def ilineplot(ds, y_coo, x_coo, z_coo=None,
                                 colormap=colormap,
                                 log_scale=colormap_log,
                                 reverse=colormap_reverse))
-    elif colors is False:
-        cols = itertools.repeat(None)
+    elif colors:
+        cols = itertools.cycle(convert_colors(colors, outformat='PLOTLY'))
     else:
-        cols = itertools.cycle(colors)
+        cols = itertools.repeat(None)
+
+    # Set custom names for each line ("ztick")
+    if zlabels is not None:
+        zlabels = iter(zlabels)
+    elif z_coo is not None:
+        zlabels = iter(str(z) for z in z_vals)
+    else:
+        zlabels = itertools.repeat(None)
 
     # Decide on using markers, and set custom markers and line-styles
     markers = (len(ds[y_coo]) <= 51) if markers is None else markers
-    if markers:
-        if len(z_vals) > 1:
-            mrkrs = itertools.cycle(range(44))
-        else:
-            mrkrs = iter([None])
+    if markers and len(z_vals) > 1:
+        mrkrs = itertools.cycle(range(44))
     else:
         mrkrs = itertools.repeat(None)
 
-    def gen_traces():
+    def gen_xy():
         for z in z_vals:
             # Select data for current z coord - flatten for singletons
             sds = ds.loc[{z_coo: z}] if z is not None else ds
             x = sds[x_coo].data.flatten()
             y = sds[y_coo].data.flatten()
-
             # Trim out missing data
             notnull = ~np.isnan(x) & ~np.isnan(y)
-            x, y = x[notnull], y[notnull]
+            yield x[notnull], y[notnull]
 
+    def gen_traces():
+        for x, y in gen_xy():
             col = next(cols)
 
             yield Scatter({
                 'x': x,
                 'y': y,
-                'name': str(z),
+                'name': next(zlabels),
                 'mode': 'lines+markers' if markers else 'lines',
                 'marker': {
                     'color': col,
@@ -138,6 +141,10 @@ def ilineplot(ds, y_coo, x_coo, z_coo=None,
 
     traces = list(gen_traces())
 
+    if vlines is None:
+        vlines = []
+    if hlines is None:
+        hlines = []
     lines = ([{'type': 'line',
                'layer': 'below',
                'line': {'color': 'rgb(128, 128, 128)',
@@ -154,6 +161,7 @@ def ilineplot(ds, y_coo, x_coo, z_coo=None,
                'xref': 'paper', 'x0': 0, 'x1': 1} for ly in hlines])
 
     auto_no_legend = (legend is False or len(z_vals) > 10 or len(z_vals) == 1)
+    xlims, ylims = _process_plot_range(xlims, ylims, ds, x_coo, y_coo, padding)
 
     layout = {
         'title': title,
@@ -168,7 +176,7 @@ def ilineplot(ds, y_coo, x_coo, z_coo=None,
             'title': x_coo if xtitle is None else xtitle,
             'mirror': 'ticks',
             'ticks': 'outside',
-            'range': xlims if xlims is not None else None,
+            'range': xlims,
             'type': 'log' if xlog else 'linear',
             'tickfont': {
                 'size': fontsize_ticks,
@@ -181,7 +189,7 @@ def ilineplot(ds, y_coo, x_coo, z_coo=None,
             'showline': True,
             'showgrid': gridlines,
             'title': y_coo if ytitle is None else ytitle,
-            'range': ylims if ylims is not None else None,
+            'range': ylims,
             'mirror': 'ticks',
             'ticks': 'outside',
             'type': 'log' if ylog else 'linear',
