@@ -131,15 +131,3 @@ def auto_xyz_ds(x, y_z):
     ds = xr.Dataset(coords={'x': x, 'z': np.arange(n_y)})
     ds['y'] = (('z', 'x'), y_z)
     return ds
-
-
-def xrgroupby_to_dim(ds, dim):
-    """ Convert a grouped coordinate to dimension. """
-    def gen_ds():
-        for val, d in ds.groupby(dim):
-            del d[dim]  # delete grouped labels
-            d[dim] = [val]
-            d, = xr.broadcast(d)
-            yield d
-
-    return aggregate(*gen_ds())
