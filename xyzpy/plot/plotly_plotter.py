@@ -37,6 +37,7 @@ def ishow(figs, nb=True, **kwargs):
 
 def ilineplot(ds, y_coo, x_coo, z_coo=None,
               return_fig=False,
+              figsize=(8, 6),          # absolute figure size
               nb=True,
               title=None,
               # Line coloring options
@@ -46,14 +47,14 @@ def ilineplot(ds, y_coo, x_coo, z_coo=None,
               colormap_reverse=False,
               # Legend options
               legend=None,
-              legend_ncol=None,  # TODO: unused
-              zlabel=None,  # TODO: unused
+              legend_ncol=None,       # XXX: unused
+              ztitle=None,            # XXX: unused
               # x-axis options
-              xlabel=None,
+              xtitle=None,
               xlims=None,
               xlog=False,
               # y-axis options
-              ylabel=None,
+              ytitle=None,
               ylims=None,
               ylog=False,
               # Line markers, styles and positions
@@ -61,16 +62,18 @@ def ilineplot(ds, y_coo, x_coo, z_coo=None,
               # Misc options
               vlines=[],
               hlines=[],
+              gridlines=True,
               font='Source Sans Pro',
+              fontsize_title=20,
+              fontsize_ticks=16,
+              fontsize_xtitle=20,
+              fontsize_ytitle=20,
+              fontsize_ztitle=20,     # XXX: unused by plotly
               fontsize_legend=18,
-              go_dict={},
-              ly_dict={},
               # TODO padding
-              # TODO markers
               # TODO linewidths
               # TODO linestyles
-              # TODO gridlines
-              # TODO font and labels
+              # TODO style gridlines
               **kwargs):
     """ Take a dataset and plot onse of its variables as a function of two
     coordinates using plotly. """
@@ -131,7 +134,7 @@ def ilineplot(ds, y_coo, x_coo, z_coo=None,
                         'color': col,
                     },
                 },
-                **go_dict})
+            })
 
     traces = list(gen_traces())
 
@@ -154,23 +157,40 @@ def ilineplot(ds, y_coo, x_coo, z_coo=None,
 
     layout = {
         'title': title,
-        'width': 750,
-        'height': 600,
+        'titlefont': {
+            'size': fontsize_title,
+        },
+        'width': figsize[0] * 100,
+        'height': figsize[1] * 100,
         'xaxis': {
             'showline': True,
-            'title': x_coo if xlabel is None else xlabel,
+            'showgrid': gridlines,
+            'title': x_coo if xtitle is None else xtitle,
             'mirror': 'ticks',
-            'ticks': 'inside',
+            'ticks': 'outside',
             'range': xlims if xlims is not None else None,
-            'type': 'log' if xlog else 'linear'
+            'type': 'log' if xlog else 'linear',
+            'tickfont': {
+                'size': fontsize_ticks,
+            },
+            'titlefont': {
+                'size': fontsize_xtitle,
+            },
         },
         'yaxis': {
             'showline': True,
-            'title': y_coo if ylabel is None else ylabel,
+            'showgrid': gridlines,
+            'title': y_coo if ytitle is None else ytitle,
             'range': ylims if ylims is not None else None,
             'mirror': 'ticks',
-            'ticks': 'inside',
-            'type': 'log' if ylog else 'linear'
+            'ticks': 'outside',
+            'type': 'log' if ylog else 'linear',
+            'tickfont': {
+                'size': fontsize_ticks,
+            },
+            'titlefont': {
+                'size': fontsize_ytitle,
+            },
         },
         'showlegend': legend or not auto_no_legend,
         'legend': {
@@ -182,8 +202,7 @@ def ilineplot(ds, y_coo, x_coo, z_coo=None,
         'font': {
             'family': font,
         },
-        **ly_dict
-        }
+    }
 
     fig = {'data': traces, 'layout': layout}
     if return_fig:
@@ -246,10 +265,10 @@ def iscatter(x, y, cols=None, xlog=False, ylog=False, nb=True,
     traces = [Scatter({"x": x, "y": y, "mode": "markers", "marker": mkr})]
     layout = {"width": 700, "height": 700, "showlegend": False,
               "xaxis": {"showline": True, "mirror": "ticks",
-                        "ticks": "inside",
+                        "ticks": "outside",
                         "type": "log" if xlog else "linear"},
               "yaxis": {"showline": True, "mirror": "ticks",
-                        "ticks": "inside",
+                        "ticks": "outside",
                         "type": "log" if ylog else "linear"}, **ly_dict}
     fig = {"data": traces, "layout": layout}
     if return_fig:
@@ -264,9 +283,9 @@ def ihist(xs, nb=True, go_dict={}, ly_dict={}, return_fig=False,
     traces = [Histogram({"x": x, **go_dict}) for x in xs]
     layout = {"width": 750, "height": 600,
               "xaxis": {"showline": True, "mirror": "ticks",
-                        "ticks": "inside"},
+                        "ticks": "outside"},
               "yaxis": {"showline": True, "mirror": "ticks",
-                        "ticks": "inside"}, **ly_dict}
+                        "ticks": "outside"}, **ly_dict}
     fig = {"data": traces, "layout": layout}
     if return_fig:
         return fig

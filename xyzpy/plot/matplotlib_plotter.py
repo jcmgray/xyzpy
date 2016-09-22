@@ -62,54 +62,54 @@ _MPL_MARKERS = [*_MPL_MARKER_DICT.keys()]
 
 def lineplot(ds, y_coo, x_coo, z_coo=None,
              # Figure options
-             add_to_axes=None,  # add to existing axes
-             add_to_fig=None,  # add plot to an exisitng figure
+             add_to_axes=None,        # add to existing axes
+             add_to_fig=None,         # add plot to an exisitng figure
              new_axes_loc=[0.4, 0.6, 0.30, 0.25],  # overlay axes position
-             figsize=(8, 6),  # absolute figure size
-             subplot=None,  # make plot in subplot
+             figsize=(8, 6),          # absolute figure size
+             subplot=None,            # make plot in subplot
              fignum=1,
              title=None,
              # Line coloring options
-             colors=[None],
+             colors=None,
              colormap="xyz",
              colormap_log=False,
              colormap_reverse=False,
              # Legend options
              legend=None,
-             legend_loc=0,
-             legend_ncol=1,  # number of columns in the legend
-             zlabel=None,  # 'z-title' i.e. legend title
-             zticks=None,  # 'z-ticks' i.e. legend labels
+             legend_loc=0,            # legend location
+             ztitle=None,             # legend title
+             zlabels=None,            # legend labels
+             legend_ncol=1,           # number of columns in the legend
              # x-axis options
-             xlabel=None,
-             xlabel_pad=10,  # distance between label and axes line
-             xlims=None,
-             xticks=None,
+             xtitle=None,
+             xtitle_pad=10,           # distance between label and axes line
+             xlims=None,              # plotting range on x axis
+             xticks=None,             # where to place x ticks
              xticklabels_hide=False,  # hide labels but not actual ticks
-             xlog=False,
+             xlog=False,              # logarithmic x scale
              # y-axis options
-             ylabel=None,
-             ylabel_pad=10,  # distance between label and axes line
-             ylims=None,
-             yticks=None,
+             ytitle=None,
+             ytitle_pad=10,           # distance between label and axes line
+             ylims=None,              # plotting range on y-axis
+             yticks=None,             # where to place y ticks
              yticklabels_hide=False,  # hide labels but not actual ticks
-             ylog=False,
-             # Line markers, styles and positions
-             markers=None,
-             line_styles=None,
-             line_widths=None,
-             zorders=None,  # draw order
+             ylog=False,              # logarithmic y scale
+             # Shapes
+             markers=None,            # use markers for each plotted point
+             line_styles=None,        # iterable of line-styles, e.g. '--'
+             line_widths=None,        # iterable of line-widths
+             zorders=None,            # draw order
              # Misc options
-             padding=0.0,  # plot range padding
-             vlines=None,
-             hlines=None,
+             padding=0.0,             # plot range padding
+             vlines=None,             # iterable of vertical lines to plot
+             hlines=None,             # iterable of horizontal lines to plot
              gridlines=True,
              font=['Source Sans Pro', 'PT Sans', 'Liberation Sans', 'Arial'],
              fontsize_title=20,
              fontsize_ticks=16,
-             fontsize_xlabel=20,
-             fontsize_ylabel=20,
-             fontsize_zlabel=20,
+             fontsize_xtitle=20,
+             fontsize_ytitle=20,
+             fontsize_ztitle=20,
              fontsize_legend=18,
              ):
     """ Take a data set and plot one of its variables as a function of two
@@ -151,10 +151,10 @@ def lineplot(ds, y_coo, x_coo, z_coo=None,
                                 colormap=colormap,
                                 log_scale=colormap_log,
                                 reverse=colormap_reverse))
-    elif colors is False:
-        cols = itertools.repeat(None)
-    else:
+    elif colors:
         cols = itertools.cycle(colors)
+    else:
+        cols = itertools.repeat(None)
 
     # Decide on using markers, and set custom markers and line-styles
     markers = (len(ds[y_coo]) <= 51) if markers is None else markers
@@ -170,12 +170,12 @@ def lineplot(ds, y_coo, x_coo, z_coo=None,
              itertools.cycle(line_styles))
 
     # Set custom names for each line ("ztick")
-    if zticks is not None:
-        zticks = iter(zticks)
+    if zlabels is not None:
+        zlabels = iter(zlabels)
     elif z_coo is not None:
-        zticks = iter(str(z) for z in z_vals)
+        zlabels = iter(str(z) for z in z_vals)
     else:
-        zticks = itertools.repeat(None)
+        zlabels = itertools.repeat(None)
 
     # Set custom widths for each line
     if line_widths is not None:
@@ -209,26 +209,26 @@ def lineplot(ds, y_coo, x_coo, z_coo=None,
                   lw=next(lws),
                   marker=next(mrkrs),
                   markeredgecolor=col,
-                  label=next(zticks),
+                  label=next(zlabels),
                   zorder=next(zorders))
 
     # Add a legend
     auto_no_legend = (legend is False or len(z_vals) > 10 or len(z_vals) == 1)
     if legend or not auto_no_legend:
-        lgnd = axes.legend(title=(z_coo if zlabel is None else zlabel),
+        lgnd = axes.legend(title=(z_coo if ztitle is None else ztitle),
                            loc=legend_loc, fontsize=fontsize_legend,
                            frameon=False, ncol=legend_ncol)
-        lgnd.get_title().set_fontsize(fontsize_zlabel)
+        lgnd.get_title().set_fontsize(fontsize_ztitle)
 
     # Set axis scale-type and names
     axes.set_xscale("log" if xlog else "linear")
     axes.set_yscale("log" if ylog else "linear")
-    axes.set_xlabel(x_coo if xlabel is None else xlabel,
-                    fontsize=fontsize_xlabel)
-    axes.xaxis.labelpad = xlabel_pad
-    axes.set_ylabel(y_coo if ylabel is None else ylabel,
-                    fontsize=fontsize_ylabel)
-    axes.yaxis.labelpad = ylabel_pad
+    axes.set_xlabel(x_coo if xtitle is None else xtitle,
+                    fontsize=fontsize_xtitle)
+    axes.xaxis.labelpad = xtitle_pad
+    axes.set_ylabel(y_coo if ytitle is None else ytitle,
+                    fontsize=fontsize_ytitle)
+    axes.yaxis.labelpad = ytitle_pad
 
     # Set plot range
     if xlims is None:

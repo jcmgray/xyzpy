@@ -2,13 +2,17 @@ import os
 from pytest import fixture, mark
 import numpy as np
 import xarray as xr
-from ..plot.matplotlib_plotter import xmlineplot
+import matplotlib
+
+from ..plot.matplotlib_plotter import lineplot
 from ..plot.plotly_plotter import ilineplot
 
 
 DISPLAY_PRESENT = 'DISPLAY' in os.environ
 no_display_msg = "No display found."
 needs_display = mark.skipif(not DISPLAY_PRESENT, reason=no_display_msg)
+
+matplotlib.use('Template')
 
 
 @fixture
@@ -28,15 +32,13 @@ def dataset_3d():
 # --------------------------------------------------------------------------- #
 
 class TestLinePlot:
-    @needs_display
     def test_works_at_all(self, dataset_3d):
         ds = dataset_3d
-        xmlineplot(ds, "y", "x", "z")
+        lineplot(ds, "y", "x", "z")
 
-    @needs_display
     def test_works_1d(self, dataset_3d):
         ds = dataset_3d
-        xmlineplot(ds.loc[{"z": "c"}], "y", "x")
+        lineplot(ds.loc[{"z": "c"}], "y", "x")
 
 
 class TestILinePlot:
