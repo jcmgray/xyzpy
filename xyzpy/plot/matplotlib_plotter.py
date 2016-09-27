@@ -12,10 +12,9 @@ Functions for plotting datasets nicely.
 
 import itertools
 import collections
-import numpy as np
 from ..manage import auto_xyz_ds
-from .color import calc_colors, convert_colors
-from .plotting_help import _process_plot_range
+
+from .plotting_help import _process_plot_range, _prepare_data_and_styles
 
 
 # -------------------------------------------------------------------------- #
@@ -141,30 +140,10 @@ def lineplot(ds, y_coo, x_coo, z_coo=None,
         axes = fig.add_axes([0.15, 0.15, 0.8, 0.75])
     axes.set_title("" if title is None else title, fontsize=fontsize_title)
 
-    # Work out whether to iterate over multiple lines
-    if z_coo is not None:
-        z_vals = ds[z_coo].data
-    else:
-        z_vals = (None,)
-
-    # Color lines
-    if colors is True:
-        cols = iter(calc_colors(ds, z_coo, plotly=False,
-                                colormap=colormap,
-                                log_scale=colormap_log,
-                                reverse=colormap_reverse))
-    elif colors:
-        cols = itertools.cycle(convert_colors(colors, outformat='MATPLOTLIB'))
-    else:
-        cols = itertools.repeat(None)
-
-    # Set custom names for each line ("ztick")
-    if zlabels is not None:
-        zlabels = iter(zlabels)
-    elif z_coo is not None:
-        zlabels = iter(str(z) for z in z_vals)
-    else:
-        zlabels = itertools.repeat(None)
+    z_vals, cols, zlabels, gen_xy = _prepare_data_and_styles(
+        ds=ds, y_coo=y_coo, x_coo=x_coo, z_coo=z_coo, zlabels=zlabels,
+        colors=colors, colormap=colormap, colormap_log=colormap_log,
+        colormap_reverse=colormap_reverse, engine='MATPLOTLIB')
 
     # Decide on using markers, and set custom markers and line-styles
     markers = (len(ds[y_coo]) <= 51) if markers is None else markers
@@ -190,16 +169,6 @@ def lineplot(ds, y_coo, x_coo, z_coo=None,
         zorders = itertools.cycle(zorders)
     else:
         zorders = itertools.cycle([3])
-
-    def gen_xy():
-        for z in z_vals:
-            # Select data for current z coord - flatten for singletons
-            sds = ds.loc[{z_coo: z}] if z is not None else ds
-            x = sds[x_coo].data.flatten()
-            y = sds[y_coo].data.flatten()
-            # Trim out missing data
-            notnull = ~np.isnan(x) & ~np.isnan(y)
-            yield x[notnull], y[notnull]
 
     for x, y in gen_xy():
         col = next(cols)

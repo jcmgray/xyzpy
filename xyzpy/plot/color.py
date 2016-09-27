@@ -1,6 +1,7 @@
 """
 Helper functions for generating color spectrums.
 """
+# TODO: Transparency                                                          #
 
 from math import log
 import itertools
@@ -76,7 +77,7 @@ def _xyz_colormaps(name):
 
 
 def calc_colors(ds, z_coo, colormap="viridis",
-                log_scale=False, reverse=False, plotly=True):
+                log_scale=False, reverse=False, outformat='MATPLOTLIB'):
     """ Calculate colors for a set of lines given their relative position
     in the range of `z_coo`.
 
@@ -110,6 +111,6 @@ def calc_colors(ds, z_coo, colormap="viridis",
 
     # Map to mpl colormap, reversing if required
     cols = [cmap(1 - rval if reverse else rval) for rval in rvals]
-    cols = convert_colors(cols, 'PLOTLY' if plotly else 'MATPLOTLIB')
+    cols = convert_colors(cols, outformat)
 
     return cols

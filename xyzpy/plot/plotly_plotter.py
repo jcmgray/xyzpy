@@ -5,10 +5,8 @@ Functions for plotting datasets nicely.
 # TODO: names                                                                 #
 
 import itertools
-import numpy as np
 from ..manage import auto_xyz_ds
-from .color import calc_colors, convert_colors
-from .plotting_help import _process_plot_range
+from .plotting_help import _process_plot_range, _prepare_data_and_styles
 
 
 def ishow(figs, nb=True, **kwargs):
@@ -49,10 +47,12 @@ def ilineplot(ds, y_coo, x_coo, z_coo=None,
               # x-axis options
               xtitle=None,
               xlims=None,
+              xticks=None,
               xlog=False,
               # y-axis options
               ytitle=None,
               ylims=None,
+              yticks=None,
               ylog=False,
               # Line markers, styles and positions
               markers=None,
@@ -79,30 +79,10 @@ def ilineplot(ds, y_coo, x_coo, z_coo=None,
 
     from plotly.graph_objs import Scatter
 
-    # Work out whether to iterate over multiple lines
-    if z_coo is not None:
-        z_vals = ds[z_coo].data
-    else:
-        z_vals = (None,)
-
-    # Color lines
-    if colors is True:
-        cols = iter(calc_colors(ds, z_coo, plotly=True,
-                                colormap=colormap,
-                                log_scale=colormap_log,
-                                reverse=colormap_reverse))
-    elif colors:
-        cols = itertools.cycle(convert_colors(colors, outformat='PLOTLY'))
-    else:
-        cols = itertools.repeat(None)
-
-    # Set custom names for each line ("ztick")
-    if zlabels is not None:
-        zlabels = iter(zlabels)
-    elif z_coo is not None:
-        zlabels = iter(str(z) for z in z_vals)
-    else:
-        zlabels = itertools.repeat(None)
+    z_vals, cols, zlabels, gen_xy = _prepare_data_and_styles(
+        ds=ds, y_coo=y_coo, x_coo=x_coo, z_coo=z_coo, zlabels=zlabels,
+        colors=colors, colormap=colormap, colormap_log=colormap_log,
+        colormap_reverse=colormap_reverse, engine='PLOTLY')
 
     # Decide on using markers, and set custom markers and line-styles
     markers = (len(ds[y_coo]) <= 51) if markers is None else markers
@@ -110,16 +90,6 @@ def ilineplot(ds, y_coo, x_coo, z_coo=None,
         mrkrs = itertools.cycle(range(44))
     else:
         mrkrs = itertools.repeat(None)
-
-    def gen_xy():
-        for z in z_vals:
-            # Select data for current z coord - flatten for singletons
-            sds = ds.loc[{z_coo: z}] if z is not None else ds
-            x = sds[x_coo].data.flatten()
-            y = sds[y_coo].data.flatten()
-            # Trim out missing data
-            notnull = ~np.isnan(x) & ~np.isnan(y)
-            yield x[notnull], y[notnull]
 
     def gen_traces():
         for x, y in gen_xy():
@@ -176,6 +146,7 @@ def ilineplot(ds, y_coo, x_coo, z_coo=None,
             'title': x_coo if xtitle is None else xtitle,
             'mirror': 'ticks',
             'ticks': 'outside',
+            'tickvals': xticks if xticks is not None else None,
             'range': xlims,
             'type': 'log' if xlog else 'linear',
             'tickfont': {
@@ -192,6 +163,7 @@ def ilineplot(ds, y_coo, x_coo, z_coo=None,
             'range': ylims,
             'mirror': 'ticks',
             'ticks': 'outside',
+            'tickvals': yticks if yticks is not None else None,
             'type': 'log' if ylog else 'linear',
             'tickfont': {
                 'size': fontsize_ticks,
