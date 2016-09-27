@@ -65,7 +65,7 @@ def lineplot(ds, y_coo, x_coo, z_coo=None,
              # Figure options
              add_to_axes=None,        # add to existing axes
              add_to_fig=None,         # add plot to an exisitng figure
-             new_axes_loc=[0.4, 0.6, 0.30, 0.25],  # overlay axes position
+             new_axes_loc=(0.4, 0.6, 0.30, 0.25),  # overlay axes position
              figsize=(8, 6),          # absolute figure size
              subplot=None,            # make plot in subplot
              fignum=1,
@@ -105,7 +105,7 @@ def lineplot(ds, y_coo, x_coo, z_coo=None,
              vlines=None,             # iterable of vertical lines to plot
              hlines=None,             # iterable of horizontal lines to plot
              gridlines=True,
-             font=['Source Sans Pro', 'PT Sans', 'Liberation Sans', 'Arial'],
+             font=('Source Sans Pro', 'PT Sans', 'Liberation Sans', 'Arial'),
              fontsize_title=20,
              fontsize_ticks=16,
              fontsize_xtitle=20,
