@@ -146,7 +146,8 @@ def lineplot(ds, y_coo, x_coo, z_coo=None,
         colormap_reverse=colormap_reverse, engine='MATPLOTLIB')
 
     # Decide on using markers, and set custom markers and line-styles
-    markers = (len(ds[y_coo]) <= 51) if markers is None else markers
+    if markers is None:
+        markers = len(ds[x_coo]) <= 51
     if markers:
         if len(z_vals) > 1:
             mrkrs = itertools.cycle(_MPL_MARKERS)
@@ -196,8 +197,10 @@ def lineplot(ds, y_coo, x_coo, z_coo=None,
     axes.set_xlabel(x_coo if xtitle is None else xtitle,
                     fontsize=fontsize_xtitle)
     axes.xaxis.labelpad = xtitle_pad
-    axes.set_ylabel(y_coo if ytitle is None else ytitle,
-                    fontsize=fontsize_ytitle)
+    if ytitle is None and isinstance(y_coo, str):
+        ytitle = y_coo
+    if ytitle:
+        axes.set_ylabel(ytitle, fontsize=fontsize_ytitle)
     axes.yaxis.labelpad = ytitle_pad
 
     # Set plot range

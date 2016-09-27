@@ -14,10 +14,39 @@ def _prepare_data_and_styles(ds, y_coo, x_coo, z_coo, zlabels,
                              colormap_reverse,
                              engine):
     # Work out whether to iterate over multiple lines
+    multi_var = False
     if z_coo is not None:
         z_vals = ds[z_coo].data
+    elif not isinstance(y_coo, str):
+        multi_var = True
+        z_vals = y_coo
     else:
         z_vals = (None,)
+
+    def gen_xy():
+        for z in z_vals:
+            # Select data for current z coord - flatten for singletons
+            if multi_var:
+                x = ds[x_coo].data.flatten()
+                y = ds[z].data.flatten()
+            elif z is not None:
+                x = ds.loc[{z_coo: z}][x_coo].data.flatten()
+                y = ds.loc[{z_coo: z}][y_coo].data.flatten()
+            else:
+                x = ds[x_coo].data.flatten()
+                y = ds[y_coo].data.flatten()
+
+            # Trim out missing data
+            notnull = ~np.isnan(x) & ~np.isnan(y)
+            yield x[notnull], y[notnull]
+
+    # Set custom names for each line ("ztick")
+    if zlabels is not None:
+        zlabels = iter(zlabels)
+    elif z_coo is not None or multi_var:
+        zlabels = iter(str(z) for z in z_vals)
+    else:
+        zlabels = itertools.repeat(None)
 
     # Color lines
     if colors is True:
@@ -30,24 +59,6 @@ def _prepare_data_and_styles(ds, y_coo, x_coo, z_coo, zlabels,
         cols = itertools.cycle(convert_colors(colors, outformat=engine))
     else:
         cols = itertools.repeat(None)
-
-    # Set custom names for each line ("ztick")
-    if zlabels is not None:
-        zlabels = iter(zlabels)
-    elif z_coo is not None:
-        zlabels = iter(str(z) for z in z_vals)
-    else:
-        zlabels = itertools.repeat(None)
-
-    def gen_xy():
-        for z in z_vals:
-            # Select data for current z coord - flatten for singletons
-            sds = ds.loc[{z_coo: z}] if z is not None else ds
-            x = sds[x_coo].data.flatten()
-            y = sds[y_coo].data.flatten()
-            # Trim out missing data
-            notnull = ~np.isnan(x) & ~np.isnan(y)
-            yield x[notnull], y[notnull]
 
     return z_vals, cols, zlabels, gen_xy
 
@@ -62,6 +73,7 @@ def _process_plot_range(xlims, ylims, ds, x_coo, y_coo, padding):
             xmin, xmax = xlims
         else:
             xmax, xmin = ds[x_coo].max(), ds[x_coo].min()
+            xmin, xmax = float(xmin), float(xmax)
         if padding is not None:
             xrnge = xmax - xmin
             xlims = (xmin - padding * xrnge, xmax + padding * xrnge)
@@ -70,7 +82,12 @@ def _process_plot_range(xlims, ylims, ds, x_coo, y_coo, padding):
         if ylims is not None:
             ymin, ymax = ylims
         else:
-            ymax, ymin = ds[y_coo].max(), ds[y_coo].min()
+            if isinstance(y_coo, str):
+                ymax, ymin = ds[y_coo].max(), ds[y_coo].min()
+            else:
+                ymax = max(ds[var].max() for var in y_coo)
+                ymin = min(ds[var].min() for var in y_coo)
+        ymin, ymax = float(ymin), float(ymax)
         if padding is not None:
             yrnge = ymax - ymin
             ylims = (ymin - padding * yrnge, ymax + padding * yrnge)

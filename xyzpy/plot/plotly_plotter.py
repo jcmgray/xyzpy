@@ -85,7 +85,8 @@ def ilineplot(ds, y_coo, x_coo, z_coo=None,
         colormap_reverse=colormap_reverse, engine='PLOTLY')
 
     # Decide on using markers, and set custom markers and line-styles
-    markers = (len(ds[y_coo]) <= 51) if markers is None else markers
+    if markers is None:
+        markers = len(ds[x_coo]) <= 51
     if markers and len(z_vals) > 1:
         mrkrs = itertools.cycle(range(44))
     else:
