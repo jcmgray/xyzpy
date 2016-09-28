@@ -12,10 +12,20 @@
 
 import functools
 import itertools
-import multiprocessing
+
 import numpy as np
 import xarray as xr
 import tqdm
+
+
+@functools.lru_cache(1)
+def _distributed_client(n=None):
+    """Return a dask.distributed client, but cache it.
+    """
+    import distributed
+    cluster = distributed.LocalCluster(n, scheduler_port=0)
+    client = distributed.Client(cluster)
+    return client
 
 
 def progbar(it=None, nb=False, **tqdm_settings):
@@ -123,14 +133,14 @@ def combo_runner(fn, combos, constants=None, split=False, progbars=0,
 
     # Evaluate combos in parallel
     if parallel or (processes is not None and processes > 1):
-        mp = multiprocessing.Pool(processes=processes)
+        pool = _distributed_client(processes)
 
         # Submit jobs in parallel and in nested structure
         def submit_jobs(fn, combos):
             arg, inputs = combos[0]
             for x in inputs:
                 if len(combos) == 1:
-                    yield mp.apply_async(fn, kwds={arg: x})
+                    yield pool.submit(fn, **{arg: x})
                 else:
                     sub_fn = functools.partial(fn, **{arg: x})
                     yield tuple(submit_jobs(sub_fn, combos[1:]))
@@ -141,7 +151,7 @@ def combo_runner(fn, combos, constants=None, split=False, progbars=0,
             for fut in progbar(futs, disable=(_pl >= progbars or len1),
                                desc=fn_args[_l], **progbar_opts):
                 if _l == len(fn_args) - 1:
-                    y = fut.get()
+                    y = fut.result()
                     yield y if split else (y,)
                 else:
                     _npl = _pl if len1 else _pl+1
@@ -290,11 +300,11 @@ def case_runner(fn, fn_args, cases, constants=None, split=False,
 
     # Evaluate configurations in parallel
     if parallel or (processes is not None and processes > 1):
-        mp = multiprocessing.Pool(processes=processes)
-        fut = tuple(mp.apply_async(fn, kwds=dict(zip(fn_args, c)))
+        pool = _distributed_client(processes)
+        fut = tuple(pool.submit(fn, **dict(zip(fn_args, c)))
                     for c in cases)
-        results = tuple(x.get() for x in progbar(fut, total=len(cases),
-                                                 disable=progbars < 1))
+        results = tuple(x.result() for x in progbar(fut, total=len(cases),
+                                                    disable=progbars < 1))
 
     # Evaluate configurations sequentially
     else:
