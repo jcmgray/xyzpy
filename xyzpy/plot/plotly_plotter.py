@@ -92,6 +92,11 @@ def ilineplot(ds, y_coo, x_coo, z_coo=None,
     else:
         mrkrs = itertools.repeat(None)
 
+    # Strip out probable latex signs "$"
+    title, xtitle, ytitle, ztitle = (
+        (s.translate({ord("$"): ""}) if isinstance(s, str) else s)
+        for s in (title, xtitle, ytitle, ztitle))
+
     def gen_traces():
         for x, y in gen_xy():
             col = next(cols)

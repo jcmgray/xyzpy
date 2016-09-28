@@ -118,3 +118,11 @@ class TestCommonInterface:
                 yticks=yticks,
                 vlines=vlines,
                 hlines=hlines)
+
+    def test_multi_var(self):
+        # TODO: works
+        # TODO: colors
+        # TODO: labels
+        # TODO: ytitle
+        # TODO: padding, and lims
+        assert False

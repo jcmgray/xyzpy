@@ -62,10 +62,10 @@ _MPL_MARKERS = [*_MPL_MARKER_DICT.keys()]
 
 def lineplot(ds, y_coo, x_coo, z_coo=None,
              # Figure options
+             figsize=(8, 6),          # absolute figure size
+             axes_loc=None,           # axes location within fig
              add_to_axes=None,        # add to existing axes
              add_to_fig=None,         # add plot to an exisitng figure
-             new_axes_loc=(0.4, 0.6, 0.30, 0.25),  # overlay axes position
-             figsize=(8, 6),          # absolute figure size
              subplot=None,            # make plot in subplot
              fignum=1,
              title=None,
@@ -80,6 +80,7 @@ def lineplot(ds, y_coo, x_coo, z_coo=None,
              ztitle=None,             # legend title
              zlabels=None,            # legend labels
              legend_ncol=1,           # number of columns in the legend
+             legend_bbox=None,        # Where to anchor the legend to
              # x-axis options
              xtitle=None,
              xtitle_pad=10,           # distance between label and axes line
@@ -110,7 +111,7 @@ def lineplot(ds, y_coo, x_coo, z_coo=None,
              fontsize_xtitle=20,
              fontsize_ytitle=20,
              fontsize_ztitle=20,
-             fontsize_legend=18,
+             fontsize_zlabels=18,
              return_fig=False,
              ):
     """ Take a data set and plot one of its variables as a function of two
@@ -122,7 +123,8 @@ def lineplot(ds, y_coo, x_coo, z_coo=None,
     # Add a new set of axes to an existing plot
     if add_to_fig is not None and subplot is None:
         fig = add_to_fig
-        axes = fig.add_axes(new_axes_loc)
+        axes = fig.add_axes((0.4, 0.6, 0.30, 0.25)
+                            if axes_loc is None else axes_loc)
     # Add lines to an existing set of axes
     elif add_to_axes is not None:
         fig = add_to_axes
@@ -137,7 +139,8 @@ def lineplot(ds, y_coo, x_coo, z_coo=None,
         axes = fig.add_subplot(subplot)
     else:
         fig = plt.figure(fignum, figsize=figsize, dpi=100)
-        axes = fig.add_axes([0.15, 0.15, 0.8, 0.75])
+        axes = fig.add_axes((0.15, 0.15, 0.8, 0.75)
+                            if axes_loc is None else axes_loc)
     axes.set_title("" if title is None else title, fontsize=fontsize_title)
 
     z_vals, cols, zlabels, gen_xy = _prepare_data_and_styles(
@@ -187,8 +190,11 @@ def lineplot(ds, y_coo, x_coo, z_coo=None,
     auto_no_legend = (legend is False or len(z_vals) > 10 or len(z_vals) == 1)
     if legend or not auto_no_legend:
         lgnd = axes.legend(title=(z_coo if ztitle is None else ztitle),
-                           loc=legend_loc, fontsize=fontsize_legend,
-                           frameon=False, ncol=legend_ncol)
+                           loc=legend_loc,
+                           fontsize=fontsize_zlabels,
+                           frameon=False,
+                           bbox_to_anchor=legend_bbox,
+                           ncol=legend_ncol)
         lgnd.get_title().set_fontsize(fontsize_ztitle)
 
     # Set axis scale-type and names
