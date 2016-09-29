@@ -12,24 +12,16 @@
 
 import functools
 import itertools
-
 import numpy as np
 import xarray as xr
 import tqdm
 
-
-@functools.lru_cache(1)
-def _distributed_client(n=None):
-    """Return a dask.distributed client, but cache it.
-    """
-    import distributed
-    cluster = distributed.LocalCluster(n, scheduler_port=0)
-    client = distributed.Client(cluster)
-    return client
+from .parallel_work import Pool
 
 
 def progbar(it=None, nb=False, **tqdm_settings):
-    """ Turn any iterable into a progress bar, with notebook version. """
+    """Turn any iterable into a progress bar, with notebook option.
+    """
     defaults = {'ascii': True, 'smoothing': 0}
     # Overide defaults with custom tqdm_settings
     settings = {**defaults, **tqdm_settings}
@@ -42,7 +34,7 @@ def progbar(it=None, nb=False, **tqdm_settings):
 # COMBO_RUNNER functions: for evaluating all possible combinations of args    #
 # --------------------------------------------------------------------------- #
 
-def parse_combos(combos):
+def _parse_combos(combos):
     """ Turn dicts and single tuples into proper form for combo runners. """
     if isinstance(combos, dict):
         return tuple(combos.items())
@@ -51,8 +43,14 @@ def parse_combos(combos):
     return tuple(combos)
 
 
-def combo_runner(fn, combos, constants=None, split=False, progbars=0,
-                 parallel=False, processes=None, progbar_opts=None):
+def combo_runner(fn, combos,
+                 constants=None,
+                 split=False,
+                 progbars=0,
+                 parallel=False,
+                 processes=None,
+                 parallel_backend='MULTIPROCESSING',
+                 progbar_opts=None):
     """ Take a function fn and analyse it over all combinations of named
     variables' values, optionally showing progress and in parallel.
 
@@ -121,7 +119,7 @@ def combo_runner(fn, combos, constants=None, split=False, progbars=0,
             used (needs to be picklable/importable).
     """
     # Prepare combos
-    combos = parse_combos(combos)
+    combos = _parse_combos(combos)
     fn_args, _ = zip(*combos)
 
     # Prepare Function
@@ -133,32 +131,32 @@ def combo_runner(fn, combos, constants=None, split=False, progbars=0,
 
     # Evaluate combos in parallel
     if parallel or (processes is not None and processes > 1):
-        pool = _distributed_client(processes)
+        with Pool(n=processes, backend=parallel_backend) as pool:
 
-        # Submit jobs in parallel and in nested structure
-        def submit_jobs(fn, combos):
-            arg, inputs = combos[0]
-            for x in inputs:
-                if len(combos) == 1:
-                    yield pool.submit(fn, **{arg: x})
-                else:
-                    sub_fn = functools.partial(fn, **{arg: x})
-                    yield tuple(submit_jobs(sub_fn, combos[1:]))
+            # Submit jobs in parallel and in nested structure
+            def submit_jobs(fn, combos):
+                arg, inputs = combos[0]
+                for x in inputs:
+                    if len(combos) == 1:
+                        yield pool.submit(fn, **{arg: x})
+                    else:
+                        sub_fn = functools.partial(fn, **{arg: x})
+                        yield tuple(submit_jobs(sub_fn, combos[1:]))
 
-        # Run through nested structure retrieving results
-        def get_results(futs, _l=0, _pl=0):
-            len1 = (len(futs) == 1)
-            for fut in progbar(futs, disable=(_pl >= progbars or len1),
-                               desc=fn_args[_l], **progbar_opts):
-                if _l == len(fn_args) - 1:
-                    y = fut.result()
-                    yield y if split else (y,)
-                else:
-                    _npl = _pl if len1 else _pl+1
-                    yield tuple(zip(*get_results(fut, _l + 1, _npl)))
+            # Run through nested structure retrieving results
+            def get_results(futs, _l=0, _pl=0):
+                len1 = (len(futs) == 1)
+                for fut in progbar(futs, disable=(_pl >= progbars or len1),
+                                   desc=fn_args[_l], **progbar_opts):
+                    if _l == len(fn_args) - 1:
+                        y = fut.result()
+                        yield y if split else (y,)
+                    else:
+                        _npl = _pl if len1 else _pl+1
+                        yield tuple(zip(*get_results(fut, _l + 1, _npl)))
 
-        futures = tuple(submit_jobs(fn, combos))
-        results = tuple(zip(*get_results(futures)))
+            futures = tuple(submit_jobs(fn, combos))
+            results = tuple(zip(*get_results(futures)))
 
     # Evaluate combos sequentially
     else:
@@ -198,7 +196,7 @@ def combos_to_ds(results, combos, var_names, var_dims=None, var_coords=None,
     -------
         ds: xarray Dataset with appropriate coordinates.
     """
-    combos = parse_combos(combos)
+    combos = _parse_combos(combos)
     fn_args, _ = zip(*combos)
 
     # Work out if multiple variables are expected as output
@@ -264,8 +262,14 @@ def combo_runner_to_ds(fn, combos, var_names, var_dims=None, var_coords=None,
 # CASE_RUNNER functions: for evaluating specific configurations of args       #
 # --------------------------------------------------------------------------- #
 
-def case_runner(fn, fn_args, cases, constants=None, split=False,
-                progbars=0, parallel=False, processes=None, progbar_opts=None):
+def case_runner(fn, fn_args, cases,
+                constants=None,
+                split=False,
+                progbars=0,
+                parallel=False,
+                processes=None,
+                parallel_backend='MULTIPROCESSING',
+                progbar_opts=None):
     """ Evaluate a function in many different configurations, optionally in
     parallel and or with live progress.
 
@@ -300,11 +304,11 @@ def case_runner(fn, fn_args, cases, constants=None, split=False,
 
     # Evaluate configurations in parallel
     if parallel or (processes is not None and processes > 1):
-        pool = _distributed_client(processes)
-        fut = tuple(pool.submit(fn, **dict(zip(fn_args, c)))
-                    for c in cases)
-        results = tuple(x.result() for x in progbar(fut, total=len(cases),
-                                                    disable=progbars < 1))
+        with Pool(n=processes, backend=parallel_backend) as pool:
+            fut = tuple(pool.submit(fn, **dict(zip(fn_args, c)))
+                        for c in cases)
+            results = tuple(x.result() for x in progbar(fut, total=len(cases),
+                                                        disable=progbars < 1))
 
     # Evaluate configurations sequentially
     else:
