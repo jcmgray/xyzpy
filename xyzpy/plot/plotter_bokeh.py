@@ -23,11 +23,6 @@ def bshow(figs, nb=True, **kwargs):
 def blineplot(ds, y_coo, x_coo, z_coo=None,
               # Figure options
               figsize=(6, 5),          # absolute figure size
-              axes_loc=None,           # axes location within fig
-              add_to_axes=None,        # add to existing axes
-              add_to_fig=None,         # add plot to an exisitng figure
-              subplot=None,            # make plot in subplot
-              fignum=1,
               title=None,
               # Line coloring options
               colors=None,
