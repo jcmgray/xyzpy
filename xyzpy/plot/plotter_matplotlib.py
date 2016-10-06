@@ -14,7 +14,7 @@ import itertools
 import collections
 from ..manage import auto_xyz_ds
 
-from .plotting_help import _process_plot_range, _prepare_data_and_styles
+from .core import _process_plot_range, _prepare_data_and_styles
 
 
 # -------------------------------------------------------------------------- #
@@ -148,7 +148,7 @@ def lineplot(ds, y_coo, x_coo, z_coo=None,
         colors=colors, colormap=colormap, colormap_log=colormap_log,
         colormap_reverse=colormap_reverse, engine='MATPLOTLIB')
 
-    # Decide on using markers, and set custom markers and line-styles
+    # Decide on using markers, and set custom markers
     if markers is None:
         markers = len(ds[x_coo]) <= 51
     if markers:
@@ -159,6 +159,7 @@ def lineplot(ds, y_coo, x_coo, z_coo=None,
     else:
         mrkrs = itertools.repeat(None)
 
+    # Line-styles
     lines = (itertools.repeat("-") if line_styles is None else
              itertools.cycle(line_styles))
 
