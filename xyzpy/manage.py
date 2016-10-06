@@ -7,7 +7,19 @@ import xarray as xr
 import xarray.ufuncs as xrufuncs
 
 
+_DEFAULT_FN_CACHE_PATH = '__xyz_cache__'
+
+
+def cache_to_disk(foo, folder=_DEFAULT_FN_CACHE_PATH):
+    import joblib
+    mem = joblib.Memory(folder)
+    return mem.cache(foo)
+
+
 def _auto_add_extension(file_name, engine):
+    """Make sure a file name has an extension that reflects its
+    file type.
+    """
     if "." not in file_name:
         extension = ".h5" if engine == "h5netcdf" else ".nc"
         file_name += extension
@@ -15,7 +27,7 @@ def _auto_add_extension(file_name, engine):
 
 
 def xrsave(ds, file_name, engine="h5netcdf"):
-    """ Saves a xarray dataset.
+    """Saves a xarray dataset.
 
     Parameters
     ----------
@@ -32,8 +44,7 @@ def xrsave(ds, file_name, engine="h5netcdf"):
 
 
 def xrload(file_name, engine="h5netcdf", load_to_mem=True, create_new=False):
-    """
-    Loads a xarray dataset.
+    """Loads a xarray dataset.
 
     Parameters
     ----------
@@ -67,14 +78,15 @@ def xrload(file_name, engine="h5netcdf", load_to_mem=True, create_new=False):
 
 
 def nonnull_compatible(first, second):
-    """ Check whether two (aligned) datasets have any conflicting values. """
+    """Check whether two (aligned) datasets have any conflicting values.
+    """
     # TODO assert common coordinates are aligned?
     both_not_null = xrufuncs.logical_not(first.isnull() | second.isnull())
     return first.where(both_not_null).equals(second.where(both_not_null))
 
 
 def aggregate(*datasets, overwrite=False, accept_newer=False):
-    """ Aggregates xarray Datasets and DataArrays
+    """Aggregates xarray Datasets and DataArrays
 
     Parameters
     ----------
@@ -121,7 +133,8 @@ xrsmoosh = aggregate
 
 
 def auto_xyz_ds(x, y_z):
-    """ Automatically turn an array into a `xarray` dataset """
+    """Automatically turn an array into a `xarray` dataset.
+    """
     # Infer dimensions to coords mapping
     y_z = np.array(np.squeeze(y_z), ndmin=2)
     if np.size(x) == y_z.shape[0]:
