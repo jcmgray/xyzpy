@@ -92,11 +92,11 @@ class Pool(object):
     # Context Manager #
     # --------------- #
     def __enter__(self):
-        if self.backend == 'MULTIPROCESSING':
+        if self.backend in {'MULTIPROCESSING', 'MP'}:
             return _start_multiprocessing_client(self.n)
-        elif self.backend == 'IPYPARALLEL':
+        elif self.backend in {'IPYPARALLEL', 'IPY'}:
             return _ipyparallel_client(self.n)
-        elif self.backend == 'DISTRIBUTED':
+        elif self.backend in {'DISTRIBUTED', 'DASK'}:
             return _distributed_client(self.n)
         else:
             raise ValueError("Invalid backend specified.")
