@@ -4,13 +4,23 @@ Functions for plotting datasets nicely.
 # TODO: unify all options with lineplot                                       #
 # TODO: names                                                                 #
 
+import functools
 import itertools
 from ..manage import auto_xyz_ds
-from .plotting_help import _process_plot_range, _prepare_data_and_styles
+from .core import _process_plot_range, _prepare_data_and_styles
+
+
+@functools.lru_cache(1)
+def init_plotly_nb():
+    """Cache this so it doesn't happen over and over again.
+    """
+    from plotly.offline import init_notebook_mode
+    init_notebook_mode()
 
 
 def ishow(figs, nb=True, **kwargs):
-    """ Show multiple plotly figures in notebook or on web. """
+    """Show multiple plotly figures in notebook or on web.
+    """
     if isinstance(figs, (list, tuple)):
         fig_main = figs[0]
         for fig in figs[1:]:
@@ -18,9 +28,8 @@ def ishow(figs, nb=True, **kwargs):
     else:
         fig_main = figs
     if nb:
-        from plotly.offline import init_notebook_mode
         from plotly.offline import iplot as plot
-        init_notebook_mode()
+        init_plotly_nb()
     else:
         from plotly.plotly import plot
     plot(fig_main, **kwargs)
@@ -31,7 +40,7 @@ def ishow(figs, nb=True, **kwargs):
 # --------------------------------------------------------------------------  #
 
 def ilineplot(ds, y_coo, x_coo, z_coo=None,
-              figsize=(8, 6),          # absolute figure size
+              figsize=(6, 5),          # absolute figure size
               nb=True,
               title=None,
               # Line coloring options
@@ -72,8 +81,9 @@ def ilineplot(ds, y_coo, x_coo, z_coo=None,
               fontsize_legend=18,
               return_fig=False,
               **kwargs):
-    """ Take a dataset and plot onse of its variables as a function of two
-    coordinates using plotly. """
+    """Take a dataset and plot onse of its variables as a function of two
+    coordinates using plotly.
+    """
     # TODO: list of colors, send to calc_colors
     # TODO: mouse scroll zoom
 
@@ -213,7 +223,9 @@ def iheatmap(ds, data_name, x_coo, y_coo,
              nb=True,
              return_fig=False,
              **kwargs):
-    """ Automatic 2D-Heatmap plot using plotly. """
+    """Automatic 2D-Heatmap plot using plotly.
+    """
+    # TODO: automatic aspect ratio? aspect_ratio='AUTO'
     from plotly.graph_objs import Heatmap
     traces = [Heatmap({"z": (ds[data_name]
                              .dropna(x_coo, how="all")

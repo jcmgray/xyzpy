@@ -17,8 +17,15 @@ def _COLORS_MATPLOTLIB_TO_PLOTLY(cols):
         yield "rgba" + str(tuple(int(255*rgb) for rgb in col))
 
 
-_conversion_methods = {
-    ('MATPLOTLIB', 'PLOTLY'): _COLORS_MATPLOTLIB_TO_PLOTLY}
+def _COLORS_MATPLOTLIB_TO_BOKEH(cols):
+    for col in cols:
+        yield (int(255*col[0]), int(255*col[1]), int(255*col[2]), col[3])
+
+
+_COLOR_CONVERT_METHODS = {
+    ('MATPLOTLIB', 'PLOTLY'): _COLORS_MATPLOTLIB_TO_PLOTLY,
+    ('MATPLOTLIB', 'BOKEH'): _COLORS_MATPLOTLIB_TO_BOKEH,
+}
 
 
 def convert_colors(cols, outformat, informat='MATPLOTLIB'):
@@ -26,11 +33,12 @@ def convert_colors(cols, outformat, informat='MATPLOTLIB'):
     """
     if informat == outformat:
         return cols
-    return _conversion_methods[(informat, outformat)](cols)
+    return _COLOR_CONVERT_METHODS[(informat, outformat)](cols)
 
 
 def _xyz_colormaps(name):
-    """ Custom-defined colormaps """
+    """Custom-defined colormaps
+    """
     cmaps = {
         'xyz': {'red':   ((0.00,    0/255,   0/255),
                           (0.36,   44/255,  44/255),
@@ -96,9 +104,9 @@ def _xyz_colormaps(name):
     return LinearSegmentedColormap(name, cmaps[name])
 
 
-def calc_colors(ds, z_coo, colormap="viridis",
-                log_scale=False, reverse=False, outformat='MATPLOTLIB'):
-    """ Calculate colors for a set of lines given their relative position
+def calc_colors(ds, z_coo, colormap="xyz", log_scale=False,
+                reverse=False, outformat='MATPLOTLIB'):
+    """Calculate colors for a set of lines given their relative position
     in the range of `z_coo`.
 
     Parameters
