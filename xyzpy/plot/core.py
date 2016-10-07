@@ -1,7 +1,7 @@
 """
 Helper functions for preparing data to be plotted.
 """
-# TODO: Error bars ********************************************************** #
+# TODO: Error bars ---------------------------------------------------------- #
 
 import itertools
 import numpy as np

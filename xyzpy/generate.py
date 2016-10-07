@@ -1,25 +1,30 @@
-""" Generate datasets from function and parameter lists """
+"""Generate datasets from function and parameter lists
+"""
+# XXX: fix h5netcdf attributes recursion error
 
-# TODO: allow combo_runner_to_ds to use output vars as coords
+# TODO: 'resources', big arguments, not to store anywhere. cache? ----------- #
+# TODO: allow combo_runner_to_ds to use output vars as coords --------------- #
 # TODO: automatically count the number of progbars (i.e. no. of len > 1 coos) #
 # TODO: combos add to existing dataset. ------------------------------------- #
-# TODO: save to ds every case. For case_runner only?------------------------- #
+# TODO: save to ds every case. For case_runner only? ------------------------ #
+# TODO: function for printing ranges of runs done. -------------------------- #
+# TODO: logging ------------------------------------------------------------- #
+# TODO: catch attribute error from multiprocessing unimportable functions --- #
+# TODO: proper docs --------------------------------------------------------- #
 # TODO: pause / finish early interactive commands. -------------------------- #
-# TODO: function for printing ranges of runs done.
-# TODO: logging
-# TODO: catch attribute error from multiprocessing unimportable functions
-# TODO: proper docs
 
 import functools
 import itertools
-import multiprocessing
 import numpy as np
 import xarray as xr
 import tqdm
 
+from .parallel_work import Pool
+
 
 def progbar(it=None, nb=False, **tqdm_settings):
-    """ Turn any iterable into a progress bar, with notebook version. """
+    """Turn any iterable into a progress bar, with notebook option.
+    """
     defaults = {'ascii': True, 'smoothing': 0}
     # Overide defaults with custom tqdm_settings
     settings = {**defaults, **tqdm_settings}
@@ -32,7 +37,7 @@ def progbar(it=None, nb=False, **tqdm_settings):
 # COMBO_RUNNER functions: for evaluating all possible combinations of args    #
 # --------------------------------------------------------------------------- #
 
-def parse_combos(combos):
+def _parse_combos(combos):
     """ Turn dicts and single tuples into proper form for combo runners. """
     if isinstance(combos, dict):
         return tuple(combos.items())
@@ -41,114 +46,86 @@ def parse_combos(combos):
     return tuple(combos)
 
 
-def combo_runner(fn, combos, constants=None, split=False, progbars=0,
-                 parallel=False, processes=None, progbar_opts=None):
-    """ Take a function fn and analyse it over all combinations of named
+def combo_runner(fn, combos,
+                 constants=None,
+                 resources=None,
+                 split=False,
+                 progbars=0,
+                 parallel=False,
+                 processes=None,
+                 parallel_backend='MP',
+                 progbar_opts=None):
+    """Take a function fn and analyse it over all combinations of named
     variables' values, optionally showing progress and in parallel.
 
     Parameters
     ----------
-        fn: function to analyse
-        combos: list of tuples/dict of form ((variable_name, [values]), ...),
-            all combinations of each argument will be calculated. Each
+        fn: callable
+            function to analyse
+        combos: mapping of individual fn arguments to iterable of values
+            All combinations of each argument will be calculated. Each
             argument range thus gets a dimension in the output array(s).
-        constants: list of tuples/dict of *constant* fn argument mappings.
-        split: whether to split into multiple output arrays or not.
-        progbars: how many levels of nested progress bars to show.
-        parallel: process combos in parallel.
-        processes: how many processes to use, use None for automatic.
-        progbar_opts: dict of options for the progress bar.
+        constants:
+            list of tuples/dict of *constant* fn argument mappings.
+        split:
+            whether to split into multiple output arrays or not.
+        progbars:
+            how many levels of nested progress bars to show.
+        parallel: bool
+            process combos in parallel, default number of workers picked.
+        processes: int
+            Explicitly choose how many processes to use, None for automatic.
+        progbar_opts: dict
+            Options for the progress bar.
 
     Returns
     -------
-        data: list of result arrays, each with all param combinations.
-
-    Examples
-    --------
-    In [1]: from xyzpy import *
-
-    In [2]: from time import sleep
-
-    In [3]: def foo(a, b, c):
-       ...:     sleep(1)
-       ...:     return a + b + c, c % 2 == 0
-       ...:
-       ...:
-
-    In [4]: combos = (('a', [100, 400]), ('b', [20, 50]), ('c', [3, 6]))
-
-    In [5]: combo_runner(foo, combos, progbars=3)
-    a: 100%|##########| 2/2 [00:08<00:00,  4.02s/it]
-    b: 100%|##########| 2/2 [00:04<00:00,  2.01s/it]
-    c: 100%|##########| 2/2 [00:02<00:00,  1.00s/it]
-
-    Out[5]:
-    ((((123, False), (126, True)), ((153, False), (156, True))),
-     (((423, False), (426, True)), ((453, False), (456, True))))
-
-    In [6]: combo_runner(foo, combos, progbars=3, parallel=True)  # Faster!
-    a: 100%|##########| 2/2 [00:01<00:00,  1.96it/s]
-    b: 100%|##########| 2/2 [00:00<00:00, 327.58it/s]
-    c: 100%|##########| 2/2 [00:00<00:00, 17512.75it/s]
-
-    Out[6]:
-    ((((123, False), (126, True)), ((153, False), (156, True))),
-     (((423, False), (426, True)), ((453, False), (456, True))))
-
-
-    In [7]: x, y = combo_runner(foo, combos, split=True)
-
-    In [8]: x
-    Out[8]: (((123, 126), (153, 156)), ((423, 426), (453, 456)))
-
-    In [9]: y
-    Out[9]: (((False, True), (False, True)), ((False, True), (False, True)))
-
-    Notes
-    -----
-        1. The parallel evaluation of combos relies on the `multiprocessing`
-            module, this places some restrictions of what functions can be
-            used (needs to be picklable/importable).
+        data:
+            list of result arrays, each with all param combinations in nested
+            tuples.
     """
     # Prepare combos
-    combos = parse_combos(combos)
+    combos = _parse_combos(combos)
     fn_args, _ = zip(*combos)
 
+    constants = dict() if constants is None else dict(constants)
+    resources = dict() if resources is None else dict(resources)
+
     # Prepare Function
-    if constants is not None:
-        fn = functools.partial(fn, **dict(constants))
+    if len(constants) + len(resources) > 0:
+        fn = functools.partial(fn, **constants, **resources)
 
     if progbar_opts is None:
         progbar_opts = dict()
 
     # Evaluate combos in parallel
     if parallel or (processes is not None and processes > 1):
-        mp = multiprocessing.Pool(processes=processes)
+        with Pool(n=processes, backend=parallel_backend) as pool:
 
-        # Submit jobs in parallel and in nested structure
-        def submit_jobs(fn, combos):
-            arg, inputs = combos[0]
-            for x in inputs:
-                if len(combos) == 1:
-                    yield mp.apply_async(fn, kwds={arg: x})
-                else:
-                    sub_fn = functools.partial(fn, **{arg: x})
-                    yield tuple(submit_jobs(sub_fn, combos[1:]))
+            # Submit jobs in parallel and in nested structure
+            def submit_jobs(fn, combos):
+                arg, inputs = combos[0]
+                for x in inputs:
+                    if len(combos) == 1:
+                        yield pool.submit(fn, **{arg: x})
+                    else:
+                        sub_fn = functools.partial(fn, **{arg: x})
+                        yield tuple(submit_jobs(sub_fn, combos[1:]))
 
-        # Run through nested structure retrieving results
-        def get_results(futs, _l=0, _pl=0):
-            len1 = (len(futs) == 1)
-            for fut in progbar(futs, disable=(_pl >= progbars or len1),
-                               desc=fn_args[_l], **progbar_opts):
-                if _l == len(fn_args) - 1:
-                    y = fut.get()
-                    yield y if split else (y,)
-                else:
-                    _npl = _pl if len1 else _pl+1
-                    yield tuple(zip(*get_results(fut, _l + 1, _npl)))
+            # Run through nested structure retrieving results
+            def get_results(futs, _l=0, _pl=0):
+                len1 = (len(futs) == 1)
+                for fut in progbar(futs, disable=(_pl >= progbars or len1),
+                                   desc=fn_args[_l], **progbar_opts):
+                    if _l == len(fn_args) - 1:
+                        y = fut.result()
+                        yield y if split else (y,)
+                    else:
+                        _npl = _pl if len1 else _pl+1
+                        yield tuple(zip(*get_results(fut, _l + 1, _npl)))
 
-        futures = tuple(submit_jobs(fn, combos))
-        results = tuple(zip(*get_results(futures)))
+            futures = tuple(submit_jobs(fn, combos))
+            results = tuple(zip(*get_results(futures)))
 
     # Evaluate combos sequentially
     else:
@@ -188,7 +165,7 @@ def combos_to_ds(results, combos, var_names, var_dims=None, var_coords=None,
     -------
         ds: xarray Dataset with appropriate coordinates.
     """
-    combos = parse_combos(combos)
+    combos = _parse_combos(combos)
     fn_args, _ = zip(*combos)
 
     # Work out if multiple variables are expected as output
@@ -254,8 +231,14 @@ def combo_runner_to_ds(fn, combos, var_names, var_dims=None, var_coords=None,
 # CASE_RUNNER functions: for evaluating specific configurations of args       #
 # --------------------------------------------------------------------------- #
 
-def case_runner(fn, fn_args, cases, constants=None, split=False,
-                progbars=0, parallel=False, processes=None, progbar_opts=None):
+def case_runner(fn, fn_args, cases,
+                constants=None,
+                split=False,
+                progbars=0,
+                parallel=False,
+                processes=None,
+                parallel_backend='MULTIPROCESSING',
+                progbar_opts=None):
     """ Evaluate a function in many different configurations, optionally in
     parallel and or with live progress.
 
@@ -290,11 +273,11 @@ def case_runner(fn, fn_args, cases, constants=None, split=False,
 
     # Evaluate configurations in parallel
     if parallel or (processes is not None and processes > 1):
-        mp = multiprocessing.Pool(processes=processes)
-        fut = tuple(mp.apply_async(fn, kwds=dict(zip(fn_args, c)))
-                    for c in cases)
-        results = tuple(x.get() for x in progbar(fut, total=len(cases),
-                                                 disable=progbars < 1))
+        with Pool(n=processes, backend=parallel_backend) as pool:
+            fut = tuple(pool.submit(fn, **dict(zip(fn_args, c)))
+                        for c in cases)
+            results = tuple(x.result() for x in progbar(fut, total=len(cases),
+                                                        disable=progbars < 1))
 
     # Evaluate configurations sequentially
     else:
