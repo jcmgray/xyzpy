@@ -1,7 +1,8 @@
 """Generate datasets from function and parameter lists
 """
+# XXX: fix h5netcdf attributes recursion error
 
-# TODO: 'resources', big arguments, not to store anywhere. ------------------ #
+# TODO: 'resources', big arguments, not to store anywhere. cache? ----------- #
 # TODO: allow combo_runner_to_ds to use output vars as coords --------------- #
 # TODO: automatically count the number of progbars (i.e. no. of len > 1 coos) #
 # TODO: combos add to existing dataset. ------------------------------------- #
