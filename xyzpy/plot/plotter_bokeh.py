@@ -4,7 +4,7 @@ from .core import _prepare_data_and_styles, _process_plot_range
 
 
 @functools.lru_cache(1)
-def init_bokeh_nb():
+def _init_bokeh_nb():
     """Cache this so it doesn't happen over and over again.
     """
     from bokeh.plotting import output_notebook
@@ -14,7 +14,7 @@ def init_bokeh_nb():
 def bshow(figs, nb=True, **kwargs):
     from bokeh.plotting import show
     if nb:
-        init_bokeh_nb()
+        _init_bokeh_nb()
         show(figs)
     else:
         show(figs)

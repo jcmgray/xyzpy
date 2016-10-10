@@ -290,7 +290,7 @@ def ihist(xs, nb=True, go_dict={}, ly_dict={}, return_fig=False,
     ishow(fig, nb=nb, **kwargs)
 
 
-def plot_matrix(a, colormap="Greys", nb=True, return_fig=False, **kwargs):
+def visualize_matrix(a, colormap="Greys", nb=True, return_fig=False, **kwargs):
     from plotly.graph_objs import Heatmap
     traces = [Heatmap({"z": -abs(a),
                        "colorscale": colormap,

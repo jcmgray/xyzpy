@@ -12,7 +12,7 @@ if [ ! -d "$HOME/conda/bin" ]; then
   conda config --append channels conda-config
   conda update -q conda
   conda info -a
-  conda create -q -n test-environment python=$TRAVIS_PYTHON_VERSION numpy scipy xarray matplotlib h5py coverage pytest pytest-cov distributed tqdm plotly h5netcdf
+  conda create -q -n test-environment python=$TRAVIS_PYTHON_VERSION numpy xarray matplotlib h5py coverage pytest pytest-cov distributed tqdm plotly h5netcdf
   source activate test-environment
   pip install coveralls codeclimate-test-reporter
 else
