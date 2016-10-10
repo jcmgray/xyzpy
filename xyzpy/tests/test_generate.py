@@ -233,7 +233,7 @@ class TestComboRunnerToDS:
                                 var_coords={'sugar': [*range(10, 20)]})
         assert ds.ripe.data.dtype == bool
         assert ds.sel(a=2, b=30, sugar=14)['bananas'].data == 32.4
-        with raises(ValueError):
+        with raises((KeyError, ValueError)):
             ds['ripe'].sel(sugar=12)
 
     def test_single_string_var_names_with_no_var_dims(self):

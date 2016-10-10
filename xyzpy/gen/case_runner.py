@@ -86,9 +86,10 @@ def case_runner(fn, fn_args, cases,
     return tuple(zip(*results)) if split else results
 
 
-def minimal_covering_coords(cases):
-    """ Take a list of cases and find the minimal covering set of coordinates
-    with which to index all cases. Sort the coords if possible. """
+def find_union_coords(cases):
+    """Take a list of cases and find the union of coordinates
+    with which to index all cases. Sort the coords if possible.
+    """
     for x in zip(*cases):
         try:
             yield sorted(list(set(x)))
@@ -160,7 +161,7 @@ def cases_to_ds(results, fn_args, cases, var_names, var_dims=None,
                     itertools.repeat(tuple()))
 
         # Find minimal covering set of coordinates for fn_args
-        case_coords = dict(zip(fn_args, minimal_covering_coords(cases)))
+        case_coords = dict(zip(fn_args, find_union_coords(cases)))
 
         # Create new, 'all missing' dataset if required
         ds = all_missing_ds(coords={**case_coords, **dict(var_coords)},
@@ -187,8 +188,11 @@ def cases_to_ds(results, fn_args, cases, var_names, var_dims=None,
     return ds
 
 
-def case_runner_to_ds(fn, fn_args, cases, var_names, var_dims=None,
-                      var_coords=None, add_to_ds=None, overwrite=False,
+def case_runner_to_ds(fn, fn_args, cases, var_names,
+                      var_dims=None,
+                      var_coords=None,
+                      add_to_ds=None,
+                      overwrite=False,
                       **case_runner_settings):
     """ Combination of `case_runner` and `cases_to_ds`. Takes a function and
     list of argument configurations and produces a `xarray.Dataset`.
