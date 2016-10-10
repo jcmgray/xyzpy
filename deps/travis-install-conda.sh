@@ -9,17 +9,17 @@ if [ ! -d "$HOME/conda/bin" ]; then
   export PATH="$HOME/conda/bin:$PATH"
   hash -r
   conda config --set always_yes yes --set changeps1 no
-  conda config --append channels conda-config
+  conda config --append channels conda-forge
   conda update -q conda
   conda info -a
-  conda create -q -n test-environment python=$TRAVIS_PYTHON_VERSION numpy xarray matplotlib h5py coverage pytest pytest-cov distributed tqdm plotly h5netcdf
+  conda create -q -n test-environment python=$TRAVIS_PYTHON_VERSION numpy dask xarray matplotlib h5py coverage pytest pytest-cov distributed tqdm plotly h5netcdf
   source activate test-environment
   pip install coveralls codeclimate-test-reporter
 else
   export PATH="$HOME/conda/bin:$PATH"
   hash -r
   conda config --set always_yes yes --set changeps1 no
-  conda config --append channels conda-config
+  conda config --append channels conda-forge
   conda update -q conda
   source activate test-environment
   conda update -q --all
