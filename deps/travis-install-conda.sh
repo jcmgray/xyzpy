@@ -13,7 +13,7 @@ if [ ! -d "$HOME/conda/bin" ]; then
   conda config --set always_yes yes --set changeps1 no
   conda update -q conda
   conda info -a
-  conda env create --file $DIR/requirements-py53.yml
+  conda env create --file $DIR/requirements-py35.yml
   source activate test-environment
 else
   export PATH="$HOME/conda/bin:$PATH"
