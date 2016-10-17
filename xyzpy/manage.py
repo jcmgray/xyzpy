@@ -138,7 +138,7 @@ def aggregate(*datasets, overwrite=False, accept_newer=False):
 def xrsmoosh(*objs, overwrite=False, accept_newer=False):
     try:
         return xr.merge(objs, compat='no_conflicts')
-    except xr.MergeError:
+    except (ValueError, xr.MergeError):
         return aggregate(*objs, overwrite=overwrite, accept_newer=accept_newer)
 
 
