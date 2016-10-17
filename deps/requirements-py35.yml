@@ -1,0 +1,23 @@
+name: test-environment
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - python=3.5
+  - numpy
+  - xarray
+  - dask
+  - distributed
+  - joblib >=0.10.2
+  - netcdf4
+  - h5py
+  - h5netcdf
+  - pytest
+  - pytest-cov
+  - tqdm
+  - matplotlib
+  - plotly
+  - coverage
+  - pip:
+    - coveralls
+    - codeclimate-test-reporter

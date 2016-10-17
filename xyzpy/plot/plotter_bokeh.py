@@ -4,7 +4,7 @@ from .core import _prepare_data_and_styles, _process_plot_range
 
 
 @functools.lru_cache(1)
-def init_bokeh_nb():
+def _init_bokeh_nb():
     """Cache this so it doesn't happen over and over again.
     """
     from bokeh.plotting import output_notebook
@@ -14,7 +14,7 @@ def init_bokeh_nb():
 def bshow(figs, nb=True, **kwargs):
     from bokeh.plotting import show
     if nb:
-        init_bokeh_nb()
+        _init_bokeh_nb()
         show(figs)
     else:
         show(figs)
@@ -71,8 +71,12 @@ def blineplot(ds, y_coo, x_coo, z_coo=None,
               **kwargs):
     """Interactively plot a dataset using bokeh.
     """
+    # TODO: toggle legend
+    # TODO: automatic plot range, and padding
+    # TODO: hover z_coo info
+
     from bokeh.plotting import figure
-    from bokeh.models import Span
+    from bokeh.models import Span, HoverTool
 
     # Prepare data and labels etc ------------------------------------------- #
     xlims, ylims = _process_plot_range(xlims, ylims, ds, x_coo, y_coo, padding)
@@ -114,7 +118,13 @@ def blineplot(ds, y_coo, x_coo, z_coo=None,
 
         p.line(x, y, legend=zlabel, color=col, line_width=1.3)
         if markers:
-            p.circle(x, y, legend=zlabel, color=col)
+            p.circle(x, y, legend=zlabel, color=col, name=zlabel)
+
+    p.add_tools(HoverTool(
+        tooltips=[
+            ("(" + x_coo + ", " + y_coo + ")", "($x, $y)"),
+            (z_coo, "@" + z_coo),
+        ]))
 
     if return_fig:
         return p

@@ -6,11 +6,12 @@ import numpy as np
 from numpy.testing import assert_allclose
 import xarray as xr
 
-from ..generate import (
-    progbar,
+from ..gen.combo_runner import (
     combo_runner,
     combos_to_ds,
     combo_runner_to_ds,
+)
+from ..gen.case_runner import (
     case_runner,
     cases_to_ds,
     case_runner_to_ds,
@@ -19,7 +20,7 @@ from ..generate import (
 )
 
 
-_PARALLEL_BACKENDS = ['MULTIPROCESSING', 'DISTRIBUTED']
+_GET_MODES = ['THREADED', 'MULTIPROCESS', 'DISTRIBUTED']
 
 
 def foo3_scalar(a, b, c):
@@ -84,16 +85,6 @@ def foo_array_input(a, t):
 # COMBO_RUNNER tests                                                          #
 # --------------------------------------------------------------------------- #
 
-class TestProgbar:
-    def test_normal(self):
-        for i in progbar(range(10)):
-            pass
-
-    def test_overide_ascii(self):
-        for i in progbar(range(10), ascii=False):
-            pass
-
-
 class TestComboRunner:
     def test_simple(self):
         combos = [('a', [1, 2]),
@@ -109,7 +100,7 @@ class TestComboRunner:
         combos = [('a', [1, 2]),
                   ('b', [10, 20, 30]),
                   ('c', [100, 200, 300, 400])]
-        combo_runner(foo3_scalar, combos, progbars=3)
+        combo_runner(foo3_scalar, combos, hide_progbar=False)
 
     def test_dict(self):
         combos = OrderedDict((('a', [1, 2]),
@@ -145,42 +136,48 @@ class TestComboRunner:
         assert_allclose(x, xn)
         assert_allclose(y, yn)
 
-    @mark.parametrize('parallel_backend', _PARALLEL_BACKENDS)
-    def test_parallel_basic(self, parallel_backend):
+    @mark.parametrize('scheduler', _GET_MODES)
+    def test_parallel_basic(self, scheduler):
         combos = (('a', [1, 2]),
                   ('b', [10, 20, 30]),
                   ('c', [100, 200, 300, 400]))
-        x = combo_runner(foo3_scalar, combos, processes=2,
-                         parallel_backend=parallel_backend)
+        x = combo_runner(foo3_scalar, combos, num_workers=2,
+                         scheduler=scheduler)
         xn = (np.array([1, 2]).reshape((2, 1, 1)) +
               np.array([10, 20, 30]).reshape((1, 3, 1)) +
               np.array([100, 200, 300, 400]).reshape((1, 1, 4)))
         assert_allclose(x, xn)
 
-    @mark.parametrize('parallel_backend', _PARALLEL_BACKENDS)
-    def test_parallel_multires(self, parallel_backend):
+    @mark.parametrize('scheduler', _GET_MODES)
+    def test_parallel_multires(self, scheduler):
         combos = (('a', [1, 2]),
                   ('b', [10, 20, 30]),
                   ('c', [100, 200, 300, 400]))
-        x = combo_runner(foo3_float_bool, combos, processes=2, split=True,
-                         parallel_backend=parallel_backend)
+        x = combo_runner(foo3_float_bool, combos, num_workers=2, split=True,
+                         scheduler=scheduler)
         xn = (np.array([1, 2]).reshape((2, 1, 1)) +
               np.array([10, 20, 30]).reshape((1, 3, 1)) +
               np.array([100, 200, 300, 400]).reshape((1, 1, 4)))
         assert_allclose(x[0], xn)
         assert np.all(np.asarray(x[1])[1, ...])
 
-    @mark.parametrize('parallel_backend', _PARALLEL_BACKENDS)
-    def test_parallel_dict(self, parallel_backend):
+    @mark.parametrize('scheduler', _GET_MODES)
+    def test_parallel_dict(self, scheduler):
         combos = OrderedDict((('a', [1, 2]),
                              ('b', [10, 20, 30]),
                              ('c', [100, 200, 300, 400])))
-        x = [*combo_runner(foo3_scalar, combos, processes=2,
-                           parallel_backend=parallel_backend)]
+        x = [*combo_runner(foo3_scalar, combos, num_workers=2,
+                           scheduler=scheduler)]
         xn = (np.array([1, 2]).reshape((2, 1, 1)) +
               np.array([10, 20, 30]).reshape((1, 3, 1)) +
               np.array([100, 200, 300, 400]).reshape((1, 1, 4)))
         assert_allclose(x, xn)
+
+    def test_invalid_scheduler_raises(self):
+        combos = OrderedDict((('a', [1, 2]),
+                              ('b', [10, 20, 30])))
+        with raises(ValueError):
+            combo_runner(foo3_scalar, combos, num_workers=2, scheduler='z')
 
 
 class TestCombosToDS:
@@ -242,7 +239,7 @@ class TestComboRunnerToDS:
                                 var_coords={'sugar': [*range(10, 20)]})
         assert ds.ripe.data.dtype == bool
         assert ds.sel(a=2, b=30, sugar=14)['bananas'].data == 32.4
-        with raises(KeyError):
+        with raises((KeyError, ValueError)):
             ds['ripe'].sel(sugar=12)
 
     def test_single_string_var_names_with_no_var_dims(self):
@@ -326,7 +323,8 @@ class TestCaseRunner:
         cases = ((1, 10, 100),
                  (2, 20, 200),
                  (3, 30, 300))
-        xs = case_runner(foo3_scalar, ('a', 'b', 'c'), cases, progbars=1)
+        xs = case_runner(foo3_scalar, ('a', 'b', 'c'), cases,
+                         hide_progbar=False)
         assert xs == (111, 222, 333)
 
     def test_constants(self):
@@ -337,13 +335,13 @@ class TestCaseRunner:
                          constants={'b': 10, 'c': 100})
         assert xs == (111, 112, 113)
 
-    @mark.parametrize("parallel_backend", _PARALLEL_BACKENDS)
-    def test_parallel(self, parallel_backend):
+    @mark.parametrize("scheduler", _GET_MODES)
+    def test_parallel(self, scheduler):
         cases = ((1, 10, 100),
                  (2, 20, 200),
                  (3, 30, 300))
-        xs = case_runner(foo3_scalar, ('a', 'b', 'c'), cases, processes=2,
-                         parallel_backend=parallel_backend)
+        xs = case_runner(foo3_scalar, ('a', 'b', 'c'), cases, num_workers=2,
+                         scheduler=scheduler)
         assert xs == (111, 222, 333)
 
     def test_split(self):

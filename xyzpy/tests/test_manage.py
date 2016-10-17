@@ -1,24 +1,28 @@
-from pytest import fixture, raises
+import os
+import tempfile
+
+from pytest import fixture, raises, mark
 import numpy as np
 import xarray as xr
 
 from ..manage import (
-    aggregate,
-    # xrload,
-    # xrsave,
+    xrsmoosh,
+    xrload,
+    xrsave,
 )
 
 
 @fixture
 def ds1():
     return xr.Dataset(
-            coords={
-                'b': ['l1', 'l2', 'l4'],
-                'a': [1, 2, 3, 4]},
-            data_vars={
-                'x': (('b', 'a'),
-                      np.random.randn(3, 4) + 1.0j * np.random.randn(3, 4)),
-                'isodd': ('a', np.asarray([True, False, True, False]))})
+        coords={
+            'b': ['l1', 'l2', 'l4'],
+            'a': [1, 2, 3, 4]},
+        data_vars={
+            'x': (('b', 'a'),
+                  np.random.randn(3, 4) + 1.0j * np.random.randn(3, 4)),
+            'isodd': ('a', np.asarray([True, False, True, False]))},
+        attrs={'foo': 'bar'})
 
 
 @fixture
@@ -30,7 +34,8 @@ def ds2():
         data_vars={
             'x': (('b', 'a'),
                   np.random.randn(2, 3) + 1.0j * np.random.randn(2, 3)),
-            'isodd': ('a', np.asarray([True, False, True]))})
+            'isodd': ('a', np.asarray([True, False, True]))},
+        attrs={'bar': 'baz'})
 
 
 @fixture
@@ -41,38 +46,25 @@ def ds3():
             'a': [4]},
         data_vars={
             'x': (('b', 'a'), [[123. + 456.0j]]),
-            'isodd': ('a', np.asarray([True]))})
+            'isodd': ('a', np.asarray([True]))},
+        attrs={'baz': 'qux'})
 
 
-class TestNonnullCompatible:
-    def test_compatible_no_coo_overlap(self):
-        # TODO ************************************************************** #
-        pass
-
-    def test_compatible_coo_overlap(self):
-        # TODO ************************************************************** #
-        pass
-
-    def test_not_compatible(self):
-        # TODO ************************************************************** #
-        pass
-
-    def test_different_data_vars(self):
-        # TODO ************************************************************** #
-        pass
-
-    def test_overlapping_but_with_equal_values(self):
-        # TODO ************************************************************** #
-        pass
-
-    def test_overlapping_but_with_equal_values_float(self):
-        # TODO ************************************************************** #
-        pass
+@fixture
+def ds_real():
+    return xr.Dataset(
+        coords={
+            'b': ['l3', 'l5'],
+            'a': [3, 4, 5]},
+        data_vars={
+            'x': (('b', 'a'), np.random.randn(2, 3)),
+            'isodd': ('a', np.asarray([True, False, True]))},
+        attrs={'qux': 'corge'})
 
 
 class TestAggregate:
     def test_simple(self, ds1, ds2):
-        fds = aggregate(ds1, ds2)
+        fds = xrsmoosh(ds1, ds2)
         assert fds['x'].dtype == complex
         assert fds['x'].dtype == complex
         assert (fds.loc[{'a': 3, 'b': "l2"}]['x'].data ==
@@ -84,7 +76,7 @@ class TestAggregate:
 
     def test_no_overwrite(self, ds2, ds3):
         with raises(ValueError):
-            aggregate(ds2, ds3)
+            xrsmoosh(ds2, ds3)
 
     def test_overwrite(self):
         # TODO ************************************************************** #
@@ -104,9 +96,25 @@ class TestAggregate:
 
 
 class TestSaveAndLoad:
-    def test_simple(self, ds1, tmpdir):
-        # TODO ************************************************************** #
-        pass
-        # xrsave(ds1, "test.h5")
-        # dsl = xrload("test.h5")
-        # assert ds1.equals(dsl)
+    @mark.parametrize(("engine_save, engine_load"),
+                      [('h5netcdf', 'h5netcdf'),
+                       ('h5netcdf', 'netcdf4'),
+                       mark.xfail(('netcdf4', 'h5netcdf')),
+                       ('netcdf4', 'netcdf4')])
+    def test_oi_only_real(self, ds_real, engine_save, engine_load):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            xrsave(ds_real, os.path.join(tmpdir, "test.h5"),
+                   engine=engine_save)
+            ds2 = xrload(os.path.join(tmpdir, "test.h5"), engine=engine_load)
+            assert ds_real.identical(ds2)
+
+    @mark.parametrize(("engine_save, engine_load"),
+                      [('h5netcdf', 'h5netcdf'),
+                       mark.xfail(('h5netcdf', 'netcdf4')),
+                       mark.xfail(('netcdf4', 'h5netcdf')),
+                       mark.xfail(('netcdf4', 'netcdf4'))])
+    def test_io_complex_data(self, ds1, engine_save, engine_load):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            xrsave(ds1, os.path.join(tmpdir, "test.h5"), engine=engine_save)
+            ds2 = xrload(os.path.join(tmpdir, "test.h5"), engine=engine_load)
+            assert ds1.identical(ds2)
