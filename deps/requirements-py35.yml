@@ -8,7 +8,7 @@ dependencies:
   - xarray
   - dask
   - distributed
-  - joblib=>0.10.2
+  - joblib >=0.10.2
   - netcdf4
   - h5py
   - h5netcdf
