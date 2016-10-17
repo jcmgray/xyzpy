@@ -20,7 +20,7 @@ from ..gen.case_runner import (
 )
 
 
-_PARALLEL_BACKENDS = ['THREADED', 'MULTIPROCESSING', 'DISTRIBUTED']
+_GET_MODES = ['THREADED', 'MULTIPROCESS', 'DISTRIBUTED']
 
 
 def foo3_scalar(a, b, c):
@@ -136,42 +136,48 @@ class TestComboRunner:
         assert_allclose(x, xn)
         assert_allclose(y, yn)
 
-    @mark.parametrize('parallel_backend', _PARALLEL_BACKENDS)
-    def test_parallel_basic(self, parallel_backend):
+    @mark.parametrize('scheduler', _GET_MODES)
+    def test_parallel_basic(self, scheduler):
         combos = (('a', [1, 2]),
                   ('b', [10, 20, 30]),
                   ('c', [100, 200, 300, 400]))
         x = combo_runner(foo3_scalar, combos, num_workers=2,
-                         parallel_backend=parallel_backend)
+                         scheduler=scheduler)
         xn = (np.array([1, 2]).reshape((2, 1, 1)) +
               np.array([10, 20, 30]).reshape((1, 3, 1)) +
               np.array([100, 200, 300, 400]).reshape((1, 1, 4)))
         assert_allclose(x, xn)
 
-    @mark.parametrize('parallel_backend', _PARALLEL_BACKENDS)
-    def test_parallel_multires(self, parallel_backend):
+    @mark.parametrize('scheduler', _GET_MODES)
+    def test_parallel_multires(self, scheduler):
         combos = (('a', [1, 2]),
                   ('b', [10, 20, 30]),
                   ('c', [100, 200, 300, 400]))
         x = combo_runner(foo3_float_bool, combos, num_workers=2, split=True,
-                         parallel_backend=parallel_backend)
+                         scheduler=scheduler)
         xn = (np.array([1, 2]).reshape((2, 1, 1)) +
               np.array([10, 20, 30]).reshape((1, 3, 1)) +
               np.array([100, 200, 300, 400]).reshape((1, 1, 4)))
         assert_allclose(x[0], xn)
         assert np.all(np.asarray(x[1])[1, ...])
 
-    @mark.parametrize('parallel_backend', _PARALLEL_BACKENDS)
-    def test_parallel_dict(self, parallel_backend):
+    @mark.parametrize('scheduler', _GET_MODES)
+    def test_parallel_dict(self, scheduler):
         combos = OrderedDict((('a', [1, 2]),
                              ('b', [10, 20, 30]),
                              ('c', [100, 200, 300, 400])))
         x = [*combo_runner(foo3_scalar, combos, num_workers=2,
-                           parallel_backend=parallel_backend)]
+                           scheduler=scheduler)]
         xn = (np.array([1, 2]).reshape((2, 1, 1)) +
               np.array([10, 20, 30]).reshape((1, 3, 1)) +
               np.array([100, 200, 300, 400]).reshape((1, 1, 4)))
         assert_allclose(x, xn)
+
+    def test_invalid_scheduler_raises(self):
+        combos = OrderedDict((('a', [1, 2]),
+                              ('b', [10, 20, 30])))
+        with raises(ValueError):
+            combo_runner(foo3_scalar, combos, num_workers=2, scheduler='z')
 
 
 class TestCombosToDS:
@@ -329,13 +335,13 @@ class TestCaseRunner:
                          constants={'b': 10, 'c': 100})
         assert xs == (111, 112, 113)
 
-    @mark.parametrize("parallel_backend", _PARALLEL_BACKENDS)
-    def test_parallel(self, parallel_backend):
+    @mark.parametrize("scheduler", _GET_MODES)
+    def test_parallel(self, scheduler):
         cases = ((1, 10, 100),
                  (2, 20, 200),
                  (3, 30, 300))
         xs = case_runner(foo3_scalar, ('a', 'b', 'c'), cases, num_workers=2,
-                         parallel_backend=parallel_backend)
+                         scheduler=scheduler)
         assert xs == (111, 222, 333)
 
     def test_split(self):

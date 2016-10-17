@@ -7,7 +7,7 @@ import xarray as xr
 from dask.delayed import delayed, compute
 
 from ..parallel import DaskTqdmProgbar, _dask_get
-from ..utils import _parse_fn_name, progbar
+from ..utils import _get_fn_name, progbar
 
 
 def case_runner(fn, fn_args, cases,
@@ -15,7 +15,7 @@ def case_runner(fn, fn_args, cases,
                 split=False,
                 parallel=False,
                 num_workers=None,
-                parallel_backend='MULTIPROCESSING',
+                scheduler='t',
                 hide_progbar=False,
                 progbar_opts=None):
     """ Evaluate a function in many different configurations, optionally in
@@ -25,31 +25,22 @@ def case_runner(fn, fn_args, cases,
     ----------
         fn:
             function with which to evalute cases with
-
         fn_args:
             names of case arguments that fn takes
-
         cases:
             list settings that fn_args take
-
         constants:
             constant fn args that won't be iterated over
-
         split:
             whether to split fn's output into multiple lists
-
         progbars:
             whether to show (in this case only 1) progbar
-
         parallel:
             whether to evaluate cases in parallel
-
         processes:
             how any processes to use for parallel processing
-
         progbar_opts:
             options to send to progbar
-
 
     Returns
     -------
@@ -58,7 +49,7 @@ def case_runner(fn, fn_args, cases,
 
     # Prepare Function
     constants = dict() if constants is None else dict(constants)
-    fn_name = _parse_fn_name(fn)
+    fn_name = _get_fn_name(fn)
 
     # Prepate fn_args and values
     if isinstance(fn_args, str):
@@ -73,9 +64,9 @@ def case_runner(fn, fn_args, cases,
         with DaskTqdmProgbar(fn_name, disable=hide_progbar, **progbar_opts):
             jobs = [delayed(fn)(**constants, **dict(zip(fn_args, case)))
                     for case in cases]
-            getter = (_dask_get(parallel_backend, num_workers=num_workers) if
-                      parallel_backend is not None else None)
-            results = compute(*jobs, get=getter, num_workers=num_workers)
+            if scheduler and isinstance(scheduler, str):
+                scheduler = _dask_get(scheduler, num_workers=num_workers)
+            results = compute(*jobs, get=scheduler, num_workers=num_workers)
 
     # Evaluate configurations sequentially
     else:

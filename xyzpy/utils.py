@@ -2,6 +2,7 @@
 """
 import functools
 import operator
+import inspect
 
 import tqdm
 
@@ -43,7 +44,7 @@ def unzip(its, zip_level=1):
     return zip(*_unzipper(its, zip_level)) if zip_level else its
 
 
-def _parse_fn_name(fn):
+def _get_fn_name(fn):
     """Try to inspect a function's name, taking into account several common
     non-standard types of function: dask, functools.partial ...
     """
@@ -54,6 +55,13 @@ def _parse_fn_name(fn):
             return fn.key.partition('-')[0]
         except AttributeError:
             return fn.func.__name__
+
+
+def _get_fn_args(fn):
+    """Try to inspect a function's arguments.
+    """
+    sig = inspect.signature(fn)
+    return tuple(sig.parameters)
 
 
 def progbar(it=None, nb=False, **kwargs):

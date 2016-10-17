@@ -78,17 +78,17 @@ def _distributed_client(n=None):
     return client
 
 
-def _dask_get(backend, num_workers=None):
+def _dask_get(get_mode, num_workers=None):
     """
     """
-    if backend.upper() == 'THREADED':
+    if get_mode.upper() in {'T', 'THREADED'}:
         from dask.threaded import get
         return get
-    elif backend.upper() in {'MP', 'MULTIPROCESSING'}:
-        from dask.threaded import get
+    elif get_mode.upper() in {'M', 'MULTIPROCESS'}:
+        from dask.multiprocessing import get
         return get
-    elif backend.upper() in {'DASK', 'DISTRIBUTED'}:
+    elif get_mode.upper() in {'D', 'DISTRIBUTED'}:
         client = _distributed_client(num_workers)
         return client.get
     else:
-        raise ValueError("\'" + backend + " \' is not a valid backend.")
+        raise ValueError("\'" + get_mode + " \' is not a valid scheduler.")

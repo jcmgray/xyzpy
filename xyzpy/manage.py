@@ -10,10 +10,16 @@ import xarray.ufuncs as xrufuncs
 _DEFAULT_FN_CACHE_PATH = '__xyz_cache__'
 
 
-def cache_to_disk(foo, folder=_DEFAULT_FN_CACHE_PATH):
+def cache_to_disk(fn=None, *, cachedir=_DEFAULT_FN_CACHE_PATH, **kwargs):
     import joblib
-    mem = joblib.Memory(folder)
-    return mem.cache(foo)
+    mem = joblib.Memory(cachedir=cachedir, verbose=0, **kwargs)
+
+    if fn:  # bare decorator
+        return mem.cache(fn)
+    else:  # called with kwargs
+        def cache_to_disk_decorator(fn):
+            return mem.cache(fn)
+        return cache_to_disk_decorator
 
 
 def _auto_add_extension(file_name, engine):
@@ -62,7 +68,7 @@ def xrload(file_name, engine="h5netcdf", load_to_mem=True, create_new=False):
         try:
             ds = xr.open_dataset(file_name, engine=engine)
         except AttributeError as e1:
-            if "object has no attribute" in str(e1):
+            if "object has no attribute" in str(e1) and engine == 'h5netcdf':
                 ds = xr.open_dataset(file_name, engine="netcdf4")
             else:
                 raise e1
@@ -129,7 +135,11 @@ def aggregate(*datasets, overwrite=False, accept_newer=False):
     return ds1
 
 
-xrsmoosh = aggregate
+def xrsmoosh(*objs, overwrite=False, accept_newer=False):
+    try:
+        return xr.merge(objs, compat='no_conflicts')
+    except xr.MergeError:
+        return aggregate(*objs, overwrite=overwrite, accept_newer=accept_newer)
 
 
 def auto_xyz_ds(x, y_z):
