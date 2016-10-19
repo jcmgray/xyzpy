@@ -87,7 +87,7 @@ def ilineplot(ds, y_coo, x_coo, z_coo=None,
     # TODO: list of colors, send to calc_colors
     # TODO: mouse scroll zoom
 
-    from plotly.graph_objs import Scatter
+    from plotly.graph_objs import Scatter, Margin
 
     z_vals, cols, zlabels, gen_xy = _prepare_data_and_styles(
         ds=ds, y_coo=y_coo, x_coo=x_coo, z_coo=z_coo, zlabels=zlabels,
@@ -154,8 +154,9 @@ def ilineplot(ds, y_coo, x_coo, z_coo=None,
         'titlefont': {
             'size': fontsize_title,
         },
-        'width': figsize[0] * 100,
+        'width': figsize[0] * 100 + 100,
         'height': figsize[1] * 100,
+        'margin': Margin(autoexpand=True, l=60, r=80, b=50, t=30, pad=0),
         'xaxis': {
             'showline': True,
             'showgrid': gridlines,

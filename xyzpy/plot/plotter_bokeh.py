@@ -72,14 +72,32 @@ def blineplot(ds, y_coo, x_coo, z_coo=None,
     """Interactively plot a dataset using bokeh.
     """
     # TODO: toggle legend
-    # TODO: automatic plot range, and padding
     # TODO: hover z_coo info
 
-    from bokeh.plotting import figure
-    from bokeh.models import Span, HoverTool
+    from bokeh.plotting import figure, ColumnDataSource
+    from bokeh.models import Span, HoverTool, Legend, DataRange1d
 
     # Prepare data and labels etc ------------------------------------------- #
     xlims, ylims = _process_plot_range(xlims, ylims, ds, x_coo, y_coo, padding)
+
+    # x-axis plot range details
+    plt_x_min, plt_x_max = ds[x_coo].min().data, ds[x_coo].max().data
+    plt_x_centre = (plt_x_max + plt_x_min) / 2
+    plt_x_range = abs(plt_x_max - plt_x_min)
+    xbounds = (plt_x_centre - plt_x_range, plt_x_centre + plt_x_range)
+    xlims = (DataRange1d(start=xlims[0],
+                         end=xlims[1],
+                         bounds=xbounds) if xlims else
+             DataRange1d(bounds=xbounds))
+    # y-axis plot range details
+    plt_y_min, plt_y_max = ds[y_coo].min().data, ds[y_coo].max().data
+    plt_y_centre = (plt_y_max + plt_y_min) / 2
+    plt_y_range = abs(plt_y_max - plt_y_min)
+    ybounds = (plt_y_centre - plt_y_range, plt_y_centre + plt_y_range)
+    ylims = (DataRange1d(start=ylims[0],
+                         end=ylims[1],
+                         bounds=ybounds) if ylims else
+             DataRange1d(bounds=ybounds))
 
     z_vals, cols, zlabels, gen_xy = _prepare_data_and_styles(
         ds=ds, y_coo=y_coo, x_coo=x_coo, z_coo=z_coo, zlabels=zlabels,
@@ -87,7 +105,7 @@ def blineplot(ds, y_coo, x_coo, z_coo=None,
         colormap_reverse=colormap_reverse, engine='BOKEH')
 
     # Make figure and custom lines etc -------------------------------------- #
-    p = figure(width=int(figsize[0] * 100),
+    p = figure(width=int(figsize[0] * 100 + 100),
                height=int(figsize[1] * 100),
                x_axis_label=x_coo,
                y_axis_label=y_coo,
@@ -111,19 +129,29 @@ def blineplot(ds, y_coo, x_coo, z_coo=None,
                               line_color=(127, 127, 127), line_dash='dashed',
                               line_width=1))
 
+    legend_items = []
+
     # Plot lines and markers on figure -------------------------------------- #
     for x, y in gen_xy():
         col = next(cols)
         zlabel = next(zlabels)
 
-        p.line(x, y, legend=zlabel, color=col, line_width=1.3)
+        source = ColumnDataSource(data={'x': x, 'y': y,
+                                        'z_coo': [zlabel] * len(x)})
+
+        l = p.line('x', 'y', source=source, color=col, line_width=2)
         if markers:
-            p.circle(x, y, legend=zlabel, color=col, name=zlabel)
+            m = p.circle('x', 'y', source=source, color=col, name=zlabel)
+            legend_items.append((zlabel, [l, m]))
+        else:
+            legend_items.append((zlabel, [l]))
+
+    p.add_layout(Legend(items=legend_items, location=(0, 0)), 'right')
 
     p.add_tools(HoverTool(
         tooltips=[
             ("(" + x_coo + ", " + y_coo + ")", "($x, $y)"),
-            (z_coo, "@" + z_coo),
+            (z_coo, "@z_coo"),
         ]))
 
     if return_fig:
