@@ -8,6 +8,48 @@ from dask.delayed import delayed, compute
 
 from ..parallel import DaskTqdmProgbar, _dask_get
 from ..utils import _get_fn_name, progbar
+from .prepare import (
+    _parse_fn_args_and_cases,
+    _parse_case_results,
+    _parse_var_names,
+    _parse_var_dims,
+    _parse_var_coords,
+    _parse_constants,
+    _parse_resources,
+    _parse_progbar_opts,
+)
+
+
+# Core Case Runner ---------------------------------------------------------- #
+
+def _case_runner(fn, fn_args, cases,
+                 constants=None,
+                 split=False,
+                 parallel=False,
+                 num_workers=None,
+                 scheduler='t',
+                 hide_progbar=False,
+                 progbar_opts=None):
+    """Core case runner, i.e. without parsing of arguments.
+    """
+    fn_name = _get_fn_name(fn)
+
+    # Evaluate configurations in parallel
+    if parallel or num_workers:
+        with DaskTqdmProgbar(fn_name, disable=hide_progbar, **progbar_opts):
+            jobs = [delayed(fn)(**constants, **dict(zip(fn_args, case)))
+                    for case in cases]
+            if scheduler and isinstance(scheduler, str):
+                scheduler = _dask_get(scheduler, num_workers=num_workers)
+            results = compute(*jobs, get=scheduler, num_workers=num_workers)
+
+    # Evaluate configurations sequentially
+    else:
+        results = tuple(fn(**constants, **dict(zip(fn_args, case)))
+                        for case in progbar(cases, total=len(cases),
+                                            disable=hide_progbar))
+
+    return tuple(zip(*results)) if split else results
 
 
 def case_runner(fn, fn_args, cases,
@@ -46,36 +88,22 @@ def case_runner(fn, fn_args, cases,
     -------
         results: list of fn output for each case
     """
+    # Prepare fn_args and values
+    fn_args, cases = _parse_fn_args_and_cases(fn_args, cases)
+    constants = _parse_constants(constants)
+    progbar_opts = _parse_progbar_opts(progbar_opts)
 
-    # Prepare Function
-    constants = dict() if constants is None else dict(constants)
-    fn_name = _get_fn_name(fn)
+    return _case_runner(fn, fn_args, cases,
+                        constants=constants,
+                        split=split,
+                        parallel=parallel,
+                        num_workers=num_workers,
+                        scheduler=scheduler,
+                        hide_progbar=hide_progbar,
+                        progbar_opts=progbar_opts)
 
-    # Prepate fn_args and values
-    if isinstance(fn_args, str):
-        fn_args = (fn_args,)
-        cases = tuple((c,) for c in cases)
 
-    if progbar_opts is None:
-        progbar_opts = dict()
-
-    # Evaluate configurations in parallel
-    if parallel or num_workers:
-        with DaskTqdmProgbar(fn_name, disable=hide_progbar, **progbar_opts):
-            jobs = [delayed(fn)(**constants, **dict(zip(fn_args, case)))
-                    for case in cases]
-            if scheduler and isinstance(scheduler, str):
-                scheduler = _dask_get(scheduler, num_workers=num_workers)
-            results = compute(*jobs, get=scheduler, num_workers=num_workers)
-
-    # Evaluate configurations sequentially
-    else:
-        results = tuple(fn(**constants, **dict(zip(fn_args, case)))
-                        for case in progbar(cases, total=len(cases),
-                                            disable=hide_progbar))
-
-    return tuple(zip(*results)) if split else results
-
+# Utils --------------------------------------------------------------------- #
 
 def find_union_coords(cases):
     """Take a list of cases and find the union of coordinates
@@ -88,11 +116,23 @@ def find_union_coords(cases):
             yield list(set(x))
 
 
-def all_missing_ds(coords, var_names, var_dims, var_types):
-    """ Make a dataset whose data is all missing. """
+def all_missing_ds(coords, var_names, all_dims, var_types):
+    """Make a dataset whose data is all missing.
+
+    Parameters
+    ----------
+        coords : dict
+            coordinates of dataset
+        var_names : tuple
+            names of each variable in dataset
+        all_dims : tuple
+            corresponding list of dimensions for each variable
+        var_types : tuple
+            corresponding list of types for each variable
+    """
     # Blank dataset with appropirate coordinates
     ds = xr.Dataset(coords=coords)
-    for v_name, v_dims, v_type in zip(var_names, var_dims, var_types):
+    for v_name, v_dims, v_type in zip(var_names, all_dims, var_types):
         shape = tuple(ds[d].size for d in v_dims)
         if v_type == int or v_type == float:
             # Warn about upcasting int to float?
@@ -105,8 +145,11 @@ def all_missing_ds(coords, var_names, var_dims, var_types):
     return ds
 
 
-def cases_to_ds(results, fn_args, cases, var_names, var_dims=None,
-                var_coords=None, add_to_ds=None, overwrite=False):
+def _cases_to_ds(results, fn_args, cases, var_names,
+                 var_dims=None,
+                 var_coords=None,
+                 add_to_ds=None,
+                 overwrite=False):
     """ Take a list of results and configurations that generate them and turn it
     into a `xarray.Dataset`.
 
@@ -131,40 +174,21 @@ def cases_to_ds(results, fn_args, cases, var_names, var_dims=None,
         1. Many data types have to be converted to object in order for the
             missing values to be represented by NaNs.
     """
-    # Prepare fn_args/cases var_names/results
-    if isinstance(fn_args, str):
-        fn_args = (fn_args,)
-        cases = tuple((c,) for c in cases)
-
-    # Prepare var_names/dims/results
-    if isinstance(var_names, str):
-        var_names = (var_names,)
-        results = tuple((r,) for r in results)
-        if var_dims is not None:
-            var_dims = (var_dims,)
-
-    if var_coords is None:
-        var_coords = dict()
-
-    if add_to_ds is None:
-        # Allow single given dimensions to represent all result variables
-        var_dims = (itertools.cycle(var_dims) if var_dims is not None else
-                    itertools.repeat(tuple()))
-
+    if add_to_ds:
+        ds = add_to_ds
+    else:
         # Find minimal covering set of coordinates for fn_args
         case_coords = dict(zip(fn_args, find_union_coords(cases)))
 
         # Create new, 'all missing' dataset if required
-        ds = all_missing_ds(coords={**case_coords, **dict(var_coords)},
+        ds = all_missing_ds(coords={**case_coords, **var_coords},
                             var_names=var_names,
-                            var_dims=(tuple(fn_args) + tuple(next(var_dims))
-                                      for i in range(len(var_names))),
+                            all_dims=tuple(fn_args + var_dims[k]
+                                           for k in var_names),
                             var_types=(np.asarray(x).dtype
                                        for x in results[0]))
-    else:
-        ds = add_to_ds
 
-    #  go through cases, overwriting nan with results
+    # Go through cases, overwriting nan with results
     for res, cfg in zip(results, cases):
         for vname, x in zip(var_names, res):
             if not overwrite:
@@ -182,10 +206,12 @@ def cases_to_ds(results, fn_args, cases, var_names, var_dims=None,
 def case_runner_to_ds(fn, fn_args, cases, var_names,
                       var_dims=None,
                       var_coords=None,
+                      constants=None,
+                      resources=None,
                       add_to_ds=None,
                       overwrite=False,
                       **case_runner_settings):
-    """ Combination of `case_runner` and `cases_to_ds`. Takes a function and
+    """ Combination of `case_runner` and `_cases_to_ds`. Takes a function and
     list of argument configurations and produces a `xarray.Dataset`.
 
     Parameters
@@ -203,18 +229,28 @@ def case_runner_to_ds(fn, fn_args, cases, var_names,
         ds: dataset with minimal covering coordinates and all cases
             evaluated.
     """
-    if var_coords is None:
-        var_coords = dict()
+    fn_args, cases = _parse_fn_args_and_cases(fn_args, cases)
+    constants = _parse_constants(constants)
+    resources = _parse_resources(resources)
 
     # Generate results
-    results = case_runner(fn, fn_args, cases, **case_runner_settings)
+    results = case_runner(fn, fn_args, cases,
+                          constants={**constants, **resources},
+                          **case_runner_settings)
+
+    # Prepare var_names/dims/results
+    results = _parse_case_results(results, var_names)
+    var_names = _parse_var_names(var_names)
+    var_dims = _parse_var_dims(var_dims, var_names)
+    var_coords = _parse_var_coords(var_coords)
+
     # Convert to xarray.Dataset
-    ds = cases_to_ds(results, fn_args, cases,
-                     var_names=var_names,
-                     var_dims=var_dims,
-                     var_coords=var_coords,
-                     add_to_ds=add_to_ds,
-                     overwrite=overwrite)
+    ds = _cases_to_ds(results, fn_args, cases,
+                      var_names=var_names,
+                      var_dims=var_dims,
+                      var_coords=var_coords,
+                      add_to_ds=add_to_ds,
+                      overwrite=overwrite)
     return ds
 
 
@@ -222,30 +258,36 @@ def case_runner_to_ds(fn, fn_args, cases, var_names,
 # Update or add new values                                                    #
 # --------------------------------------------------------------------------- #
 
-def find_missing_cases(ds, var_dims=None):
-    """ Find all cases in a dataset with missing data.
+def find_missing_cases(ds, ignore_dims=None, show_progbar=False):
+    """Find all cases in a dataset with missing data.
 
     Parameters
     ----------
-        ds: Dataset in which to find missing data
-        var_dims: internal variable dimensions (i.e. to ignore)
+        ds : xarray.Dataset
+            Dataset in which to find missing data
+        ignore_dims : set (optional)
+            internal variable dimensions (i.e. to ignore)
+        show_progbar : bool (optional)
+            Show the current progress
 
     Returns
     -------
-        (m_fn_args, m_cases): function arguments and missing cases.
+        missing_fn_args, missing_cases :
+            Function arguments and missing cases.
     """
-    # Parse var_dims
-    var_dims = (() if var_dims is None else
-                (var_dims,) if isinstance(var_dims, str) else
-                var_dims)
+    # Parse ignore_dims
+    ignore_dims = (set() if ignore_dims is None else
+                   {ignore_dims} if isinstance(ignore_dims, str) else
+                   set(ignore_dims))
+
     # Find all configurations
-    fn_args = tuple(coo for coo in ds.coords if coo not in var_dims)
+    fn_args = tuple(coo for coo in ds.coords if coo not in ignore_dims)
     var_names = tuple(ds.data_vars)
     all_cases = itertools.product(*(ds[arg].data for arg in fn_args))
 
     # Only return those corresponding to all missing data
     def gen_missing_list():
-        for case in all_cases:
+        for case in progbar(all_cases, disable=not show_progbar):
             sub_ds = ds.loc[dict(zip(fn_args, case))]
             if all(sub_ds[v].isnull().all() for v in var_names):
                 yield case
@@ -253,31 +295,57 @@ def find_missing_cases(ds, var_dims=None):
     return fn_args, tuple(gen_missing_list())
 
 
-def fill_missing_cases(ds, fn, var_names, var_dims=None, var_coords=None,
+def fill_missing_cases(ds, fn, var_names,
+                       var_dims=None,
+                       var_coords=None,
+                       constants=None,
+                       resources=None,
                        **case_runner_settings):
     """ Take a dataset and function etc. and fill its missing data in
 
     Parameters
     ----------
-        ds: Dataset to analyse and fill
-        fn: function to use to fill missing cases
-        var_names: output variable names of function
-        var_dims: output varialbe named dimensions of function
-        var_coords: dictionary of coords for output dims
+        ds : xarray.Dataset
+            Dataset to analyse and fill
+        fn : callable
+            Function to use to fill missing cases
+        var_names : tuple
+            Output variable names of function
+        var_dims : dict
+            Output variabe named dimensions of function
+        var_coords : dict
+            Dictionary of coords for output dims
         **case_runner_settings: settings sent to `case_runner`
+
     Returns
     -------
-        None: (filling performed in-place)
+        xarray.Dataset
     """
-    if var_coords is None:
-        var_coords = dict()
+    var_names = _parse_var_names(var_names)
+    var_dims = _parse_var_dims(var_dims, var_names)
+    var_coords = _parse_var_coords(var_coords)
+    constants = _parse_constants(constants)
+    resources = _parse_resources(resources)
+
+    # Gather all internal dimensions
+    ignore_dims = set()
+    for d in var_dims.values():
+        ignore_dims |= set(d)
 
     # Find missing cases
-    fn_args, missing_cases = find_missing_cases(ds, var_dims)
-    # Evaluate and add to Dataset
-    case_runner_to_ds(fn, fn_args, missing_cases,
-                      var_names=var_names,
-                      var_dims=var_dims,
-                      var_coords=var_coords,
-                      add_to_ds=ds,
-                      **case_runner_settings)
+    fn_args, cases = find_missing_cases(ds, ignore_dims=ignore_dims)
+    fn_args, cases = _parse_fn_args_and_cases(fn_args, cases)
+
+    # Generate missing results
+    results = _case_runner(fn, fn_args, cases,
+                           constants={**constants, **resources},
+                           **case_runner_settings)
+
+    results = _parse_case_results(results, var_names)
+
+    # Add to dataset
+    return _cases_to_ds(results, fn_args, cases,
+                        var_names=var_names,
+                        var_dims=var_dims,
+                        var_coords=var_coords,
+                        add_to_ds=ds)
