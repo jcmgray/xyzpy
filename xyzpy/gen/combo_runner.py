@@ -1,5 +1,7 @@
 """Functions for systematically evaluating a function over all combinations.
 """
+# TODO: add_to_ds
+# TODO: add straight to array, ds ...
 # TODO: allow combo_runner_to_ds to use output vars as coords --------------- #
 
 import xarray as xr
@@ -13,9 +15,9 @@ from .prepare import (
     _parse_var_dims,
     _parse_constants,
     _parse_resources,
-    _parse_progbar_opts,
     _parse_var_coords,
     _parse_combos,
+    _parse_combo_results,
 )
 
 
@@ -49,22 +51,19 @@ def _nested_submit(fn, combos, kwds, delay=False):
                 for x in inputs]
 
 
-# Core Combo Runner --------------------------------------------------------- #
-
-def _combo_runner(fn, combos, constants=None,
+def _combo_runner(fn, combos, constants,
                   split=False,
                   parallel=False,
                   num_workers=None,
                   scheduler='t',
-                  hide_progbar=False,
-                  progbar_opts=None):
+                  hide_progbar=False):
     """Core combo runner, i.e. no parsing of arguments.
     """
     fn_name = _get_fn_name(fn)
 
     # Evaluate combos in parallel
     if parallel or num_workers:
-        with DaskTqdmProgbar(fn_name, disable=hide_progbar, **progbar_opts):
+        with DaskTqdmProgbar(fn_name, disable=hide_progbar):
             jobs = _nested_submit(fn, combos, constants, delay=True)
             if scheduler and isinstance(scheduler, str):
                 scheduler = _dask_get(scheduler, num_workers=num_workers)
@@ -73,7 +72,7 @@ def _combo_runner(fn, combos, constants=None,
     # Evaluate combos sequentially
     else:
         n = prod(len(x) for _, x in combos)
-        with progbar(total=n, disable=hide_progbar, **progbar_opts) as p:
+        with progbar(total=n, disable=hide_progbar) as p:
             # Wrap the function such that the progbar is updated upon each call
             fn = update_upon_eval(fn, p)
             results = _nested_submit(fn, combos, constants)
@@ -84,10 +83,9 @@ def _combo_runner(fn, combos, constants=None,
 def combo_runner(fn, combos, constants=None,
                  split=False,
                  parallel=False,
-                 num_workers=None,
                  scheduler='t',
-                 hide_progbar=False,
-                 progbar_opts=None):
+                 num_workers=None,
+                 hide_progbar=False):
     """Take a function fn and analyse it over all combinations of named
     variables' values, optionally showing progress and in parallel.
 
@@ -110,8 +108,6 @@ def combo_runner(fn, combos, constants=None,
             Explicitly choose how many workers to use, None for automatic.
         scheduler : str or dask.get instance
             Specify scheduler to use for the parallel work.
-        progbar_opts : dict
-            Options for the progress bar.
 
     Returns
     -------
@@ -122,13 +118,15 @@ def combo_runner(fn, combos, constants=None,
     # Prepare combos
     combos = _parse_combos(combos)
     constants = _parse_constants(constants)
-    progbar_opts = _parse_progbar_opts(progbar_opts)
 
     # Submit to core combo runner
-    return _combo_runner(fn=fn, combos=combos, constants=constants,
-                         split=split, parallel=parallel,
-                         num_workers=num_workers, scheduler=scheduler,
-                         hide_progbar=hide_progbar, progbar_opts=progbar_opts)
+    return _combo_runner(fn, combos,
+                         constants=constants,
+                         split=split,
+                         parallel=parallel,
+                         scheduler=scheduler,
+                         num_workers=num_workers,
+                         hide_progbar=hide_progbar)
 
 
 def _combos_to_ds(results, combos, var_names, var_dims, var_coords,
@@ -156,17 +154,13 @@ def _combos_to_ds(results, combos, var_names, var_dims, var_coords,
         xarray.Dataset
     """
     fn_args = tuple(x for x, _ in combos)
-    if len(var_names) == 1:
-        results = (results,)
+    results = _parse_combo_results(results, var_names)
 
     # Set dataset coordinates
-    ds = xr.Dataset(
-        coords={**dict(combos), **dict(var_coords)},
-        data_vars={name: (fn_args + var_dims[name], np.asarray(data))
-                   for data, name in zip(results, var_names)},
-        attrs=attrs)
-
-    # TODO: merge into add_to_ds
+    ds = xr.Dataset(coords={**dict(combos), **dict(var_coords)}, attrs=attrs,
+                    data_vars={name: (fn_args + var_dims[name],
+                                      np.asarray(data))
+                               for data, name in zip(results, var_names)})
 
     # Add constants to attrs, but filter out those which are already coords
     if constants:
@@ -182,7 +176,7 @@ def combo_runner_to_ds(fn, combos, var_names,
                        constants=None,
                        resources=None,
                        attrs=None,
-                       progbar_opts=None,
+                       parse=True,
                        **combo_runner_settings):
     """Evaluate a function over all combinations and output to a Dataset.
 
@@ -214,23 +208,23 @@ def combo_runner_to_ds(fn, combos, var_names,
     -------
         xarray.Dataset
     """
-    # Parse inputs
-    combos = _parse_combos(combos)
-    var_names = _parse_var_names(var_names)
-    var_dims = _parse_var_dims(var_dims, var_names=var_names)
-    var_coords = _parse_var_coords(var_coords)
-    constants = _parse_constants(constants)
-    resources = _parse_resources(resources)
-    progbar_opts = _parse_progbar_opts(progbar_opts)
-
-    # Set split based on var_names format
-    split = not (isinstance(var_names, str) or len(var_names) == 1)
+    if parse:
+        combos = _parse_combos(combos)
+        var_names = _parse_var_names(var_names)
+        var_dims = _parse_var_dims(var_dims, var_names=var_names)
+        var_coords = _parse_var_coords(var_coords)
+        constants = _parse_constants(constants)
+        resources = _parse_resources(resources)
 
     # Generate data for all combos
     results = _combo_runner(fn, combos, constants={**resources, **constants},
-                            split=split, progbar_opts=progbar_opts,
+                            split=len(var_names) > 1,
                             **combo_runner_settings)
     # Convert to dataset
-    ds = _combos_to_ds(results, combos, var_names=var_names, var_dims=var_dims,
-                       var_coords=var_coords, constants=constants, attrs=attrs)
+    ds = _combos_to_ds(results, combos,
+                       var_names=var_names,
+                       var_dims=var_dims,
+                       var_coords=var_coords,
+                       constants=constants,
+                       attrs=attrs)
     return ds

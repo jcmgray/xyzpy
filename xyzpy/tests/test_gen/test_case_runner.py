@@ -31,7 +31,7 @@ class TestCaseRunner:
                  (2, 20, 200),
                  (3, 30, 300))
         xs = case_runner(foo3_scalar, ('a', 'b', 'c'), cases)
-        assert xs == (111, 222, 333)
+        assert xs == [111, 222, 333]
 
     def test_progbar(self):
         cases = ((1, 10, 100),
@@ -39,7 +39,7 @@ class TestCaseRunner:
                  (3, 30, 300))
         xs = case_runner(foo3_scalar, ('a', 'b', 'c'), cases,
                          hide_progbar=False)
-        assert xs == (111, 222, 333)
+        assert xs == [111, 222, 333]
 
     def test_constants(self):
         cases = ((1,),
@@ -47,7 +47,7 @@ class TestCaseRunner:
                  (3,))
         xs = case_runner(foo3_scalar, ('a', 'b', 'c'), cases,
                          constants={'b': 10, 'c': 100})
-        assert xs == (111, 112, 113)
+        assert xs == [111, 112, 113]
 
     @pytest.mark.parametrize("scheduler", _GET_MODES)
     def test_parallel(self, scheduler):
@@ -63,14 +63,14 @@ class TestCaseRunner:
                  (2, 20, 200),
                  (3, 30, 300))
         a, b = case_runner(foo3_float_bool, ('a', 'b', 'c'), cases, split=True)
-        assert a == (111, 222, 333)
-        assert b == (False, True, False)
+        assert a == [111, 222, 333]
+        assert b == [False, True, False]
 
     def test_single_args(self):
         cases = (1, 2, 3)
         xs = case_runner(foo3_scalar, 'a', cases,
                          constants={'b': 10, 'c': 100})
-        assert xs == (111, 112, 113)
+        assert xs == [111, 112, 113]
 
 
 class TestCasesToDS:
@@ -129,7 +129,7 @@ class TestCasesToDS:
                                 'b': [10, 20]})
         ds['x'] = (('a', 'b'), [[11, 21], [12, 0]])
         assert ds['x'].sel(a=2, b=20).data == 0
-        _cases_to_ds(results=[[22]],
+        _cases_to_ds(results=[22],
                      fn_args=['a', 'b'],
                      cases=[[2, 20]],
                      var_names=['x'],
@@ -159,7 +159,7 @@ class TestCasesToDS:
         ds['x'] = (('a', 'b'), [[11, 21], [12, 0]])
         assert ds['x'].sel(a=2, b=20).data == 0
         with pytest.raises(ValueError):
-            _cases_to_ds(results=[[22]],
+            _cases_to_ds(results=[22],
                          fn_args=['a', 'b'],
                          cases=[[2, 20]],
                          var_names=['x'],
@@ -168,7 +168,7 @@ class TestCasesToDS:
         ds = xr.Dataset(coords={'a': [1, 2],
                                 'b': [10, 20]})
         ds['x'] = (('a', 'b'), [[11, 21], [12, None]])
-        _cases_to_ds(results=[[22]],
+        _cases_to_ds(results=[22],
                      fn_args=['a', 'b'],
                      cases=[[2, 20]],
                      var_names=['x'],

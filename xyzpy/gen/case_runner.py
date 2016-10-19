@@ -15,28 +15,25 @@ from .prepare import (
     _parse_var_dims,
     _parse_var_coords,
     _parse_constants,
-    _parse_resources,
-    _parse_progbar_opts,
+    _parse_resources
 )
 
 
 # Core Case Runner ---------------------------------------------------------- #
 
-def _case_runner(fn, fn_args, cases,
-                 constants=None,
+def _case_runner(fn, fn_args, cases, constants,
                  split=False,
                  parallel=False,
-                 num_workers=None,
                  scheduler='t',
-                 hide_progbar=False,
-                 progbar_opts=None):
+                 num_workers=None,
+                 hide_progbar=False):
     """Core case runner, i.e. without parsing of arguments.
     """
     fn_name = _get_fn_name(fn)
 
     # Evaluate configurations in parallel
     if parallel or num_workers:
-        with DaskTqdmProgbar(fn_name, disable=hide_progbar, **progbar_opts):
+        with DaskTqdmProgbar(fn_name, disable=hide_progbar):
             jobs = [delayed(fn)(**constants, **dict(zip(fn_args, case)))
                     for case in cases]
             if scheduler and isinstance(scheduler, str):
@@ -45,11 +42,13 @@ def _case_runner(fn, fn_args, cases,
 
     # Evaluate configurations sequentially
     else:
-        results = tuple(fn(**constants, **dict(zip(fn_args, case)))
-                        for case in progbar(cases, total=len(cases),
-                                            disable=hide_progbar))
+        results = [fn(**constants, **dict(zip(fn_args, case)))
+                   for case in progbar(cases, total=len(cases),
+                                       disable=hide_progbar)]
 
-    return tuple(zip(*results)) if split else results
+    if split:
+        return tuple(list(rs) for rs in zip(*results))
+    return results
 
 
 def case_runner(fn, fn_args, cases,
@@ -58,8 +57,7 @@ def case_runner(fn, fn_args, cases,
                 parallel=False,
                 num_workers=None,
                 scheduler='t',
-                hide_progbar=False,
-                progbar_opts=None):
+                hide_progbar=False):
     """ Evaluate a function in many different configurations, optionally in
     parallel and or with live progress.
 
@@ -81,8 +79,6 @@ def case_runner(fn, fn_args, cases,
             whether to evaluate cases in parallel
         processes:
             how any processes to use for parallel processing
-        progbar_opts:
-            options to send to progbar
 
     Returns
     -------
@@ -91,7 +87,6 @@ def case_runner(fn, fn_args, cases,
     # Prepare fn_args and values
     fn_args, cases = _parse_fn_args_and_cases(fn_args, cases)
     constants = _parse_constants(constants)
-    progbar_opts = _parse_progbar_opts(progbar_opts)
 
     return _case_runner(fn, fn_args, cases,
                         constants=constants,
@@ -99,8 +94,7 @@ def case_runner(fn, fn_args, cases,
                         parallel=parallel,
                         num_workers=num_workers,
                         scheduler=scheduler,
-                        hide_progbar=hide_progbar,
-                        progbar_opts=progbar_opts)
+                        hide_progbar=hide_progbar)
 
 
 # Utils --------------------------------------------------------------------- #
@@ -174,6 +168,8 @@ def _cases_to_ds(results, fn_args, cases, var_names,
         1. Many data types have to be converted to object in order for the
             missing values to be represented by NaNs.
     """
+    results = _parse_case_results(results, var_names)
+
     if add_to_ds:
         ds = add_to_ds
     else:
@@ -232,17 +228,14 @@ def case_runner_to_ds(fn, fn_args, cases, var_names,
     fn_args, cases = _parse_fn_args_and_cases(fn_args, cases)
     constants = _parse_constants(constants)
     resources = _parse_resources(resources)
-
-    # Generate results
-    results = case_runner(fn, fn_args, cases,
-                          constants={**constants, **resources},
-                          **case_runner_settings)
-
-    # Prepare var_names/dims/results
-    results = _parse_case_results(results, var_names)
     var_names = _parse_var_names(var_names)
     var_dims = _parse_var_dims(var_dims, var_names)
     var_coords = _parse_var_coords(var_coords)
+
+    # Generate results
+    results = _case_runner(fn, fn_args, cases,
+                           constants={**constants, **resources},
+                           **case_runner_settings)
 
     # Convert to xarray.Dataset
     ds = _cases_to_ds(results, fn_args, cases,
@@ -340,8 +333,6 @@ def fill_missing_cases(ds, fn, var_names,
     results = _case_runner(fn, fn_args, cases,
                            constants={**constants, **resources},
                            **case_runner_settings)
-
-    results = _parse_case_results(results, var_names)
 
     # Add to dataset
     return _cases_to_ds(results, fn_args, cases,

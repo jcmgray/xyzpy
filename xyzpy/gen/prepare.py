@@ -4,23 +4,6 @@ def _parse_var_names(var_names):
     return (var_names,) if isinstance(var_names, str) else tuple(var_names)
 
 
-def _parse_case_results(results, var_names):
-    """
-    """
-    if isinstance(var_names, str) or len(var_names) == 1:
-        results = tuple((r,) for r in results)
-    return results
-
-
-def _parse_fn_args_and_cases(fn_args, cases):
-    """
-    """
-    if isinstance(fn_args, str):
-        cases = tuple((c,) for c in cases)
-    fn_args = (fn_args,) if isinstance(fn_args, str) else tuple(fn_args)
-    return fn_args, cases
-
-
 def _parse_var_dims(var_dims, var_names):
     """Parse function mapping parameters into standard form.
 
@@ -103,12 +86,6 @@ def _parse_resources(resources):
     return dict(resources) if resources else dict()
 
 
-def _parse_progbar_opts(progbar_opts):
-    """
-    """
-    return dict(progbar_opts) if progbar_opts else dict()
-
-
 def _parse_combos(combos):
     """Turn dicts and single tuples into proper form for combo runners.
     """
@@ -117,3 +94,34 @@ def _parse_combos(combos):
     elif isinstance(combos[0], str):
         return (combos,)
     return tuple(combos)
+
+
+def _parse_combo_results(results, var_names):
+    """
+    """
+    if isinstance(var_names, str) or len(var_names) == 1:
+        results = (results,)
+    return results
+
+
+def _parse_case_results(results, var_names):
+    """
+    """
+    if isinstance(var_names, str) or len(var_names) == 1:
+        results = tuple((r,) for r in results)
+    return results
+
+
+def _parse_fn_args(fn_args):
+    """
+    """
+    return (fn_args,) if isinstance(fn_args, str) else tuple(fn_args)
+
+
+def _parse_fn_args_and_cases(fn_args, cases):
+    """
+    """
+    if isinstance(fn_args, str):
+        cases = tuple((c,) for c in cases)
+    fn_args = (fn_args,) if isinstance(fn_args, str) else tuple(fn_args)
+    return fn_args, cases
