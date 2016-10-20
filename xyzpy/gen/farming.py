@@ -4,6 +4,7 @@
 # TODO: keep last n datasets
 # TODO: file lock
 # TODO: setters with parsers
+# TODO: harvester getter last_ds from runner
 
 import os
 import xarray as xr
@@ -141,20 +142,27 @@ class Harvester(object):
         self.data_name = data_name
         self.engine = engine
 
-    def merge_save(self, new_ds):
+    def merge_save(self, new_ds, create_new=True):
         """
         """
         # Check file exists and can be written to.
         if os.access(self.data_name, os.W_OK):
             # Open, merge new data and close.
-            with xr.open_dataset(self.data_name, engine=self.engine) as old_ds:
-                old_ds.merge(new_ds, compat='no_conflicts', inplace=True)
-                old_ds.to_netcdf(self.data_name, engine=self.engine)
+            self.full_ds = xr.open_dataset(self.data_name, engine=self.engine)
+            self.full_ds.load()
+            self.full_ds.close()
+            self.full_ds.merge(new_ds, compat='no_conflicts', inplace=True)
+            self.full_ds.to_netcdf(self.data_name, engine=self.engine)
+        elif create_new:
+            self.full_ds = new_ds.copy(deep=True)
+            self.full_ds.to_netcdf(self.data_name, engine=self.engine)
         else:
-            new_ds.to_netcdf(self.data_name, engine=self.engine)
+            raise OSError("The file '{}' can not be accesed and `create_new` "
+                          "is set to False.".format(self.data_name))
 
-    def harvest_combos(self, combos, **runner_settings):
+    def harvest_combos(self, combos, save=True, **runner_settings):
         """Run combos, automatically merging into an on-disk dataset.
         """
         self.r.run_combos(combos, **runner_settings)
-        self.merge_save(self.r.last_ds)
+        if save:
+            self.merge_save(self.r.last_ds)

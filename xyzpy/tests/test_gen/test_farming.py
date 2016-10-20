@@ -18,7 +18,7 @@ def fn3_fba(a, b, c):
     return sm, ev, ts
 
 
-# Tests --------------------------------------------------------------------- #
+# Runner Tests -------------------------------------------------------------- #
 
 class TestRunner:
     def test_runner_simple(self):
@@ -75,5 +75,17 @@ class TestRunner:
         pass
 
 
+# Harvester Tests ----------------------------------------------------------- #
+
 class TestHarvester:
-    pass
+    def test_merge_save(self):
+        # TODO
+        pass
+
+    def test_harvest_combos(self):
+        # TODO
+        pass
+
+    def test_harvest_cases(self):
+        # TODO
+        pass

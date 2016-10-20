@@ -114,6 +114,7 @@ def blineplot(ds, y_coo, x_coo, z_coo=None,
                toolbar_location="above",
                toolbar_sticky=False,
                active_scroll="wheel_zoom",
+               logo=None,
                x_range=xlims,
                y_range=ylims,
                webgl=False)
