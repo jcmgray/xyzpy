@@ -17,6 +17,7 @@ dependencies:
   - tqdm
   - matplotlib
   - plotly
+  - cytoolz
   - coverage
   - pip:
     - coveralls

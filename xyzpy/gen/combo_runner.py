@@ -155,18 +155,15 @@ def _combos_to_ds(results, combos, var_names, var_dims, var_coords,
     """
     fn_args = tuple(x for x, _ in combos)
     results = _parse_combo_results(results, var_names)
-
     # Set dataset coordinates
     ds = xr.Dataset(coords={**dict(combos), **dict(var_coords)}, attrs=attrs,
                     data_vars={name: (fn_args + var_dims[name],
                                       np.asarray(data))
                                for data, name in zip(results, var_names)})
-
     # Add constants to attrs, but filter out those which are already coords
     if constants:
         ds.attrs.update({k: v for k, v in constants.items()
                          if k not in ds.coords})
-
     return ds
 
 

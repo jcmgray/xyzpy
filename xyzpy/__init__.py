@@ -3,12 +3,12 @@ XYZPY
 =====
 """
 # XXX: fix h5netcdf attributes recursion error
-
 # TODO: combos add to existing dataset. ------------------------------------- #
 # TODO: save to ds every case. For case_runner only? ------------------------ #
 # TODO: function for printing ranges of runs done. -------------------------- #
 # TODO: logging ------------------------------------------------------------- #
 # TODO: pause / finish early interactive commands. -------------------------- #
+# TODO: set global progbar options e.g. notebook mode ----------------------- #
 
 from .utils import (unzip,
                     progbar)
@@ -20,8 +20,8 @@ from .gen.case_runner import (case_runner,
                               case_runner_to_ds,
                               find_missing_cases,
                               fill_missing_cases)
-from .gen.runner import Runner
-from .parallel import DaskTqdmProgbar
+from .gen.farming import (Runner,
+                          Harvester)
 from .manage import (cache_to_disk,
                      xrsmoosh,
                      xrsave,
@@ -44,7 +44,9 @@ from .plot.plotter_plotly import (ishow,
 from .plot.plotter_bokeh import (blineplot,
                                  xyz_blineplot)
 
-__all__ = ["combo_runner",
+__all__ = ["Runner",
+           "Harvester",
+           "combo_runner",
            "combo_runner_to_ds",
            "case_runner",
            "find_union_coords",
@@ -52,7 +54,6 @@ __all__ = ["combo_runner",
            "case_runner_to_ds",
            "find_missing_cases",
            "fill_missing_cases",
-           "DaskTqdmProgbar",
            "cache_to_disk",
            "xrsave",
            "xrload",
@@ -70,7 +71,6 @@ __all__ = ["combo_runner",
            "visualize_matrix",
            "blineplot",
            "xyz_blineplot",
-           "Runner",
            "unzip",
            "progbar",
            "xrsmoosh"]

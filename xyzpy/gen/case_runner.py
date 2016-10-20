@@ -1,7 +1,7 @@
 """Functions for systematically evaluating a function over specific cases.
 """
 import itertools
-
+from cytoolz import concat
 import numpy as np
 import xarray as xr
 from dask.delayed import delayed, compute
@@ -9,7 +9,8 @@ from dask.delayed import delayed, compute
 from ..parallel import DaskTqdmProgbar, _dask_get
 from ..utils import _get_fn_name, progbar
 from .prepare import (
-    _parse_fn_args_and_cases,
+    _parse_fn_args,
+    _parse_cases,
     _parse_case_results,
     _parse_var_names,
     _parse_var_dims,
@@ -18,8 +19,6 @@ from .prepare import (
     _parse_resources
 )
 
-
-# Core Case Runner ---------------------------------------------------------- #
 
 def _case_runner(fn, fn_args, cases, constants,
                  split=False,
@@ -85,7 +84,8 @@ def case_runner(fn, fn_args, cases,
         results: list of fn output for each case
     """
     # Prepare fn_args and values
-    fn_args, cases = _parse_fn_args_and_cases(fn_args, cases)
+    fn_args = _parse_fn_args(fn_args)
+    cases = _parse_cases(cases)
     constants = _parse_constants(constants)
 
     return _case_runner(fn, fn_args, cases,
@@ -96,8 +96,6 @@ def case_runner(fn, fn_args, cases,
                         scheduler=scheduler,
                         hide_progbar=hide_progbar)
 
-
-# Utils --------------------------------------------------------------------- #
 
 def find_union_coords(cases):
     """Take a list of cases and find the union of coordinates
@@ -206,6 +204,7 @@ def case_runner_to_ds(fn, fn_args, cases, var_names,
                       resources=None,
                       add_to_ds=None,
                       overwrite=False,
+                      parse=True,
                       **case_runner_settings):
     """ Combination of `case_runner` and `_cases_to_ds`. Takes a function and
     list of argument configurations and produces a `xarray.Dataset`.
@@ -225,12 +224,14 @@ def case_runner_to_ds(fn, fn_args, cases, var_names,
         ds: dataset with minimal covering coordinates and all cases
             evaluated.
     """
-    fn_args, cases = _parse_fn_args_and_cases(fn_args, cases)
-    constants = _parse_constants(constants)
-    resources = _parse_resources(resources)
-    var_names = _parse_var_names(var_names)
-    var_dims = _parse_var_dims(var_dims, var_names)
-    var_coords = _parse_var_coords(var_coords)
+    if parse:
+        fn_args = _parse_fn_args(fn_args)
+        cases = _parse_cases(cases)
+        constants = _parse_constants(constants)
+        resources = _parse_resources(resources)
+        var_names = _parse_var_names(var_names)
+        var_dims = _parse_var_dims(var_dims, var_names)
+        var_coords = _parse_var_coords(var_coords)
 
     # Generate results
     results = _case_runner(fn, fn_args, cases,
@@ -321,21 +322,18 @@ def fill_missing_cases(ds, fn, var_names,
     resources = _parse_resources(resources)
 
     # Gather all internal dimensions
-    ignore_dims = set()
-    for d in var_dims.values():
-        ignore_dims |= set(d)
+    ignore_dims = set(concat(var_dims.values()))
 
     # Find missing cases
-    fn_args, cases = find_missing_cases(ds, ignore_dims=ignore_dims)
-    fn_args, cases = _parse_fn_args_and_cases(fn_args, cases)
+    fn_args, missing_cases = find_missing_cases(ds, ignore_dims=ignore_dims)
 
     # Generate missing results
-    results = _case_runner(fn, fn_args, cases,
+    results = _case_runner(fn, fn_args, missing_cases,
                            constants={**constants, **resources},
                            **case_runner_settings)
 
     # Add to dataset
-    return _cases_to_ds(results, fn_args, cases,
+    return _cases_to_ds(results, fn_args, missing_cases,
                         var_names=var_names,
                         var_dims=var_dims,
                         var_coords=var_coords,

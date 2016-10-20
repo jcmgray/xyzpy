@@ -1,3 +1,57 @@
+from cytoolz import isiterable
+
+
+def dictify(x):
+    return dict(x) if x else dict()
+
+
+# combo_runner -------------------------------------------------------------- #
+
+def _parse_combos(combos):
+    """Turn dicts and single tuples into proper form for combo runners.
+    """
+    if isinstance(combos, dict):
+        combos = tuple(combos.items())
+    elif isinstance(combos[0], str):
+        combos = (combos,)
+    return tuple((arg, list(vals)) for arg, vals in combos)
+
+
+def _parse_combo_results(results, var_names):
+    """
+    """
+    if isinstance(var_names, str) or len(var_names) == 1:
+        results = (results,)
+    return results
+
+
+# case_runner --------------------------------------------------------------- #
+
+def _parse_fn_args(fn_args):
+    """
+    """
+    return (fn_args,) if isinstance(fn_args, str) else tuple(fn_args)
+
+
+def _parse_cases(cases):
+    """
+    """
+    cases = tuple(cases)
+    if isinstance(cases[0], str) or not isiterable(cases[0]):
+        cases = tuple((c,) for c in cases)
+    return cases
+
+
+def _parse_case_results(results, var_names):
+    """
+    """
+    if isinstance(var_names, str) or len(var_names) == 1:
+        results = tuple((r,) for r in results)
+    return results
+
+
+# common variable description ----------------------------------------------- #
+
 def _parse_var_names(var_names):
     """
     """
@@ -67,61 +121,6 @@ def _parse_var_dims(var_dims, var_names):
 
     return new_var_dims
 
-
-def _parse_var_coords(var_coords):
-    """
-    """
-    return dict(var_coords) if var_coords else dict()
-
-
-def _parse_constants(constants):
-    """
-    """
-    return dict(constants) if constants else dict()
-
-
-def _parse_resources(resources):
-    """
-    """
-    return dict(resources) if resources else dict()
-
-
-def _parse_combos(combos):
-    """Turn dicts and single tuples into proper form for combo runners.
-    """
-    if isinstance(combos, dict):
-        return tuple(combos.items())
-    elif isinstance(combos[0], str):
-        return (combos,)
-    return tuple(combos)
-
-
-def _parse_combo_results(results, var_names):
-    """
-    """
-    if isinstance(var_names, str) or len(var_names) == 1:
-        results = (results,)
-    return results
-
-
-def _parse_case_results(results, var_names):
-    """
-    """
-    if isinstance(var_names, str) or len(var_names) == 1:
-        results = tuple((r,) for r in results)
-    return results
-
-
-def _parse_fn_args(fn_args):
-    """
-    """
-    return (fn_args,) if isinstance(fn_args, str) else tuple(fn_args)
-
-
-def _parse_fn_args_and_cases(fn_args, cases):
-    """
-    """
-    if isinstance(fn_args, str):
-        cases = tuple((c,) for c in cases)
-    fn_args = (fn_args,) if isinstance(fn_args, str) else tuple(fn_args)
-    return fn_args, cases
+_parse_var_coords = dictify
+_parse_constants = dictify
+_parse_resources = dictify

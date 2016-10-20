@@ -101,12 +101,12 @@ class TestSaveAndLoad:
                        ('h5netcdf', 'netcdf4'),
                        mark.xfail(('netcdf4', 'h5netcdf')),
                        ('netcdf4', 'netcdf4')])
-    def test_oi_only_real(self, ds_real, engine_save, engine_load):
+    def test_io_only_real(self, ds_real, engine_save, engine_load):
         with tempfile.TemporaryDirectory() as tmpdir:
             xrsave(ds_real, os.path.join(tmpdir, "test.h5"),
                    engine=engine_save)
             ds2 = xrload(os.path.join(tmpdir, "test.h5"), engine=engine_load)
-            assert ds_real.identical(ds2)
+            assert ds_real.equals(ds2)
 
     @mark.parametrize(("engine_save, engine_load"),
                       [('h5netcdf', 'h5netcdf'),
