@@ -7,7 +7,25 @@ import xarray as xr
 import xarray.ufuncs as xrufuncs
 
 
+_DEFAULT_FN_CACHE_PATH = '__xyz_cache__'
+
+
+def cache_to_disk(fn=None, *, cachedir=_DEFAULT_FN_CACHE_PATH, **kwargs):
+    import joblib
+    mem = joblib.Memory(cachedir=cachedir, verbose=0, **kwargs)
+
+    if fn:  # bare decorator
+        return mem.cache(fn)
+    else:  # called with kwargs
+        def cache_to_disk_decorator(fn):
+            return mem.cache(fn)
+        return cache_to_disk_decorator
+
+
 def _auto_add_extension(file_name, engine):
+    """Make sure a file name has an extension that reflects its
+    file type.
+    """
     if "." not in file_name:
         extension = ".h5" if engine == "h5netcdf" else ".nc"
         file_name += extension
@@ -15,7 +33,7 @@ def _auto_add_extension(file_name, engine):
 
 
 def xrsave(ds, file_name, engine="h5netcdf"):
-    """ Saves a xarray dataset.
+    """Saves a xarray dataset.
 
     Parameters
     ----------
@@ -32,8 +50,7 @@ def xrsave(ds, file_name, engine="h5netcdf"):
 
 
 def xrload(file_name, engine="h5netcdf", load_to_mem=True, create_new=False):
-    """
-    Loads a xarray dataset.
+    """Loads a xarray dataset.
 
     Parameters
     ----------
@@ -51,7 +68,7 @@ def xrload(file_name, engine="h5netcdf", load_to_mem=True, create_new=False):
         try:
             ds = xr.open_dataset(file_name, engine=engine)
         except AttributeError as e1:
-            if "object has no attribute" in str(e1):
+            if "object has no attribute" in str(e1) and engine == 'h5netcdf':
                 ds = xr.open_dataset(file_name, engine="netcdf4")
             else:
                 raise e1
@@ -67,14 +84,15 @@ def xrload(file_name, engine="h5netcdf", load_to_mem=True, create_new=False):
 
 
 def nonnull_compatible(first, second):
-    """ Check whether two (aligned) datasets have any conflicting values. """
+    """Check whether two (aligned) datasets have any conflicting values.
+    """
     # TODO assert common coordinates are aligned?
     both_not_null = xrufuncs.logical_not(first.isnull() | second.isnull())
     return first.where(both_not_null).equals(second.where(both_not_null))
 
 
 def aggregate(*datasets, overwrite=False, accept_newer=False):
-    """ Aggregates xarray Datasets and DataArrays
+    """Aggregates xarray Datasets and DataArrays
 
     Parameters
     ----------
@@ -117,11 +135,16 @@ def aggregate(*datasets, overwrite=False, accept_newer=False):
     return ds1
 
 
-xrsmoosh = aggregate
+def xrsmoosh(*objs, overwrite=False, accept_newer=False):
+    try:
+        return xr.merge(objs, compat='no_conflicts')
+    except (ValueError, xr.MergeError):
+        return aggregate(*objs, overwrite=overwrite, accept_newer=accept_newer)
 
 
 def auto_xyz_ds(x, y_z):
-    """ Automatically turn an array into a `xarray` dataset """
+    """Automatically turn an array into a `xarray` dataset.
+    """
     # Infer dimensions to coords mapping
     y_z = np.array(np.squeeze(y_z), ndmin=2)
     if np.size(x) == y_z.shape[0]:

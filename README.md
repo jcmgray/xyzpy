@@ -33,7 +33,7 @@ Manages generating, saving and plotting large parameter space data.
 ## Installation
 The easiest method of installing `xyzpy`'s dependencies is via [`conda`](http://conda.pydata.org/miniconda.html) and [`conda-forge`](https://conda-forge.github.io/):
 ```bash
-$ conda install numpy scipy xarray h5py matplotlib
+$ conda install numpy xarray h5py matplotlib
 $ conda config --append channels conda-forge
 $ conda install h5netcdf plotly tqdm 
 ```

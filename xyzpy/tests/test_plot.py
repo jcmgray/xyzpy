@@ -5,8 +5,8 @@ import xarray as xr
 import matplotlib
 
 from ..plot.color import convert_colors
-from ..plot.matplotlib_plotter import lineplot
-from ..plot.plotly_plotter import ilineplot
+from ..plot.plotter_matplotlib import lineplot
+from ..plot.plotter_plotly import ilineplot
 
 
 DISPLAY_PRESENT = 'DISPLAY' in os.environ

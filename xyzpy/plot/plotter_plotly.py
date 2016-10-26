@@ -4,13 +4,23 @@ Functions for plotting datasets nicely.
 # TODO: unify all options with lineplot                                       #
 # TODO: names                                                                 #
 
+import functools
 import itertools
 from ..manage import auto_xyz_ds
-from .plotting_help import _process_plot_range, _prepare_data_and_styles
+from .core import _process_plot_range, _prepare_data_and_styles
+
+
+@functools.lru_cache(1)
+def init_plotly_nb():
+    """Cache this so it doesn't happen over and over again.
+    """
+    from plotly.offline import init_notebook_mode
+    init_notebook_mode()
 
 
 def ishow(figs, nb=True, **kwargs):
-    """ Show multiple plotly figures in notebook or on web. """
+    """Show multiple plotly figures in notebook or on web.
+    """
     if isinstance(figs, (list, tuple)):
         fig_main = figs[0]
         for fig in figs[1:]:
@@ -18,9 +28,8 @@ def ishow(figs, nb=True, **kwargs):
     else:
         fig_main = figs
     if nb:
-        from plotly.offline import init_notebook_mode
         from plotly.offline import iplot as plot
-        init_notebook_mode()
+        init_plotly_nb()
     else:
         from plotly.plotly import plot
     plot(fig_main, **kwargs)
@@ -31,7 +40,7 @@ def ishow(figs, nb=True, **kwargs):
 # --------------------------------------------------------------------------  #
 
 def ilineplot(ds, y_coo, x_coo, z_coo=None,
-              figsize=(8, 6),          # absolute figure size
+              figsize=(6, 5),          # absolute figure size
               nb=True,
               title=None,
               # Line coloring options
@@ -72,12 +81,13 @@ def ilineplot(ds, y_coo, x_coo, z_coo=None,
               fontsize_legend=18,
               return_fig=False,
               **kwargs):
-    """ Take a dataset and plot onse of its variables as a function of two
-    coordinates using plotly. """
+    """Take a dataset and plot onse of its variables as a function of two
+    coordinates using plotly.
+    """
     # TODO: list of colors, send to calc_colors
     # TODO: mouse scroll zoom
 
-    from plotly.graph_objs import Scatter
+    from plotly.graph_objs import Scatter, Margin
 
     z_vals, cols, zlabels, gen_xy = _prepare_data_and_styles(
         ds=ds, y_coo=y_coo, x_coo=x_coo, z_coo=z_coo, zlabels=zlabels,
@@ -144,8 +154,9 @@ def ilineplot(ds, y_coo, x_coo, z_coo=None,
         'titlefont': {
             'size': fontsize_title,
         },
-        'width': figsize[0] * 100,
+        'width': figsize[0] * 100 + 100,
         'height': figsize[1] * 100,
+        'margin': Margin(autoexpand=True, l=60, r=80, b=50, t=30, pad=0),
         'xaxis': {
             'showline': True,
             'showgrid': gridlines,
@@ -213,7 +224,9 @@ def iheatmap(ds, data_name, x_coo, y_coo,
              nb=True,
              return_fig=False,
              **kwargs):
-    """ Automatic 2D-Heatmap plot using plotly. """
+    """Automatic 2D-Heatmap plot using plotly.
+    """
+    # TODO: automatic aspect ratio? aspect_ratio='AUTO'
     from plotly.graph_objs import Heatmap
     traces = [Heatmap({"z": (ds[data_name]
                              .dropna(x_coo, how="all")
@@ -278,19 +291,22 @@ def ihist(xs, nb=True, go_dict={}, ly_dict={}, return_fig=False,
     ishow(fig, nb=nb, **kwargs)
 
 
-def plot_matrix(a, colormap="Greys", nb=True, return_fig=False, **kwargs):
-    from plotly.graph_objs import Heatmap
+def visualize_matrix(a, colormap="Greys", nb=True, return_fig=False, **kwargs):
+    from plotly.graph_objs import Heatmap, Margin
+    m, n = a.shape
     traces = [Heatmap({"z": -abs(a),
                        "colorscale": colormap,
                        "showscale": False})]
     layout = {"height": 500, "width": 500,
-              "xaxis": {"autorange": True,
+              'margin': Margin(autoexpand=True, l=30, r=30,
+                               b=30, t=30, pad=0),
+              "xaxis": {"range": (-1/2, m - 1/2),
                         "zeroline": False,
                         "showline": False,
                         "autotick": True,
                         "ticks": "",
                         "showticklabels": False},
-              "yaxis": {"autorange": True,
+              "yaxis": {"range": (n - 1/2, -1/2),
                         "zeroline": False,
                         "showline": False,
                         "autotick": True,
