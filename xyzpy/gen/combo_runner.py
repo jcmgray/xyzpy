@@ -1,6 +1,6 @@
 """Functions for systematically evaluating a function over all combinations.
 """
-# TODO: allow/encourage RESULTS TO BE A DICT
+# TODO: allow/encourage results to be a dict?
 # TODO: add_to_ds
 # TODO: add straight to array, ds ...
 # TODO: allow combo_runner_to_ds to use output vars as coords --------------- #

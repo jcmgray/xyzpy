@@ -50,10 +50,10 @@ def _get_fn_name(fn):
     """
     try:
         return fn.__name__
-    except AttributeError:  # assume dask delayed function with key
-        try:
+    except AttributeError:
+        try:  # try dask delayed function with key
             return fn.key.partition('-')[0]
-        except AttributeError:
+        except AttributeError:  # try functools.partial function syntax
             return fn.func.__name__
 
 

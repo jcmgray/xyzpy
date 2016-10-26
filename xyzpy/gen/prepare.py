@@ -1,8 +1,19 @@
 from cytoolz import isiterable
 
 
+def _str_2_tuple(x):
+    return (x,) if isinstance(x, str) else tuple(x)
+
+
 def dictify(x):
-    return dict(x) if x else dict()
+    """Ensure `x` is a dict.
+    """
+    if isinstance(x, dict):
+        return x
+    elif x:
+        return dict(x)
+    else:
+        return dict()
 
 
 # combo_runner -------------------------------------------------------------- #
@@ -27,10 +38,7 @@ def _parse_combo_results(results, var_names):
 
 # case_runner --------------------------------------------------------------- #
 
-def _parse_fn_args(fn_args):
-    """
-    """
-    return (fn_args,) if isinstance(fn_args, str) else tuple(fn_args)
+_parse_fn_args = _str_2_tuple
 
 
 def _parse_cases(cases):
@@ -52,10 +60,7 @@ def _parse_case_results(results, var_names):
 
 # common variable description ----------------------------------------------- #
 
-def _parse_var_names(var_names):
-    """
-    """
-    return (var_names,) if isinstance(var_names, str) else tuple(var_names)
+_parse_var_names = _str_2_tuple
 
 
 def _parse_var_dims(var_dims, var_names):
