@@ -5,6 +5,8 @@
 # TODO: file lock
 # TODO: setters with parsers
 # TODO: harvester getter last_ds from runner
+# TODO: save_on=()
+# TODO: split_on=()
 
 import os
 import xarray as xr

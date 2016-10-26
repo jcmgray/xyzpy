@@ -109,14 +109,14 @@ def blineplot(ds, y_coo, x_coo, z_coo=None,
                height=int(figsize[1] * 100),
                x_axis_label=x_coo,
                y_axis_label=y_coo,
+               x_range=xlims,
+               y_range=ylims,
                x_axis_type=('log' if xlog else 'linear'),
                y_axis_type=('log' if ylog else 'linear'),
                toolbar_location="above",
                toolbar_sticky=False,
                active_scroll="wheel_zoom",
                logo=None,
-               x_range=xlims,
-               y_range=ylims,
                webgl=False)
 
     if hlines:
@@ -140,9 +140,9 @@ def blineplot(ds, y_coo, x_coo, z_coo=None,
         source = ColumnDataSource(data={'x': x, 'y': y,
                                         'z_coo': [zlabel] * len(x)})
 
-        l = p.line('x', 'y', source=source, color=col, line_width=2)
+        l = p.line('x', 'y', source=source, line_width=2, color=col)
         if markers:
-            m = p.circle('x', 'y', source=source, color=col, name=zlabel)
+            m = p.circle('x', 'y', source=source, name=zlabel, color=col)
             legend_items.append((zlabel, [l, m]))
         else:
             legend_items.append((zlabel, [l]))

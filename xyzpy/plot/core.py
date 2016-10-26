@@ -57,7 +57,11 @@ def _prepare_data_and_styles(ds, y_coo, x_coo, z_coo, zlabels,
     elif colors:
         cols = itertools.cycle(convert_colors(colors, outformat=engine))
     else:
-        cols = itertools.repeat(None)
+        if engine == 'BOKEH':
+            from bokeh.palettes import Dark2_8
+            cols = itertools.cycle(Dark2_8)
+        else:
+            cols = itertools.repeat(None)
 
     return z_vals, cols, zlabels, gen_xy
 

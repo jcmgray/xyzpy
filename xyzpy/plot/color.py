@@ -101,7 +101,10 @@ def _xyz_colormaps(name):
         #    0.75    #fcd500    rgb(252, 213,   0)
         #    1.00    #89e996    rgb(137, 233, 150)
     }
-    return LinearSegmentedColormap(name, cmaps[name])
+    try:
+        return LinearSegmentedColormap(name, cmaps[name])
+    except KeyError:
+        return getattr(cm, name)
 
 
 def calc_colors(ds, z_coo, colormap="xyz", log_scale=False,
@@ -122,10 +125,7 @@ def calc_colors(ds, z_coo, colormap="xyz", log_scale=False,
     -------
         list of colors corresponding to each line in `z_coo`.
     """
-    try:
-        cmap = _xyz_colormaps(colormap)
-    except KeyError:
-        cmap = getattr(cm, colormap)
+    cmap = _xyz_colormaps(colormap)
 
     try:
         zmin, zmax = ds[z_coo].values.min(), ds[z_coo].values.max()

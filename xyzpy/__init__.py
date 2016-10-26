@@ -2,7 +2,7 @@
 XYZPY
 =====
 """
-# XXX: fix h5netcdf attributes recursion error
+# XXX: fix h5netcdf attributes recursion error ------------------------------ #
 # TODO: combos add to existing dataset. ------------------------------------- #
 # TODO: save to ds every case. For case_runner only? ------------------------ #
 # TODO: function for printing ranges of runs done. -------------------------- #

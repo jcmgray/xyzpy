@@ -292,18 +292,21 @@ def ihist(xs, nb=True, go_dict={}, ly_dict={}, return_fig=False,
 
 
 def visualize_matrix(a, colormap="Greys", nb=True, return_fig=False, **kwargs):
-    from plotly.graph_objs import Heatmap
+    from plotly.graph_objs import Heatmap, Margin
+    m, n = a.shape
     traces = [Heatmap({"z": -abs(a),
                        "colorscale": colormap,
                        "showscale": False})]
     layout = {"height": 500, "width": 500,
-              "xaxis": {"autorange": True,
+              'margin': Margin(autoexpand=True, l=30, r=30,
+                               b=30, t=30, pad=0),
+              "xaxis": {"range": (-1/2, m - 1/2),
                         "zeroline": False,
                         "showline": False,
                         "autotick": True,
                         "ticks": "",
                         "showticklabels": False},
-              "yaxis": {"autorange": True,
+              "yaxis": {"range": (n - 1/2, -1/2),
                         "zeroline": False,
                         "showline": False,
                         "autotick": True,

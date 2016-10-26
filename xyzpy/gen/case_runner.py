@@ -23,7 +23,7 @@ from .prepare import (
 def _case_runner(fn, fn_args, cases, constants,
                  split=False,
                  parallel=False,
-                 scheduler='t',
+                 scheduler='m',
                  num_workers=None,
                  hide_progbar=False):
     """Core case runner, i.e. without parsing of arguments.
