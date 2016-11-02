@@ -12,9 +12,11 @@ Functions for plotting datasets nicely.
 
 import itertools
 import collections
-from ..manage import auto_xyz_ds
+
+import numpy as np
 
 from .core import _process_plot_range, _prepare_data_and_styles
+from ..manage import auto_xyz_ds
 
 
 # -------------------------------------------------------------------------- #
@@ -252,3 +254,51 @@ def xyz_lineplot(x, y_z, **lineplot_opts):
     ds = auto_xyz_ds(x, y_z)
     # Plot dataset
     return lineplot(ds, 'y', 'x', 'z', **lineplot_opts)
+
+
+def _choose_squarest_grid(x):
+    p = x ** 0.5
+    if p.is_integer():
+        m = n = int(p)
+    else:
+        m = int(round(p))
+        p = int(p)
+        n = p if m * p >= x else p + 1
+    return m, n
+
+
+def visualize_matrix(x, figsize=(6, 6),
+                     colormap='Greys',
+                     touching=False,
+                     return_fig=True):
+    import matplotlib.pyplot as plt
+    from xyzpy.plot.color import _xyz_colormaps
+
+    fig = plt.figure(figsize=figsize, dpi=100)
+    if isinstance(x, np.ndarray):
+        x = (x,)
+
+    nx = len(x)
+    m, n = _choose_squarest_grid(nx)
+    subplots = tuple((m, n, i) for i in range(1, nx+1))
+
+    for img, subplot in zip(x, subplots):
+
+        ax = fig.add_subplot(*subplot)
+        ax.imshow(img, cmap=_xyz_colormaps(colormap), interpolation='nearest')
+        # Hide the right and top spines
+        ax.spines['right'].set_visible(False)
+        ax.spines['left'].set_visible(False)
+        ax.spines['bottom'].set_visible(False)
+        ax.spines['top'].set_visible(False)
+        # Only show ticks on the left and bottom spines
+        ax.yaxis.set_visible(False)
+        ax.xaxis.set_visible(False)
+    plt.subplots_adjust(left=0, bottom=0, right=1, top=1,
+                        wspace=-0.001 if touching else 0.05,
+                        hspace=-0.001 if touching else 0.05)
+    if return_fig:
+        plt.close(fig)
+        return fig
+    else:
+        plt.show()

@@ -3,6 +3,7 @@ XYZPY
 =====
 """
 # XXX: fix h5netcdf attributes recursion error ------------------------------ #
+# TODO: plotters with interact, automatic ----------------------------------- #
 # TODO: combos add to existing dataset. ------------------------------------- #
 # TODO: save to ds every case. For case_runner only? ------------------------ #
 # TODO: function for printing ranges of runs done. -------------------------- #
@@ -31,7 +32,8 @@ from .plot.color import (convert_colors,
                          calc_colors)
 # Making static plots with matplotlib
 from .plot.plotter_matplotlib import (lineplot,
-                                      xyz_lineplot)
+                                      xyz_lineplot,
+                                      visualize_matrix)
 # Making interactive plots with plotly
 from .plot.plotter_plotly import (ishow,
                                   ilineplot,
@@ -39,7 +41,7 @@ from .plot.plotter_plotly import (ishow,
                                   iheatmap,
                                   iscatter,
                                   ihist,
-                                  visualize_matrix)
+                                  ivisualize_matrix)
 # Making interactive plots with bokeh
 from .plot.plotter_bokeh import (blineplot,
                                  xyz_blineplot)
@@ -62,13 +64,14 @@ __all__ = ["Runner",
            "calc_colors",
            "lineplot",
            "xyz_lineplot",
+           "visualize_matrix",
            "ishow",
            "ilineplot",
            "xyz_ilineplot",
            "iheatmap",
            "iscatter",
            "ihist",
-           "visualize_matrix",
+           "ivisualize_matrix",
            "blineplot",
            "xyz_blineplot",
            "unzip",
