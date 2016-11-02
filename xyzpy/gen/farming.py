@@ -1,17 +1,18 @@
 """
 """
+# TODO: harvest_cases
 # TODO: logging
-# TODO: keep last n datasets
 # TODO: file lock
-# TODO: setters with parsers
 # TODO: harvester getter last_ds from runner
-# TODO: save_on=()
-# TODO: split_on=()
+# TODO: save_on=() : save every iteration of this parameter
+# TODO: split_on=() : split save files upon each iteration of this param
+# TODO: setters with parsers
+# TODO: keep last n datasets
 
 import os
 import xarray as xr
 
-from .prepare import(
+from .prepare import (
     _parse_fn_args,
     _parse_var_names,
     _parse_var_dims,
@@ -136,7 +137,7 @@ class Harvester(object):
             runner : Runner instance
                 Performs the runs and describes the results.
             data_name : str
-                File path to save data to.
+                Base file path to save data to.
             engine : str (optional)
                 Internal netcdf engine for xarray to use.
         """
@@ -168,3 +169,7 @@ class Harvester(object):
         self.r.run_combos(combos, **runner_settings)
         if save:
             self.merge_save(self.r.last_ds)
+
+    def harvest_cases(self, cases, save=True, **runner_settings):
+        # TODO
+        pass

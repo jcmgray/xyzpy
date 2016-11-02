@@ -2,6 +2,7 @@
 """
 # TODO: allow/encourage results to be a dict?
 # TODO: add_to_ds
+# TODO: add_to_ds, skip_completed
 # TODO: add straight to array, ds ...
 # TODO: allow combo_runner_to_ds to use output vars as coords --------------- #
 # TODO: time multiprocessing vs dask.distributed

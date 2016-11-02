@@ -270,9 +270,8 @@ def find_missing_cases(ds, ignore_dims=None, show_progbar=False):
             Function arguments and missing cases.
     """
     # Parse ignore_dims
-    ignore_dims = (set() if ignore_dims is None else
-                   {ignore_dims} if isinstance(ignore_dims, str) else
-                   set(ignore_dims))
+    ignore_dims = ({ignore_dims} if isinstance(ignore_dims, str) else
+                   set(ignore_dims) if ignore_dims else set())
 
     # Find all configurations
     fn_args = tuple(coo for coo in ds.coords if coo not in ignore_dims)
