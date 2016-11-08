@@ -7,7 +7,6 @@
 # TODO: harvester getter last_ds from runner
 # TODO: save_on=() : save every iteration of this parameter
 # TODO: split_on=() : split save files upon each iteration of this param
-# TODO: setters with parsers
 # TODO: keep last n datasets
 
 import os
@@ -26,6 +25,10 @@ from .combo_runner import combo_runner_to_ds
 from .case_runner import case_runner_to_ds
 from ..manage import load_ds, save_ds
 
+
+# --------------------------------------------------------------------------- #
+#                                   RUNNER                                    #
+# --------------------------------------------------------------------------- #
 
 class Runner(object):
     """Container class with all the information needed to systematically
@@ -206,6 +209,10 @@ class Runner(object):
             **{**self.default_runner_settings, **runner_settings})
 
 
+# --------------------------------------------------------------------------- #
+#                                 HARVESTER                                   #
+# --------------------------------------------------------------------------- #
+
 class Harvester(object):
     """Container class for collecting and aggregating data to disk.
     """
@@ -226,21 +233,29 @@ class Harvester(object):
         self.engine = engine
         self.full_ds = None
 
-    def merge_save(self, new_ds, create_new=True):
+    @property
+    def last_ds(self):
+        """The dataset containing last runs data.
+        """
+        return self.runner.last_ds
+
+    def merge_save(self, new_ds):
         """Merge a new dataset into the full, on-disk dataset.
         """
-        # Check file exists and can be written to.
+        # Check file exists and can be written to
         if os.access(self.data_name, os.W_OK):
             # Open, merge new data and close.
             self.full_ds = load_ds(self.data_name, engine=self.engine)
             self.full_ds.merge(new_ds, compat='no_conflicts', inplace=True)
             save_ds(self.full_ds, self.data_name, engine=self.engine)
-        elif create_new:
+        # Check that it is not read-only
+        elif os.path.isfile(self.data_name):  # pragma: no cover
+            raise OSError("The file '{}' exists but cannot be written "
+                          "to".format(self.data_name))
+        # Else just create it new
+        else:
             self.full_ds = new_ds.copy(deep=True)
             self.full_ds.to_netcdf(self.data_name, engine=self.engine)
-        else:
-            raise OSError("The file '{}' can not be accesed and `create_new` "
-                          "is set to False.".format(self.data_name))
 
     def harvest_combos(self, combos, save=True, **runner_settings):
         """Run combos, automatically merging into an on-disk dataset.
@@ -250,6 +265,8 @@ class Harvester(object):
             self.merge_save(self.runner.last_ds)
 
     def harvest_cases(self, cases, save=True, **runner_settings):
+        """Run cases, automatically merging into an on-disk dataset.
+        """
         self.runner.run_cases(cases, **runner_settings)
         if save:
             self.merge_save(self.runner.last_ds)

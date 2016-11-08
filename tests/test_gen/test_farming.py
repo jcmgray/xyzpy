@@ -1,11 +1,15 @@
+import os
+import tempfile
+
 import pytest
 import numpy as np
 import xarray as xr
 
-from xyzpy.gen.farming import Runner
+from xyzpy.manage import load_ds
+from xyzpy.gen.farming import Runner, Harvester
 
 
-# Fixtures ------------------------------------------------------------------ #
+# -------------------------------- Fixtures --------------------------------- #
 
 def fn1_x(x):
     return x ** 2
@@ -15,10 +19,10 @@ def fn3_fba(a, b, c):
     sm = a + b + c
     ev = ((a + b + c) % 2 == 0)
     ts = a * (b * np.linspace(0, 1.0, 3) + c)
-    return sm, ev, ts
+    return sm, int(ev), ts
 
 
-# Runner Tests -------------------------------------------------------------- #
+# -------------------------------Runner Tests ------------------------------- #
 
 class TestRunner:
 
@@ -116,12 +120,59 @@ class TestRunner:
         assert r.last_ds.identical(expected_ds)
 
 
-# Harvester Tests ----------------------------------------------------------- #
+# -------------------------- Harvester Tests -------------------------------- #
 
 class TestHarvester:
-    def test_merge_save(self):
-        # TODO
-        pass
+    def test_harvest_combos_new(self):
+        r = Runner(fn3_fba, var_names=['sum', 'even', 'array'],
+                   var_dims={'array': ['time']},
+                   var_coords={'time': np.linspace(0, 1.0, 3)},
+                   constants={'c': 100},
+                   attrs={'fruit': 'apples'})
+        expected_ds = xr.Dataset(
+            coords={'a': [1, 2], 'b': [3, 4], 'time': np.linspace(0, 1.0, 3)},
+            data_vars={'sum': (('a', 'b'), [[104, 105],
+                                            [105, 106]]),
+                       'even': (('a', 'b'), [[True, False],
+                                             [False, True]]),
+                       'array': (('a', 'b', 'time'),
+                                 [[[100, 101.5, 103], [100, 102, 104]],
+                                  [[200, 203, 206], [200, 204, 208]]])},
+            attrs={'c': 100, 'fruit': 'apples'})
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fl_pth = os.path.join(tmpdir, 'test.h5')
+            h = Harvester(r, fl_pth)
+            h.harvest_combos((('a', (1, 2)), ('b', (3, 4))))
+            hds = load_ds(fl_pth)
+        assert h.last_ds.identical(expected_ds)
+        assert h.full_ds.identical(expected_ds)
+        assert hds.identical(expected_ds)
+
+    def test_harvest_combos_merge(self):
+        r = Runner(fn3_fba, var_names=['sum', 'even', 'array'],
+                   var_dims={'array': ['time']},
+                   var_coords={'time': np.linspace(0, 1.0, 3)},
+                   constants={'c': 100},
+                   attrs={'fruit': 'apples'})
+        expected_ds = xr.Dataset(
+            coords={'a': [1, 2], 'b': [3, 4], 'time': np.linspace(0, 1.0, 3)},
+            data_vars={'sum': (('a', 'b'), [[104, 105],
+                                            [105, 106]]),
+                       'even': (('a', 'b'), [[True, False],
+                                             [False, True]]),
+                       'array': (('a', 'b', 'time'),
+                                 [[[100, 101.5, 103], [100, 102, 104]],
+                                  [[200, 203, 206], [200, 204, 208]]])},
+            attrs={'c': 100, 'fruit': 'apples'})
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fl_pth = os.path.join(tmpdir, 'test.h5')
+            h = Harvester(r, fl_pth)
+            h.harvest_combos((('a', (1,)), ('b', (3, 4))))
+            h.harvest_combos((('a', (2,)), ('b', (3, 4))))
+            hds = load_ds(fl_pth)
+        assert not h.last_ds.identical(expected_ds)
+        assert h.full_ds.identical(expected_ds)
+        assert hds.identical(expected_ds)
 
     def test_harvest_combos(self):
         # TODO
