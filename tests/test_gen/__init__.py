@@ -1,9 +1,22 @@
+from dask.delayed import delayed
+
 _GET_MODES = ['THREADED', 'MULTIPROCESS', 'DISTRIBUTED']
 
 
 # FIXTURES ------------------------------------------------------------------ #
 
 def foo3_scalar(a, b, c):
+    assert abs(a) >= 0
+    assert abs(a) < 10
+    assert abs(b) >= 10
+    assert abs(b) < 100
+    assert abs(c) >= 100
+    assert abs(c) < 1000
+    return a + b + c
+
+
+@delayed
+def dfoo3_scalar(a, b, c):
     assert abs(a) >= 0
     assert abs(a) < 10
     assert abs(b) >= 10
@@ -28,7 +41,7 @@ def foo2_array(a, b):
     assert abs(a) < 10
     assert abs(b) >= 10
     assert abs(b) < 100
-    return [b + a + 0.1*i for i in range(10)]
+    return [b + a + 0.1 * i for i in range(10)]
 
 
 def foo2_array_bool(a, b):
@@ -36,7 +49,7 @@ def foo2_array_bool(a, b):
     assert abs(a) < 10
     assert abs(b) >= 10
     assert abs(b) < 100
-    return [b + a + 0.1*i for i in range(10)], a % 2 == 0
+    return [b + a + 0.1 * i for i in range(10)], a % 2 == 0
 
 
 def foo2_array_array(a, b):
@@ -44,8 +57,8 @@ def foo2_array_array(a, b):
     assert abs(a) < 10
     assert abs(b) >= 10
     assert abs(b) < 100
-    return ([b + i*a for i in range(5)],
-            [b - i*a for i in range(5)])
+    return ([b + i * a for i in range(5)],
+            [b - i * a for i in range(5)])
 
 
 def foo2_zarray1_zarray2(a, b):

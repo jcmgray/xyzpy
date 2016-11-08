@@ -2,7 +2,6 @@
 """
 import functools
 import operator
-import inspect
 
 import tqdm
 
@@ -55,13 +54,6 @@ def _get_fn_name(fn):
             return fn.key.partition('-')[0]
         except AttributeError:  # try functools.partial function syntax
             return fn.func.__name__
-
-
-def _get_fn_args(fn):
-    """Try to inspect a function's arguments.
-    """
-    sig = inspect.signature(fn)
-    return tuple(sig.parameters)
 
 
 def progbar(it=None, nb=False, **kwargs):

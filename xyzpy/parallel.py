@@ -8,7 +8,7 @@ from .utils import progbar
 
 
 # --------------------------------------------------------------------------- #
-# MULTIPROCESSING                                                             #
+#                            MULTIPROCESSING                                  #
 # --------------------------------------------------------------------------- #
 
 @functools.lru_cache(1)
@@ -26,7 +26,7 @@ def _start_multiprocessing_client(n=None):
 
 
 # --------------------------------------------------------------------------- #
-# DASK.DISTRIBUTED                                                            #
+#                             DASK.DISTRIBUTED                                #
 # --------------------------------------------------------------------------- #
 
 
@@ -45,7 +45,8 @@ class DaskTqdmProgbar(Callback):
         self.kwargs = kwargs
 
     def _start(self, dsk):
-        if self.fn_name is None:
+        if self.fn_name is None:  # pragma: no cover
+            #  if function name not defined, just use total graph nodes
             total = len(dsk.keys())
         else:
             total = sum(self.fn_name in k for k in dsk.keys())

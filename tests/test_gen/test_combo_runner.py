@@ -12,6 +12,7 @@ from xyzpy.gen.combo_runner import (
 from . import (
     _GET_MODES,
     foo3_scalar,
+    dfoo3_scalar,
     foo3_float_bool,
     foo2_array,
     foo2_array_bool,
@@ -44,8 +45,8 @@ class TestComboRunner:
 
     def test_dict(self):
         combos = OrderedDict((('a', [1, 2]),
-                             ('b', [10, 20, 30]),
-                             ('c', [100, 200, 300, 400])))
+                              ('b', [10, 20, 30]),
+                              ('c', [100, 200, 300, 400])))
         x = combo_runner(foo3_scalar, combos)
         xn = (np.array([1, 2]).reshape((2, 1, 1)) +
               np.array([10, 20, 30]).reshape((1, 3, 1)) +
@@ -72,16 +73,17 @@ class TestComboRunner:
               np.array([10, 20, 30]).reshape((1, 3, 1)) +
               np.array([100, 200, 300, 400]).reshape((1, 1, 4)))
         yn = (np.array([1, 2]).reshape((2, 1, 1)) %
-              np.array([2]*24).reshape((2, 3, 4))) == 0
+              np.array([2] * 24).reshape((2, 3, 4))) == 0
         assert_allclose(x, xn)
         assert_allclose(y, yn)
 
     @pytest.mark.parametrize('scheduler', _GET_MODES)
-    def test_parallel_basic(self, scheduler):
+    @pytest.mark.parametrize('fn', (foo3_scalar, dfoo3_scalar))
+    def test_parallel_basic(self, scheduler, fn):
         combos = (('a', [1, 2]),
                   ('b', [10, 20, 30]),
                   ('c', [100, 200, 300, 400]))
-        x = combo_runner(foo3_scalar, combos, num_workers=2,
+        x = combo_runner(fn, combos, num_workers=2,
                          scheduler=scheduler)
         xn = (np.array([1, 2]).reshape((2, 1, 1)) +
               np.array([10, 20, 30]).reshape((1, 3, 1)) +
@@ -104,8 +106,8 @@ class TestComboRunner:
     @pytest.mark.parametrize('scheduler', _GET_MODES)
     def test_parallel_dict(self, scheduler):
         combos = OrderedDict((('a', [1, 2]),
-                             ('b', [10, 20, 30]),
-                             ('c', [100, 200, 300, 400])))
+                              ('b', [10, 20, 30]),
+                              ('c', [100, 200, 300, 400])))
         x = [*combo_runner(foo3_scalar, combos, num_workers=2,
                            scheduler=scheduler)]
         xn = (np.array([1, 2]).reshape((2, 1, 1)) +
