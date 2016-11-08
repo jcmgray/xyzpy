@@ -108,7 +108,7 @@ def find_union_coords(cases):
             yield list(set(x))
 
 
-def all_missing_ds(coords, var_names, all_dims, var_types):
+def all_missing_ds(coords, var_names, all_dims, var_types, attrs=None):
     """Make a dataset whose data is all missing.
 
     Parameters
@@ -123,24 +123,22 @@ def all_missing_ds(coords, var_names, all_dims, var_types):
             corresponding list of types for each variable
     """
     # Blank dataset with appropirate coordinates
-    ds = xr.Dataset(coords=coords)
+    ds = xr.Dataset(coords=coords, attrs=attrs)
     for v_name, v_dims, v_type in zip(var_names, all_dims, var_types):
         shape = tuple(ds[d].size for d in v_dims)
         if v_type == int or v_type == float:
             # Warn about upcasting int to float?
             nodata = np.tile(np.nan, shape)
         elif v_type == complex:
-            nodata = np.tile(np.nan + np.nan*1.0j, shape)
+            nodata = np.tile(np.nan + np.nan * 1.0j, shape)
         else:
             nodata = np.tile(None, shape).astype(object)
         ds[v_name] = (v_dims, nodata)
     return ds
 
 
-def _cases_to_ds(results, fn_args, cases, var_names,
-                 var_dims=None,
-                 var_coords=None,
-                 add_to_ds=None,
+def _cases_to_ds(results, fn_args, cases, var_names, add_to_ds=None,
+                 var_dims=None, var_coords=None, constants=None, attrs=None,
                  overwrite=False):
     """ Take a list of results and configurations that generate them and turn it
     into a `xarray.Dataset`.
@@ -176,11 +174,14 @@ def _cases_to_ds(results, fn_args, cases, var_names,
 
         # Create new, 'all missing' dataset if required
         ds = all_missing_ds(coords={**case_coords, **var_coords},
-                            var_names=var_names,
+                            var_names=var_names, attrs=attrs,
                             all_dims=tuple(fn_args + var_dims[k]
                                            for k in var_names),
                             var_types=(np.asarray(x).dtype
                                        for x in results[0]))
+        if constants:
+            ds.attrs.update({k: v for k, v in constants.items()
+                             if k not in ds.coords})
 
     # Go through cases, overwriting nan with results
     for res, cfg in zip(results, cases):
@@ -202,6 +203,7 @@ def case_runner_to_ds(fn, fn_args, cases, var_names,
                       var_coords=None,
                       constants=None,
                       resources=None,
+                      attrs=None,
                       add_to_ds=None,
                       overwrite=False,
                       parse=True,
@@ -243,6 +245,8 @@ def case_runner_to_ds(fn, fn_args, cases, var_names,
                       var_names=var_names,
                       var_dims=var_dims,
                       var_coords=var_coords,
+                      constants=constants,
+                      attrs=attrs,
                       add_to_ds=add_to_ds,
                       overwrite=overwrite)
     return ds

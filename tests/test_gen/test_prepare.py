@@ -1,5 +1,5 @@
 import pytest
-from ...gen.prepare import (
+from xyzpy.gen.prepare import (
     _parse_var_names,
     _parse_var_dims,
 )

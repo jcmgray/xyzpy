@@ -4,7 +4,7 @@ import pytest
 import numpy as np
 from numpy.testing import assert_allclose
 
-from ...gen.combo_runner import (
+from xyzpy.gen.combo_runner import (
     combo_runner,
     _combos_to_ds,
     combo_runner_to_ds,

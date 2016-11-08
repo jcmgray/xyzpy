@@ -5,7 +5,7 @@ from pytest import fixture, raises, mark
 import numpy as np
 import xarray as xr
 
-from ..manage import (
+from xyzpy.manage import (
     xrsmoosh,
     load_ds,
     save_ds,

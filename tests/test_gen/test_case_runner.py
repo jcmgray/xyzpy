@@ -3,14 +3,14 @@ import xarray as xr
 import numpy as np
 from numpy.testing import assert_allclose
 
-from ...gen.case_runner import (
+from xyzpy.gen.case_runner import (
     case_runner,
     _cases_to_ds,
     case_runner_to_ds,
     find_missing_cases,
     fill_missing_cases,
 )
-from ...gen.combo_runner import combo_runner_to_ds
+from xyzpy.gen.combo_runner import combo_runner_to_ds
 from . import (
     _GET_MODES,
     foo3_scalar,

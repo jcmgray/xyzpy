@@ -1,4 +1,4 @@
-from ..utils import (
+from xyzpy.utils import (
     progbar
 )
 

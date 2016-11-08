@@ -4,9 +4,9 @@ import numpy as np
 import xarray as xr
 import matplotlib
 
-from ..plot.color import convert_colors
-from ..plot.plotter_matplotlib import lineplot
-from ..plot.plotter_plotly import ilineplot
+from xyzpy.plot.color import convert_colors
+from xyzpy.plot.plotter_matplotlib import lineplot
+from xyzpy.plot.plotter_plotly import ilineplot
 
 
 DISPLAY_PRESENT = 'DISPLAY' in os.environ
