@@ -14,12 +14,12 @@ def _COLORS_MATPLOTLIB_TO_PLOTLY(cols):
     for col in cols:
         if len(col) == 3:  # append alpha value
             col = itertools.chain(col, (1,))
-        yield "rgba" + str(tuple(int(255*rgb) for rgb in col))
+        yield "rgba" + str(tuple(int(255 * rgb) for rgb in col))
 
 
 def _COLORS_MATPLOTLIB_TO_BOKEH(cols):
     for col in cols:
-        yield (int(255*col[0]), int(255*col[1]), int(255*col[2]), col[3])
+        yield (int(255 * col[0]), int(255 * col[1]), int(255 * col[2]), col[3])
 
 
 _COLOR_CONVERT_METHODS = {
@@ -108,7 +108,7 @@ def _xyz_colormaps(name):
 
 
 def calc_colors(ds, z_coo, colormap="xyz", log_scale=False,
-                reverse=False, outformat='MATPLOTLIB'):
+                reverse=False, outformat='MATPLOTLIB', zlims=(None, None)):
     """Calculate colors for a set of lines given their relative position
     in the range of `z_coo`.
 
@@ -128,11 +128,17 @@ def calc_colors(ds, z_coo, colormap="xyz", log_scale=False,
     cmap = _xyz_colormaps(colormap)
 
     try:
-        zmin, zmax = ds[z_coo].values.min(), ds[z_coo].values.max()
+        zmin = zlims[0]
+        if zmin is None:
+            zmin = ds[z_coo].values.min()
+        zmax = zlims[1]
+        if zmax is None:
+            zmax = ds[z_coo].values.max()
+
         # Relative function
         f = log if log_scale else lambda a: a
         # Relative place in range according to function
-        rvals = [1 - (f(z)-f(zmin))/(f(zmax)-f(zmin))
+        rvals = [1 - (f(z) - f(zmin)) / (f(zmax) - f(zmin))
                  for z in ds[z_coo].values]
     except TypeError:  # no relative coloring possible e.g. for strings
         rvals = np.linspace(0, 1.0, ds[z_coo].size)

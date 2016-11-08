@@ -81,6 +81,7 @@ def lineplot(ds, y_coo, x_coo, z_coo=None,
              legend_loc=0,            # legend location
              ztitle=None,             # legend title
              zlabels=None,            # legend labels
+             zlims=(None, None),      # Scaling limits for the colormap
              legend_ncol=1,           # number of columns in the legend
              legend_bbox=None,        # Where to anchor the legend to
              # x-axis options
@@ -148,7 +149,7 @@ def lineplot(ds, y_coo, x_coo, z_coo=None,
     z_vals, cols, zlabels, gen_xy = _prepare_data_and_styles(
         ds=ds, y_coo=y_coo, x_coo=x_coo, z_coo=z_coo, zlabels=zlabels,
         colors=colors, colormap=colormap, colormap_log=colormap_log,
-        colormap_reverse=colormap_reverse, engine='MATPLOTLIB')
+        colormap_reverse=colormap_reverse, engine='MATPLOTLIB', zlims=zlims)
 
     # Decide on using markers, and set custom markers
     if markers is None:
@@ -267,10 +268,30 @@ def _choose_squarest_grid(x):
     return m, n
 
 
-def visualize_matrix(x, figsize=(6, 6),
+def visualize_matrix(x, figsize=(4, 4),
                      colormap='Greys',
                      touching=False,
+                     zlims=(None, None),
+                     gridsize=None,
                      return_fig=True):
+    """Plot the elements of one or more matrices.
+
+    Parameters
+    ----------
+        x : array
+            2d-matrix to plot.
+        figsize : tuple
+            Total size of plot.
+        colormap : str
+            Colormap to use to weight elements.
+        touching : bool
+            If plotting more than one matrix, whether the edges should touch.
+        zlims:
+            Scaling parameters for the element colorings, (i.e. if these are
+            set then the weightings are not normalized).
+        return_fig : bool
+            whether to return the figure created or just show it.
+    """
     import matplotlib.pyplot as plt
     from xyzpy.plot.color import _xyz_colormaps
 
@@ -279,13 +300,17 @@ def visualize_matrix(x, figsize=(6, 6),
         x = (x,)
 
     nx = len(x)
-    m, n = _choose_squarest_grid(nx)
-    subplots = tuple((m, n, i) for i in range(1, nx+1))
+    if gridsize:
+        m, n = gridsize
+    else:
+        m, n = _choose_squarest_grid(nx)
+    subplots = tuple((m, n, i) for i in range(1, nx + 1))
 
     for img, subplot in zip(x, subplots):
 
         ax = fig.add_subplot(*subplot)
-        ax.imshow(img, cmap=_xyz_colormaps(colormap), interpolation='nearest')
+        ax.imshow(img, cmap=_xyz_colormaps(colormap), interpolation='nearest',
+                  vmin=zlims[0], vmax=zlims[1])
         # Hide the right and top spines
         ax.spines['right'].set_visible(False)
         ax.spines['left'].set_visible(False)

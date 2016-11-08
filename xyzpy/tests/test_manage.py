@@ -7,8 +7,8 @@ import xarray as xr
 
 from ..manage import (
     xrsmoosh,
-    xrload,
-    xrsave,
+    load_ds,
+    save_ds,
 )
 
 
@@ -103,9 +103,9 @@ class TestSaveAndLoad:
                        ('netcdf4', 'netcdf4')])
     def test_io_only_real(self, ds_real, engine_save, engine_load):
         with tempfile.TemporaryDirectory() as tmpdir:
-            xrsave(ds_real, os.path.join(tmpdir, "test.h5"),
-                   engine=engine_save)
-            ds2 = xrload(os.path.join(tmpdir, "test.h5"), engine=engine_load)
+            save_ds(ds_real, os.path.join(tmpdir, "test.h5"),
+                    engine=engine_save)
+            ds2 = load_ds(os.path.join(tmpdir, "test.h5"), engine=engine_load)
             assert ds_real.equals(ds2)
 
     @mark.parametrize(("engine_save, engine_load"),
@@ -115,6 +115,6 @@ class TestSaveAndLoad:
                        mark.xfail(('netcdf4', 'netcdf4'))])
     def test_io_complex_data(self, ds1, engine_save, engine_load):
         with tempfile.TemporaryDirectory() as tmpdir:
-            xrsave(ds1, os.path.join(tmpdir, "test.h5"), engine=engine_save)
-            ds2 = xrload(os.path.join(tmpdir, "test.h5"), engine=engine_load)
+            save_ds(ds1, os.path.join(tmpdir, "test.h5"), engine=engine_save)
+            ds2 = load_ds(os.path.join(tmpdir, "test.h5"), engine=engine_load)
             assert ds1.identical(ds2)

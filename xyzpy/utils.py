@@ -76,7 +76,7 @@ def progbar(it=None, nb=False, **kwargs):
         **kwargs: dict-like
             additional options to send to tqdm
     """
-    defaults = {'ascii': True, 'smoothing': 0.1}
+    defaults = {'ascii': True, 'smoothing': 0.0}
     # Overide defaults with custom kwargs
     settings = {**defaults, **kwargs}
     if nb:  # pragma: no cover

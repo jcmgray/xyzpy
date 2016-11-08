@@ -32,7 +32,7 @@ def _auto_add_extension(file_name, engine):
     return file_name
 
 
-def xrsave(ds, file_name, engine="h5netcdf"):
+def save_ds(ds, file_name, engine="h5netcdf"):
     """Saves a xarray dataset.
 
     Parameters
@@ -49,7 +49,7 @@ def xrsave(ds, file_name, engine="h5netcdf"):
     ds.to_netcdf(file_name, engine=engine)
 
 
-def xrload(file_name, engine="h5netcdf", load_to_mem=True, create_new=False):
+def load_ds(file_name, engine="h5netcdf", load_to_mem=True, create_new=False):
     """Loads a xarray dataset.
 
     Parameters
@@ -81,6 +81,10 @@ def xrload(file_name, engine="h5netcdf", load_to_mem=True, create_new=False):
         else:
             raise e2
     return ds
+
+
+xrsave = save_ds
+xrload = load_ds
 
 
 def nonnull_compatible(first, second):

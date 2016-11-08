@@ -1,5 +1,6 @@
 """
 """
+# TODO: tests
 # TODO: harvest_cases
 # TODO: logging
 # TODO: file lock
@@ -10,7 +11,6 @@
 # TODO: keep last n datasets
 
 import os
-import xarray as xr
 
 from .prepare import (
     _parse_fn_args,
@@ -24,12 +24,14 @@ from .prepare import (
 )
 from .combo_runner import combo_runner_to_ds
 from .case_runner import case_runner_to_ds
+from ..manage import load_ds, save_ds
 
 
 class Runner(object):
     """Container class with all the information needed to systematically
     run a function over many parameters and capture the output in a dataset.
     """
+
     def __init__(self, fn, var_names,
                  fn_args=None,
                  var_dims=None,
@@ -130,6 +132,7 @@ class Runner(object):
 class Harvester(object):
     """Container class for collecting and aggregating data to disk.
     """
+
     def __init__(self, runner, data_name, engine='h5netcdf'):
         """
         Parameters
@@ -151,11 +154,9 @@ class Harvester(object):
         # Check file exists and can be written to.
         if os.access(self.data_name, os.W_OK):
             # Open, merge new data and close.
-            self.full_ds = xr.open_dataset(self.data_name, engine=self.engine)
-            self.full_ds.load()
-            self.full_ds.close()
+            self.full_ds = load_ds(self.data_name, engine=self.engine)
             self.full_ds.merge(new_ds, compat='no_conflicts', inplace=True)
-            self.full_ds.to_netcdf(self.data_name, engine=self.engine)
+            save_ds(self.full_ds, self.data_name, engine=self.engine)
         elif create_new:
             self.full_ds = new_ds.copy(deep=True)
             self.full_ds.to_netcdf(self.data_name, engine=self.engine)

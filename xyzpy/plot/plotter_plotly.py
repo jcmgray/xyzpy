@@ -53,6 +53,7 @@ def ilineplot(ds, y_coo, x_coo, z_coo=None,
               legend_ncol=None,       # XXX: unused
               ztitle=None,            # XXX: unused
               zlabels=None,           # legend labels
+              zlims=(None, None),      # Scaling limits for the colormap
               # x-axis options
               xtitle=None,
               xlims=None,
@@ -92,7 +93,7 @@ def ilineplot(ds, y_coo, x_coo, z_coo=None,
     z_vals, cols, zlabels, gen_xy = _prepare_data_and_styles(
         ds=ds, y_coo=y_coo, x_coo=x_coo, z_coo=z_coo, zlabels=zlabels,
         colors=colors, colormap=colormap, colormap_log=colormap_log,
-        colormap_reverse=colormap_reverse, engine='PLOTLY')
+        colormap_reverse=colormap_reverse, engine='PLOTLY', zlims=zlims)
 
     # Decide on using markers, and set custom markers and line-styles
     if markers is None:
@@ -301,13 +302,13 @@ def ivisualize_matrix(a, colormap="Greys", nb=True, return_fig=False,
     layout = {"height": 500, "width": 500,
               'margin': Margin(autoexpand=True, l=30, r=30,
                                b=30, t=30, pad=0),
-              "xaxis": {"range": (-1/2, m - 1/2),
+              "xaxis": {"range": (-1 / 2, m - 1 / 2),
                         "zeroline": False,
                         "showline": False,
                         "autotick": True,
                         "ticks": "",
                         "showticklabels": False},
-              "yaxis": {"range": (n - 1/2, -1/2),
+              "yaxis": {"range": (n - 1 / 2, -1 / 2),
                         "zeroline": False,
                         "showline": False,
                         "autotick": True,

@@ -8,10 +8,9 @@ import numpy as np
 from .color import calc_colors, convert_colors
 
 
-def _prepare_data_and_styles(ds, y_coo, x_coo, z_coo, zlabels,
+def _prepare_data_and_styles(ds, y_coo, x_coo, z_coo, zlabels, zlims,
                              colors, colormap, colormap_log,
-                             colormap_reverse,
-                             engine):
+                             colormap_reverse, engine):
     # Work out whether to iterate over multiple lines
     multi_var = False
     if z_coo is not None:
@@ -53,7 +52,8 @@ def _prepare_data_and_styles(ds, y_coo, x_coo, z_coo, zlabels,
                                 outformat=engine,
                                 colormap=colormap,
                                 log_scale=colormap_log,
-                                reverse=colormap_reverse))
+                                reverse=colormap_reverse,
+                                zlims=zlims))
     elif colors:
         cols = itertools.cycle(convert_colors(colors, outformat=engine))
     else:

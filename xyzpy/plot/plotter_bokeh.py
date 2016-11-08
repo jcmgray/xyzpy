@@ -34,6 +34,7 @@ def blineplot(ds, y_coo, x_coo, z_coo=None,
               legend_loc=0,            # legend location
               ztitle=None,             # legend title
               zlabels=None,            # legend labels
+              zlims=(None, None),      # Scaling limits for the colormap
               legend_ncol=1,           # number of columns in the legend
               legend_bbox=None,        # Where to anchor the legend to
               # x-axis options
@@ -102,7 +103,7 @@ def blineplot(ds, y_coo, x_coo, z_coo=None,
     z_vals, cols, zlabels, gen_xy = _prepare_data_and_styles(
         ds=ds, y_coo=y_coo, x_coo=x_coo, z_coo=z_coo, zlabels=zlabels,
         colors=colors, colormap=colormap, colormap_log=colormap_log,
-        colormap_reverse=colormap_reverse, engine='BOKEH')
+        colormap_reverse=colormap_reverse, engine='BOKEH', zlims=zlims)
 
     # Make figure and custom lines etc -------------------------------------- #
     p = figure(width=int(figsize[0] * 100 + 100),
@@ -140,12 +141,12 @@ def blineplot(ds, y_coo, x_coo, z_coo=None,
         source = ColumnDataSource(data={'x': x, 'y': y,
                                         'z_coo': [zlabel] * len(x)})
 
-        l = p.line('x', 'y', source=source, line_width=2, color=col)
+        line = p.line('x', 'y', source=source, line_width=2, color=col)
         if markers:
             m = p.circle('x', 'y', source=source, name=zlabel, color=col)
-            legend_items.append((zlabel, [l, m]))
+            legend_items.append((zlabel, [line, m]))
         else:
-            legend_items.append((zlabel, [l]))
+            legend_items.append((zlabel, [line]))
 
     p.add_layout(Legend(items=legend_items, location=(0, 0)), 'right')
 
