@@ -21,6 +21,6 @@ else
   conda config --set always_yes yes --set changeps1 no
   conda update -q conda
   source activate test-environment
-  conda update -q --all
+  conda update -q --file $DIR/requirements-py35.yml
   pip install -U coveralls codeclimate-test-reporter
 fi
