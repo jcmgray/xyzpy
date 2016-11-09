@@ -4,7 +4,6 @@
 
 import numpy as np
 import xarray as xr
-import xarray.ufuncs as xrufuncs
 
 
 _DEFAULT_FN_CACHE_PATH = '__xyz_cache__'
@@ -91,7 +90,7 @@ def nonnull_compatible(first, second):
     """Check whether two (aligned) datasets have any conflicting values.
     """
     # TODO assert common coordinates are aligned?
-    both_not_null = xrufuncs.logical_not(first.isnull() | second.isnull())
+    both_not_null = first.notnull() & second.notnull()
     return first.where(both_not_null).equals(second.where(both_not_null))
 
 
