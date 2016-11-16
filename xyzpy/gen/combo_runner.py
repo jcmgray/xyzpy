@@ -68,11 +68,13 @@ def _getter_with_progress(pbar=None):
     """
     """
     def getter(future):
-        pbar.update()
         try:
-            return future.result()
+            res = future.result()
         except AttributeError:
-            return future.get()
+            res = future.get()
+        pbar.update()
+        return res
+
     return getter
 
 
