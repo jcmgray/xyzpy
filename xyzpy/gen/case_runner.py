@@ -1,12 +1,14 @@
 """Functions for systematically evaluating a function over specific cases.
 """
+# TODO: add pool
+
 import itertools
 from cytoolz import concat
 import numpy as np
 import xarray as xr
 from dask.delayed import delayed, compute
 
-from ..parallel import DaskTqdmProgbar, _dask_get
+from .dask_stuff import DaskTqdmProgbar, _dask_get
 from ..utils import _get_fn_name, progbar
 from .prepare import (
     _parse_fn_args,

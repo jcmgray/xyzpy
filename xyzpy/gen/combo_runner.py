@@ -1,19 +1,17 @@
 """Functions for systematically evaluating a function over all combinations.
 """
-# TODO: allow/encourage results to be a dict?
-# TODO: add_to_ds
-# TODO: add_to_ds, skip_completed
-# TODO: add straight to array, ds ...
+# TODO: allow/encourage results to be a dict? ------------------------------- #
+# TODO: add_to_ds, skip_completed? ------------------------------------------ #
+# TODO: add straight to array, ds ... --------------------------------------- #
 # TODO: allow combo_runner_to_ds to use output vars as coords --------------- #
-# TODO: time multiprocessing vs dask.distributed
-# TODO: better checks for var_name compatilibtiy with fn_args eg.
+# TODO: time multiprocessing vs dask.distributed ---------------------------- #
+# TODO: better checks for var_name compatilibtiy with fn_args eg. ----------- #
 
 import xarray as xr
 import numpy as np
 from dask.delayed import delayed, compute
-
 from ..utils import _get_fn_name, prod, progbar, update_upon_eval, unzip
-from ..parallel import _dask_get, DaskTqdmProgbar
+from .dask_stuff import _dask_get, DaskTqdmProgbar
 from .prepare import (
     _parse_var_names,
     _parse_var_dims,
@@ -25,8 +23,8 @@ from .prepare import (
 )
 
 
-def _nested_submit(fn, combos, kwds, delay=False):
-    """Recursively submit jobs as delayed objects.
+def _nested_submit(fn, combos, kwds, delay=False, pool=None):
+    """Recursively submit jobs directly, as delayed objects or to a pool.
 
     Parameters
     ----------
@@ -38,6 +36,8 @@ def _nested_submit(fn, combos, kwds, delay=False):
             Constant keyword arguments not to iterate over.
         delay : bool
             Whether to wrap the function as `delayed` (for parallel eval).
+        pool : Executor pool
+            Pool-executor-like class implementing a submit method.
 
     Returns
     -------
@@ -46,13 +46,45 @@ def _nested_submit(fn, combos, kwds, delay=False):
     """
     arg, inputs = combos[0]
     if len(combos) == 1:
-        if delay:
+        if pool:
+            return [pool.submit(fn, **kwds, **{arg: x}) for x in inputs]
+        elif delay:
             return [delayed(fn)(**kwds, **{arg: x}) for x in inputs]
         else:
             return [fn(**kwds, **{arg: x}) for x in inputs]
     else:
-        return [_nested_submit(fn, combos[1:], {**kwds, arg: x}, delay=delay)
-                for x in inputs]
+        return [_nested_submit(fn, combos[1:], {**kwds, arg: x}, delay=delay,
+                               pool=pool) for x in inputs]
+
+
+def _nested_get(futures, ndim, getter):
+    """Recusively get results from nested futures.
+    """
+    return ([getter(fut) for fut in futures] if ndim == 1 else
+            [_nested_get(fut, ndim - 1, getter) for fut in futures])
+
+
+def _getter_with_progress(pbar=None):
+    """
+    """
+    def getter(future):
+        pbar.update()
+        try:
+            return future.result()
+        except AttributeError:
+            return future.get()
+    return getter
+
+
+def _mpi_combo_runner_pool(fn, combos, constants, hide_progbar, n,
+                           num_workers=None):
+    from mpi4py.futures import MPIPoolExecutor
+    with progbar(total=n, disable=hide_progbar) as pbar:
+        getter = _getter_with_progress(pbar)
+        with MPIPoolExecutor(num_workers) as pool:
+            futures = _nested_submit(fn, combos, constants, pool=pool)
+            results = _nested_get(futures, len(combos), getter)
+    return results
 
 
 def _combo_runner(fn, combos, constants,
@@ -60,13 +92,28 @@ def _combo_runner(fn, combos, constants,
                   parallel=False,
                   num_workers=None,
                   scheduler='m',
+                  pool=None,
                   hide_progbar=False):
     """Core combo runner, i.e. no parsing of arguments.
     """
-    fn_name = _get_fn_name(fn)
+    n = prod(len(x) for _, x in combos)
 
-    # Evaluate combos in parallel
-    if parallel or num_workers:
+    # Use a supplied pool to run combos
+    if pool:
+        with progbar(total=n, disable=hide_progbar) as pbar:
+            getter = _getter_with_progress(pbar)
+            futures = _nested_submit(fn, combos, constants, pool=pool)
+            results = _nested_get(futures, len(combos), getter)
+
+    # Spawn an mpi pool to run combos
+    elif parallel == 'mpi_spawn':
+        results = _mpi_combo_runner_pool(fn, combos, constants,
+                                         hide_progbar, n=n,
+                                         num_workers=num_workers)
+
+    # Evaluate combos using dask
+    elif parallel or num_workers or scheduler:
+        fn_name = _get_fn_name(fn)
         with DaskTqdmProgbar(fn_name, disable=hide_progbar):
             jobs = _nested_submit(fn, combos, constants, delay=True)
             if scheduler and isinstance(scheduler, str):
@@ -75,7 +122,6 @@ def _combo_runner(fn, combos, constants,
 
     # Evaluate combos sequentially
     else:
-        n = prod(len(x) for _, x in combos)
         with progbar(total=n, disable=hide_progbar) as p:
             # Wrap the function such that the progbar is updated upon each call
             fn = update_upon_eval(fn, p)
@@ -88,6 +134,7 @@ def combo_runner(fn, combos, constants=None,
                  split=False,
                  parallel=False,
                  scheduler='t',
+                 pool=None,
                  num_workers=None,
                  hide_progbar=False):
     """Take a function fn and analyse it over all combinations of named
@@ -129,6 +176,7 @@ def combo_runner(fn, combos, constants=None,
                          split=split,
                          parallel=parallel,
                          scheduler=scheduler,
+                         pool=pool,
                          num_workers=num_workers,
                          hide_progbar=hide_progbar)
 

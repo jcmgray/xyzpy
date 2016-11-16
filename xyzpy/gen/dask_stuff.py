@@ -1,33 +1,8 @@
 """Parallel work and scheduling.
 """
 import functools
-
 from dask.callbacks import Callback
-
-from .utils import progbar
-
-
-# --------------------------------------------------------------------------- #
-#                            MULTIPROCESSING                                  #
-# --------------------------------------------------------------------------- #
-
-@functools.lru_cache(1)
-def _start_multiprocessing_client(n=None):
-    import multiprocessing
-    p = multiprocessing.Pool(n)
-
-    def _submit(fn, *args, **kwargs):
-        future = p.apply_async(fn, args, kwargs)
-        future.result = future.get
-        return future
-
-    p.submit = _submit
-    return p
-
-
-# --------------------------------------------------------------------------- #
-#                             DASK.DISTRIBUTED                                #
-# --------------------------------------------------------------------------- #
+from ..utils import progbar
 
 
 class DaskTqdmProgbar(Callback):
@@ -69,16 +44,6 @@ class DaskTqdmProgbar(Callback):
         self.pbar.close()
 
 
-@functools.lru_cache(1)
-def _distributed_client(n=None):
-    """Return a dask.distributed client, but cache it.
-    """
-    import distributed
-    cluster = distributed.LocalCluster(n, scheduler_port=0)
-    client = distributed.Client(cluster)
-    return client
-
-
 def _dask_get(get_mode, num_workers=None):
     """
     """
@@ -93,3 +58,15 @@ def _dask_get(get_mode, num_workers=None):
         return client.get
     else:
         raise ValueError("\'" + get_mode + " \' is not a valid scheduler.")
+
+
+# --------------------------- DASK.DISTRIBUTED ------------------------------ #
+
+@functools.lru_cache(1)
+def _distributed_client(n=None):
+    """Return a dask.distributed client, but cache it.
+    """
+    import distributed
+    cluster = distributed.LocalCluster(n, scheduler_port=0)
+    client = distributed.Client(cluster)
+    return client
