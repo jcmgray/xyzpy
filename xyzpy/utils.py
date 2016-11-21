@@ -2,7 +2,7 @@
 """
 import functools
 import operator
-
+import itertools
 import tqdm
 
 
@@ -43,6 +43,24 @@ def unzip(its, zip_level=1):
     return zip(*_unzipper(its, zip_level)) if zip_level else its
 
 
+def flatten(its, n):
+    """Take the n-dimensional nested iterable its and flatten it.
+
+    Parameters
+    ----------
+        its : nested iterable
+        n : number of dimensions
+
+    Returns
+    -------
+        flattened iterable of all items
+    """
+    if n > 1:
+        return itertools.chain(*(flatten(it, n - 1) for it in its))
+    else:
+        return its
+
+
 def _get_fn_name(fn):
     """Try to inspect a function's name, taking into account several common
     non-standard types of function: dask, functools.partial ...
@@ -80,6 +98,7 @@ def update_upon_eval(fn, pbar):
     """Decorate `fn` such that every time it is called, `pbar` is updated
     """
     def new_fn(*args, **kwargs):
+        result = fn(*args, **kwargs)
         pbar.update()
-        return fn(*args, **kwargs)
+        return result
     return new_fn

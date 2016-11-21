@@ -1,3 +1,6 @@
+# TODO: function_str i.e. (a, b, c) -> (x[t], y[t,w], z)
+
+
 from cytoolz import isiterable
 
 
@@ -14,6 +17,9 @@ def dictify(x):
         return dict(x)
     else:
         return dict()
+
+
+_parse_fn_args = _str_2_tuple
 
 
 # combo_runner -------------------------------------------------------------- #
@@ -37,9 +43,6 @@ def _parse_combo_results(results, var_names):
 
 
 # case_runner --------------------------------------------------------------- #
-
-_parse_fn_args = _str_2_tuple
-
 
 def _parse_cases(cases):
     """
@@ -125,6 +128,7 @@ def _parse_var_dims(var_dims, var_names):
                          "output dimensions mapping.")
 
     return new_var_dims
+
 
 _parse_var_coords = dictify
 _parse_constants = dictify

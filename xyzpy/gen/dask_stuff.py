@@ -2,6 +2,7 @@
 """
 import functools
 from dask.callbacks import Callback
+from distributed.client import CancelledError
 from ..utils import progbar
 
 
@@ -44,7 +45,7 @@ class DaskTqdmProgbar(Callback):
         self.pbar.close()
 
 
-def _dask_get(get_mode, num_workers=None):
+def _dask_scheduler_get(get_mode, num_workers=None):
     """
     """
     if get_mode.upper() in {'T', 'THREADED'}:
@@ -57,7 +58,7 @@ def _dask_get(get_mode, num_workers=None):
         client = _distributed_client(num_workers)
         return client.get
     else:
-        raise ValueError("\'" + get_mode + " \' is not a valid scheduler.")
+        raise ValueError("\'{}\' is not a valid scheduler.".format(get_mode))
 
 
 # --------------------------- DASK.DISTRIBUTED ------------------------------ #
@@ -70,3 +71,10 @@ def _distributed_client(n=None):
     cluster = distributed.LocalCluster(n, scheduler_port=0)
     client = distributed.Client(cluster)
     return client
+
+
+def _distributed_get(future):
+    try:
+        return future.result()
+    except (CancelledError, TypeError):
+        return future._stored_result
