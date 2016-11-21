@@ -239,6 +239,14 @@ class Harvester(object):
         """
         return self.runner.last_ds
 
+    def merge_into_full_ds(self, new_ds):
+        """Merge a new dataset into the in-memory full dataset.
+        """
+        if self.full_ds is None:
+            self.full_ds = new_ds.copy(deep=True)
+        else:
+            self.full_ds.merge(new_ds, compat='no_conflicts', inplace=True)
+
     def merge_save(self, new_ds):
         """Merge a new dataset into the full, on-disk dataset.
         """
@@ -263,6 +271,8 @@ class Harvester(object):
         self.runner.run_combos(combos, **runner_settings)
         if save:
             self.merge_save(self.runner.last_ds)
+        else:
+            self.merge_into_full_ds(self.runner.last_ds)
 
     def harvest_cases(self, cases, save=True, **runner_settings):
         """Run cases, automatically merging into an on-disk dataset.
@@ -270,3 +280,5 @@ class Harvester(object):
         self.runner.run_cases(cases, **runner_settings)
         if save:
             self.merge_save(self.runner.last_ds)
+        else:
+            self.merge_into_full_ds(self.runner.last_ds)
