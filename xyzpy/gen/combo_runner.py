@@ -4,7 +4,6 @@
 # TODO: add_to_ds, skip_completed? ------------------------------------------ #
 # TODO: add straight to array, ds ... --------------------------------------- #
 # TODO: allow combo_runner_to_ds to use output vars as coords --------------- #
-# TODO: time multiprocessing vs dask.distributed ---------------------------- #
 # TODO: better checks for var_name compatilibtiy with fn_args eg. ----------- #
 
 import xarray as xr

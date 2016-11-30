@@ -75,6 +75,8 @@ def _distributed_client(n=None):
 
 def _distributed_get(future):
     try:
-        return future.result()
+        future._stored_result = future.result()
+        future.release()
+        return future._stored_result
     except (CancelledError, TypeError):
         return future._stored_result
