@@ -2,6 +2,7 @@
 
 # TODO: add singlet dimensions (for all or given vars) ---------------------- #
 
+from operator import eq
 import numpy as np
 import xarray as xr
 
@@ -143,6 +144,57 @@ def xrsmoosh(*objs, overwrite=False, accept_newer=False):
         return xr.merge(objs, compat='no_conflicts')
     except (ValueError, xr.MergeError):
         return aggregate(*objs, overwrite=overwrite, accept_newer=accept_newer)
+
+
+def argwhere(x, y, key=eq):
+    """Returns the first index of where y matches an element of x using key.
+    """
+    for i, el in enumerate(x):
+        if key(el, y):
+            return i
+
+
+def gradient(xobj, dim, order=1, scale=True, ):
+    """Calculate the central different gradient, by default scaled by dim.
+
+    Paramters
+    ---------
+        xobj : xarray.DataArray or xarray.Dataset
+            Object to find gradient for.
+        dim : str
+            Dimension to find gradient along.
+        order : int
+            How many times to differentiate.
+        scale : bool (optional)
+            Scale the gradients by the change in dim, i.e. emulate dy/dx
+
+    Returns
+    -------
+        new_xobj : xarray.DataArray or xarray.Dataset
+            Object now with gradients along `dim`.
+    """
+    def _single_gradient(xobj, dim, scale):
+        if isinstance(xobj, xr.Dataset):
+            for v in xobj.data_vars:
+                if dim in xobj[v].dims:
+                    axis = argwhere(xobj[v].dims, dim)
+                    xobj[v].data = np.gradient(xobj[v].data, axis=axis)
+        else:
+            axis = argwhere(xobj.dims, dim)
+            xobj.data = np.gradient(xobj.data, axis=axis)
+
+        if scale:
+            dx = np.gradient(xobj[dim])
+            xobj['__diff__' + dim] = (dim, dx)
+            xobj /= xobj['__diff__' + dim]
+            xobj = xobj.drop('__diff__' + dim)
+
+        return xobj
+
+    new_xobj = xobj.copy(deep=True)
+    for _ in range(order):
+        new_xobj = _single_gradient(new_xobj, dim, scale)
+    return new_xobj
 
 
 def auto_xyz_ds(x, y_z):

@@ -36,7 +36,8 @@ from .manage import (
     xrsmoosh,
     save_ds,
     load_ds,
-    auto_xyz_ds
+    auto_xyz_ds,
+    gradient,
 )
 from .plot.color import (
     convert_colors,
@@ -94,4 +95,5 @@ __all__ = ["Runner",
            "xyz_blineplot",
            "unzip",
            "progbar",
-           "xrsmoosh"]
+           "xrsmoosh",
+           "gradient"]
