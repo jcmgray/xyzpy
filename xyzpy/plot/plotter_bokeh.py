@@ -82,7 +82,8 @@ def blineplot(ds, y_coo, x_coo, z_coo=None,
     xlims, ylims = _process_plot_range(xlims, ylims, ds, x_coo, y_coo, padding)
 
     # x-axis plot range details
-    plt_x_min, plt_x_max = ds[x_coo].min().data, ds[x_coo].max().data
+    (plt_x_min, plt_x_max), (plt_y_min, plt_y_max) = \
+        _process_plot_range(xlims, ylims, ds, x_coo, y_coo, padding=0)
     plt_x_centre = (plt_x_max + plt_x_min) / 2
     plt_x_range = abs(plt_x_max - plt_x_min)
     xbounds = (plt_x_centre - plt_x_range, plt_x_centre + plt_x_range)
@@ -91,7 +92,6 @@ def blineplot(ds, y_coo, x_coo, z_coo=None,
                          bounds=xbounds) if xlims else
              DataRange1d(bounds=xbounds))
     # y-axis plot range details
-    plt_y_min, plt_y_max = ds[y_coo].min().data, ds[y_coo].max().data
     plt_y_centre = (plt_y_max + plt_y_min) / 2
     plt_y_range = abs(plt_y_max - plt_y_min)
     ybounds = (plt_y_centre - plt_y_range, plt_y_centre + plt_y_range)
@@ -105,11 +105,16 @@ def blineplot(ds, y_coo, x_coo, z_coo=None,
         colors=colors, colormap=colormap, colormap_log=colormap_log,
         colormap_reverse=colormap_reverse, engine='BOKEH', zlims=zlims)
 
+    if ytitle is None and isinstance(y_coo, str):
+        ytitle = y_coo
+    if xtitle is None:
+        xtitle = x_coo
+
     # Make figure and custom lines etc -------------------------------------- #
     p = figure(width=int(figsize[0] * 100 + 100),
                height=int(figsize[1] * 100),
-               x_axis_label=x_coo,
-               y_axis_label=y_coo,
+               x_axis_label=xtitle,
+               y_axis_label=ytitle,
                x_range=xlims,
                y_range=ylims,
                x_axis_type=('log' if xlog else 'linear'),
@@ -152,7 +157,9 @@ def blineplot(ds, y_coo, x_coo, z_coo=None,
 
     p.add_tools(HoverTool(
         tooltips=[
-            ("(" + x_coo + ", " + y_coo + ")", "($x, $y)"),
+            ("({}, {})".format(x_coo,
+                               y_coo if isinstance(y_coo, str) else None),
+             "($x, $y)"),
             (z_coo, "@z_coo"),
         ]))
 
