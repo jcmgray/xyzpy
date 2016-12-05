@@ -1,0 +1,409 @@
+from operator import eq
+import functools
+
+import numpy as np
+from scipy import interpolate, signal
+import xarray as xr
+import numba
+
+
+def argwhere(x, y, key=eq):
+    """Returns the first index of where y matches an element of x using key.
+    """
+    for i, el in enumerate(x):
+        if key(el, y):
+            return i
+
+
+def xr_1d_apply(func, xobj, dim, new_dim=None, args=(), kwargs=()):
+    """Take a vector function and wrap it so that it can be applied along
+    xarray dimensions.
+    """
+    # modify function to only act on nonnull data
+    def nnfunc(x):
+        isnull = np.isnan(x)
+        # Just use function normally if no missing data
+        if not np.any(isnull):
+            res = func(x, *args, **dict(kwargs))
+        # If all null, match new output dimension with np.nan
+        elif np.all(isnull):
+            if new_dim is None:
+                res = np.tile(np.nan, x.size)
+            else:
+                res = np.tile(np.nan, new_dim.size)
+        # Apply function only on not null data
+        else:
+            nonnull = ~isnull
+            # partial results only for nonnull data
+            pres = func(x[nonnull], *args, **dict(kwargs))
+            # fill new array with nan and partial results
+            if new_dim is None:  # match old shape
+                res = np.empty(x.shape, dtype=pres.dtype)
+                res[isnull] = np.nan
+                res[nonnull] = pres
+            else:  # let function take care of nonnull
+                res = pres
+        return res
+
+    new_xobj = xobj.copy(deep=True)
+    # convert to dataset temporarily
+    if isinstance(xobj, xr.DataArray):
+        new_xobj = new_xobj.to_dataset(name='__temp_name__')
+
+    # if the dimenion is changing, create a temporary one
+    if new_dim is not None:
+        new_xobj.coords['__temp_dim__'] = new_dim
+
+    # calculate fn and insert with new coord
+    for v in new_xobj.data_vars:
+        sub_da = new_xobj[v]
+        if dim in sub_da.dims:
+            old_dims = sub_da.dims
+            axis = argwhere(old_dims, dim)
+            if new_dim is not None:
+                new_dims = tuple((d if d != dim else '__temp_dim__')
+                                 for d in old_dims)
+            else:
+                new_dims = old_dims
+            new_xobj[v] = (new_dims, np.apply_along_axis(
+                nnfunc, axis, sub_da.data))
+
+    if new_dim is not None:
+        new_xobj = new_xobj.drop(dim)
+        new_xobj = new_xobj.rename({'__temp_dim__': dim})
+
+    # convert back to dataarray if originally given, strip temp name
+    if isinstance(xobj, xr.DataArray):
+        new_xobj = new_xobj.to_array()
+        new_xobj.name = xobj.name
+    return new_xobj
+
+
+# --------------------------------------------------------------------------- #
+#                         2nd-order central differnce                         #
+# --------------------------------------------------------------------------- #
+
+def xr_gradient(xobj, dim, order=1, scale=True, ):
+    """Calculate the central different gradient, by default scaled by dim.
+
+    Paramters
+    ---------
+        xobj : xarray.DataArray or xarray.Dataset
+            Object to find gradient for.
+        dim : str
+            Dimension to find gradient along.
+        order : int
+            How many times to differentiate.
+        scale : bool (optional)
+            Scale the gradients by the change in dim, i.e. emulate dy/dx
+
+    Returns
+    -------
+        new_xobj : xarray.DataArray or xarray.Dataset
+            Object now with gradients along `dim`.
+    """
+    def _single_gradient(xobj, dim, scale):
+        if isinstance(xobj, xr.Dataset):
+            for v in xobj.data_vars:
+                if dim in xobj[v].dims:
+                    axis = argwhere(xobj[v].dims, dim)
+                    xobj[v].data = np.gradient(xobj[v].data, axis=axis)
+        else:
+            axis = argwhere(xobj.dims, dim)
+            xobj.data = np.gradient(xobj.data, axis=axis)
+
+        if scale:
+            dx = np.gradient(xobj[dim])
+            xobj['__diff__' + dim] = (dim, dx)
+            xobj /= xobj['__diff__' + dim]
+            xobj = xobj.drop('__diff__' + dim)
+
+        return xobj
+
+    new_xobj = xobj.copy(deep=True)
+    for _ in range(order):
+        new_xobj = _single_gradient(new_xobj, dim, scale)
+    return new_xobj
+
+
+xr.Dataset.gradient = xr_gradient
+xr.DataArray.gradient = xr_gradient
+
+
+# --------------------------------------------------------------------------- #
+#                    fornberg's finite difference algortihm                   #
+# --------------------------------------------------------------------------- #
+
+@numba.jit(["float64(float64[:],float64[:],float64,int64)"], nopython=True)
+def finite_difference_fornberg(fx, x, z, order):
+    """Fornberg finite difference method for single poitn `z`.
+    """
+    c1 = 1.0
+    c4 = x[0] - z
+    n = len(x) - 1
+    c = np.zeros((len(x), order + 1))
+    c[0, 0] = 1.0
+
+    for i in range(1, n + 1):
+        mn = min(i, order)
+        c2 = 1.0
+        c5 = c4
+        c4 = x[i] - z
+
+        for j in range(0, i):
+            c3 = x[i] - x[j]
+            c2 *= c3
+
+            if j == i - 1:
+
+                for k in range(mn, 0, -1):
+                    c[i, k] = c1 * (k * c[i - 1, k - 1] -
+                                    c5 * c[i - 1, k]) / c2
+                c[i, 0] = -c1 * c5 * c[i - 1, 0] / c2
+
+            for k in range(mn, 0, -1):
+                c[j, k] = (c4 * c[j, k] - k * c[j, k - 1]) / c3
+
+            c[j, 0] = c4 * c[j, 0] / c3
+
+        c1 = c2
+
+    return np.dot(c[:, order], fx)
+
+
+@numba.jit(nopython=True)
+def finite_diff_array(fx, x, ix, order, window):
+    """Fornberg finite difference method for array of points `ix`.
+    """
+    # TODO: lopsided window near edges
+    out = np.empty(len(ix))
+    fx = fx.astype(np.float64)
+
+    w = window
+    if w < 0:  # use whole window
+        for i, z in enumerate(ix):
+            out[i] = finite_difference_fornberg(fx, x, z, order)
+    else:
+        forward_limit = (x[0] + w / 2)
+        foward_win = x[0] + w
+        backward_limit = (x[-1] - w / 2)
+        backward_win = x[-1] - w
+
+        for i, z in enumerate(ix):
+            if z < forward_limit:  # use forward diff
+                bm = np.less(x, foward_win)
+            elif z > backward_limit:  # backward diff
+                bm = np.greater(x, backward_win)
+            else:  # central diff
+                bm = np.less(np.abs(x - z), w)
+            wx = x[bm]
+            wfx = fx[bm]
+            out[i] = finite_difference_fornberg(wfx, wx, z, order)
+    return out
+
+
+def wfdiff(fx, x, ix, order, mode='points', window=5, return_func=False):
+    """Find (d^k fx)/(dx^k) at points ix, using a windowed finite difference.
+    This is only appropirate for very nicely sampled/analytic data.
+
+    Uses algorithm found in:
+        Calculation of Weights in Finite Difference Formulas
+        Bengt Fornberg
+        SIAM Rev., 40(3), 685–691
+        http://dx.doi.org/10.1137/S0036144596322507
+
+    Parameters
+    ----------
+        fx : array
+            Function values at grid values.
+        x : array
+            Grid values, same legnth as `fx`, assumed sorted.
+        ix : array or int
+            If array, values at which to evalute finite difference else number
+            of points to linearly space in the range and use.
+        order : int
+            Order of derivate, 0 yields an interpolation.
+        mode : {'points', 'relative', 'absolute'}, optional
+            Used in conjuction with window.
+            If 'points', the window size is set such that the average number
+            of points in each window is given b `window`.
+            If 'relative', the window size is set such that its size relative
+            to the total range is given by `window`.
+            If 'absolute', the window size is geven explicitly by `window`.
+        window : int or float, optional
+            Depends on `mode`,
+                - 'points', target number of points to use for each window.
+                - 'relative' relative size of window compared to full range.
+                - 'absolute' The absolute window size.
+        return_func : bool, optional
+            If True, return the single argument function wfdiff(fx).
+
+    Returns
+    -------
+        ifx : array
+            Interpolated kth-derivative of data.
+    """
+    if mode in {'p', 'pts', 'points'}:
+        abs_win = (x[-1] - x[0]) * window / len(x)
+    elif mode in {'r', 'rel', 'relative'}:
+        abs_win = (x[-1] - x[0]) * window
+    elif mode in {'a', 'abs', 'absolute'}:
+        abs_win = window
+    else:
+        raise ValueError("mode: {} not valid".format(mode))
+
+    if isinstance(ix, int):
+        ix = np.linspace(x[0], x[-1], ix)
+    elif ix.dtype != float:
+        ix = ix.astype(float)
+    if x.dtype != float:
+        x = x.astype(float)
+
+    if return_func:
+        return functools.partial(finite_diff_array, x=x, ix=ix,
+                                 order=order, window=abs_win)
+    else:
+        return finite_diff_array(fx, x, ix, order, abs_win)
+
+
+def xr_wfdiff(xobj, dim, ix=100, order=1, mode='points', window=5):
+    """Find (d^k fx)/(dx^k) at points ix, using a windowed finite difference.
+    This is only appropirate for very nicely sampled/analytic data.
+
+    Uses algorithm found in:
+        Calculation of Weights in Finite Difference Formulas
+        Bengt Fornberg
+        SIAM Rev., 40(3), 685–691
+        http://dx.doi.org/10.1137/S0036144596322507
+
+    Paramters
+    ---------
+        xobj : xarray.DataArray or xarray.Dataset
+            Object to find windowed finite difference for.
+        dim : str
+            Dimension to find windowed finite difference along.
+        ix : array or int
+            If array, values at which to evalute finite difference else number
+            of points to linearly space in the range and use.
+        order : int
+            Order of derivate, 0 yields an interpolation.
+        mode : {'points', 'relative', 'absolute'}
+            Used in conjuction with window.
+            If 'points', the window size is set such that the average number
+            of points in each window is given b `window`.
+            If 'relative', the window size is set such that its size relative
+            to the total range is given by `window`.
+            If 'absolute', the window size is geven explicitly by `window`.
+        window : int or float
+            Depends on `mode`,
+                - 'points', target number of points to use for each window.
+                - 'relative' relative size of window compared to full range.
+                - 'absolute' The absolute window size.
+
+    Returns
+    -------
+        new_xobj : xarray.DataArray or xarray.Dataset
+            Object now with windowed finite difference along `dim`.
+    """
+    # original grid
+    x = xobj[dim].data
+    # generate interpolation grid if not given as array, and set as coords
+    if isinstance(ix, int):
+        ix = np.linspace(x[0], x[-1], ix)
+    # make re-useable single arg function
+    diff_fn = wfdiff(None, x=x, ix=ix, order=order, mode=mode,
+                     window=window, return_func=True)
+    return xr_1d_apply(diff_fn, xobj, dim, new_dim=ix)
+
+
+xr.Dataset.fdiff = xr_wfdiff
+xr.DataArray.fdiff = xr_wfdiff
+
+
+# --------------------------------------------------------------------------- #
+#                         Simple averaged scaled diff                         #
+# --------------------------------------------------------------------------- #
+
+@numba.jit(nopython=True)
+def simple_average_diff(fx, x, k=1):
+    n = len(x)
+    dfx = np.empty(n - k)
+    for i in range(n - k):
+        dfx[i] = (fx[i + 1] - fx[i]) / (x[i + 1] - x[i])
+        for j in range(i + 1, k):
+            dfx[i] += (fx[j + 1] - fx[j]) / (x[j + 1] - x[j])
+        dfx[i] /= k
+    return dfx
+
+
+def xr_sdiff(xobj, dim, k=1):
+    x = xobj[dim].data
+    n = len(x)
+    nx = sum(x[ki:n - k + ki] for ki in range(k + 1)) / (k + 1)
+    func = functools.partial(simple_average_diff, x=x, k=k)
+    return xr_1d_apply(func, xobj, dim, new_dim=nx)
+
+
+xr.Dataset.sdiff = xr_sdiff
+xr.DataArray.sdiff = xr_sdiff
+
+
+# --------------------------------------------------------------------------- #
+#                            spline interpolation                             #
+# --------------------------------------------------------------------------- #
+
+def array_interp1d(fx, x, ix, kind='cubic', return_func=False, **kwargs):
+
+    if isinstance(ix, int):
+        ix = np.linspace(x[0], x[-1], ix)
+
+    def fx_interp(fx):
+        ifn = interpolate.interp1d(x, fx, kind=kind, **kwargs)
+        return ifn(ix)
+
+    if return_func:
+        return fx_interp
+    return fx_interp(fx)
+
+
+def xr_interp1d(xobj, dim, ix=100, kind='cubic', **kwargs):
+    # original grid
+    x = xobj[dim].data
+    # generate interpolation grid if not given as array, and set as coords
+    if isinstance(ix, int):
+        ix = np.linspace(x[0], x[-1], ix)
+    # make re-useable single arg function
+    fn = array_interp1d(None, x=x, ix=ix, kind=kind,
+                        return_func=True, **kwargs)
+    return xr_1d_apply(fn, xobj, dim, new_dim=ix)
+
+
+xr.Dataset.interp = xr_interp1d
+xr.DataArray.interp = xr_interp1d
+
+
+# --------------------------------------------------------------------------- #
+#                           scipy signal filtering                            #
+# --------------------------------------------------------------------------- #
+
+def xr_filter_wiener(xobj, dim, *args, **kwargs):
+    func = functools.partial(signal.wiener, *args, **kwargs)
+    return xr_1d_apply(func, xobj, dim, new_dim=None)
+
+
+xr.DataArray.filtfilt = xr_filter_wiener
+xr.Dataset.wiener = xr_filter_wiener
+
+
+def xr_filtfilt(xobj, dim, filt='butter', *args, **kwargs):
+    filter_func = getattr(signal, filt)
+    b, a = filter_func(*args, **kwargs)
+
+    def func(x):
+        return signal.filtfilt(b, a, x, method='gust')
+
+    return xr_1d_apply(func, xobj, dim, new_dim=None)
+
+
+xr.DataArray.filtfilt = xr_filtfilt
+xr.Dataset.filtfilt = xr_filtfilt

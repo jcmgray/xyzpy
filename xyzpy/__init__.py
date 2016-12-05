@@ -37,7 +37,12 @@ from .manage import (
     save_ds,
     load_ds,
     auto_xyz_ds,
-    gradient,
+)
+from .signal import (
+    xr_gradient,
+    wfdiff,
+    xr_wfdiff,
+    xr_sdiff,
 )
 from .plot.color import (
     convert_colors,
@@ -96,4 +101,7 @@ __all__ = ["Runner",
            "unzip",
            "progbar",
            "xrsmoosh",
-           "gradient"]
+           "xr_gradient",
+           "wfdiff",
+           "xr_wfdiff",
+           "xr_sdiff"]
