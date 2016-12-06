@@ -15,7 +15,7 @@ def _prepare_data_and_styles(ds, y_coo, x_coo, z_coo, zlabels, zlims,
     # Work out whether to iterate over multiple lines
     multi_var = False
     if z_coo is not None:
-        z_vals = ds[z_coo].data
+        z_vals = ds[z_coo].values
     elif not isinstance(y_coo, str):
         multi_var = True
         z_vals = y_coo
@@ -26,14 +26,14 @@ def _prepare_data_and_styles(ds, y_coo, x_coo, z_coo, zlabels, zlims,
         for z in z_vals:
             # Select data for current z coord - flatten for singletons
             if multi_var:
-                x = ds[x_coo].data.flatten()
-                y = ds[z].data.flatten()
+                x = ds[x_coo].values.flatten()
+                y = ds[z].values.flatten()
             elif z is not None:
-                x = ds.loc[{z_coo: z}][x_coo].data.flatten()
-                y = ds.loc[{z_coo: z}][y_coo].data.flatten()
+                x = ds.loc[{z_coo: z}][x_coo].values.flatten()
+                y = ds.loc[{z_coo: z}][y_coo].values.flatten()
             else:
-                x = ds[x_coo].data.flatten()
-                y = ds[y_coo].data.flatten()
+                x = ds[x_coo].values.flatten()
+                y = ds[y_coo].values.flatten()
 
             # Trim out missing data
             notnull = ~np.isnan(x) & ~np.isnan(y)
