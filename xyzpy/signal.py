@@ -1,3 +1,15 @@
+"""Processing and signal analysis.
+"""
+# TODO: fornberg, exact number of points
+# TODO: singh     higher different order and k
+# TODO: cwt
+# TODO: idxmax
+# TODO: idxmin
+# TODO: peak_find == cwt + interp + idxmax
+# TODO: allow reductions with new_dim=None
+# TODO: only optionally handle nan
+# TODO: check which methods should be parsing nan
+
 from operator import eq
 import functools
 
@@ -15,35 +27,39 @@ def argwhere(x, y, key=eq):
             return i
 
 
-def xr_1d_apply(func, xobj, dim, new_dim=None, args=(), kwargs=()):
+def xr_1d_apply(func, xobj, dim, new_dim=False, leave_nan=False):
     """Take a vector function and wrap it so that it can be applied along
     xarray dimensions.
     """
-    # modify function to only act on nonnull data
-    def nnfunc(x):
-        isnull = np.isnan(x)
-        # Just use function normally if no missing data
-        if not np.any(isnull):
-            res = func(x, *args, **dict(kwargs))
-        # If all null, match new output dimension with np.nan
-        elif np.all(isnull):
-            if new_dim is None:
-                res = np.tile(np.nan, x.size)
+    if leave_nan:
+        nnfunc = func
+    else:  # modify function to only act on nonnull data
+        def nnfunc(x):
+            isnull = np.isnan(x)
+            # Just use function normally if no missing data
+            if not np.any(isnull):
+                return func(x)
+
+            # If all null, match new output dimension with np.nan
+            elif np.all(isnull):
+                if new_dim is None:
+                    return np.nan
+                if new_dim is False:
+                    return np.tile(np.nan, x.size)
+                else:
+                    return np.tile(np.nan, new_dim.size)
+
+            # Partially null: apply function only on not null data
             else:
-                res = np.tile(np.nan, new_dim.size)
-        # Apply function only on not null data
-        else:
-            nonnull = ~isnull
-            # partial results only for nonnull data
-            pres = func(x[nonnull], *args, **dict(kwargs))
-            # fill new array with nan and partial results
-            if new_dim is None:  # match old shape
-                res = np.empty(x.shape, dtype=pres.dtype)
-                res[isnull] = np.nan
-                res[nonnull] = pres
-            else:  # let function take care of nonnull
-                res = pres
-        return res
+                nonnull = ~isnull
+                part_res = func(x[nonnull])
+                if new_dim is False:  # match old shape
+                    res = np.empty(x.shape, dtype=part_res.dtype)
+                    res[isnull] = np.nan
+                    res[nonnull] = part_res
+                    return res
+                else:  # can't know
+                    return part_res
 
     new_xobj = xobj.copy(deep=True)
     # convert to dataset temporarily
@@ -51,24 +67,26 @@ def xr_1d_apply(func, xobj, dim, new_dim=None, args=(), kwargs=()):
         new_xobj = new_xobj.to_dataset(name='__temp_name__')
 
     # if the dimenion is changing, create a temporary one
-    if new_dim is not None:
+    if not (new_dim is None or new_dim is False):
         new_xobj.coords['__temp_dim__'] = new_dim
 
     # calculate fn and insert with new coord
     for v in new_xobj.data_vars:
-        sub_da = new_xobj[v]
-        if dim in sub_da.dims:
-            old_dims = sub_da.dims
+        var = new_xobj[v]
+        if dim in var.dims:
+            old_dims = var.dims
             axis = argwhere(old_dims, dim)
-            if new_dim is not None:
+            if new_dim is False:
+                new_dims = old_dims
+            elif new_dim is None:
+                new_dims = tuple(d for d in old_dims if d != dim)
+            else:
                 new_dims = tuple((d if d != dim else '__temp_dim__')
                                  for d in old_dims)
-            else:
-                new_dims = old_dims
             new_xobj[v] = (new_dims, np.apply_along_axis(
-                nnfunc, axis, sub_da.data))
+                nnfunc, axis, var.data))
 
-    if new_dim is not None:
+    if not (new_dim is None or new_dim is False):
         new_xobj = new_xobj.drop(dim)
         new_xobj = new_xobj.rename({'__temp_dim__': dim})
 
@@ -77,57 +95,6 @@ def xr_1d_apply(func, xobj, dim, new_dim=None, args=(), kwargs=()):
         new_xobj = new_xobj.to_array()
         new_xobj.name = xobj.name
     return new_xobj
-
-
-# --------------------------------------------------------------------------- #
-#                         2nd-order central differnce                         #
-# --------------------------------------------------------------------------- #
-
-def xr_gradient(xobj, dim, order=1, scale=True, ):
-    """Calculate the central different gradient, by default scaled by dim.
-
-    Paramters
-    ---------
-        xobj : xarray.DataArray or xarray.Dataset
-            Object to find gradient for.
-        dim : str
-            Dimension to find gradient along.
-        order : int
-            How many times to differentiate.
-        scale : bool (optional)
-            Scale the gradients by the change in dim, i.e. emulate dy/dx
-
-    Returns
-    -------
-        new_xobj : xarray.DataArray or xarray.Dataset
-            Object now with gradients along `dim`.
-    """
-    def _single_gradient(xobj, dim, scale):
-        if isinstance(xobj, xr.Dataset):
-            for v in xobj.data_vars:
-                if dim in xobj[v].dims:
-                    axis = argwhere(xobj[v].dims, dim)
-                    xobj[v].data = np.gradient(xobj[v].data, axis=axis)
-        else:
-            axis = argwhere(xobj.dims, dim)
-            xobj.data = np.gradient(xobj.data, axis=axis)
-
-        if scale:
-            dx = np.gradient(xobj[dim])
-            xobj['__diff__' + dim] = (dim, dx)
-            xobj /= xobj['__diff__' + dim]
-            xobj = xobj.drop('__diff__' + dim)
-
-        return xobj
-
-    new_xobj = xobj.copy(deep=True)
-    for _ in range(order):
-        new_xobj = _single_gradient(new_xobj, dim, scale)
-    return new_xobj
-
-
-xr.Dataset.gradient = xr_gradient
-xr.DataArray.gradient = xr_gradient
 
 
 # --------------------------------------------------------------------------- #
@@ -175,7 +142,6 @@ def finite_difference_fornberg(fx, x, z, order):
 def finite_diff_array(fx, x, ix, order, window):
     """Fornberg finite difference method for array of points `ix`.
     """
-    # TODO: lopsided window near edges
     out = np.empty(len(ix))
     fx = fx.astype(np.float64)
 
@@ -330,7 +296,7 @@ def simple_average_diff(fx, x, k=1):
     dfx = np.empty(n - k)
     for i in range(n - k):
         dfx[i] = (fx[i + 1] - fx[i]) / (x[i + 1] - x[i])
-        for j in range(i + 1, k):
+        for j in range(i + 1, i + k):
             dfx[i] += (fx[j + 1] - fx[j]) / (x[j + 1] - x[j])
         dfx[i] /= k
     return dfx
@@ -346,6 +312,56 @@ def xr_sdiff(xobj, dim, k=1):
 
 xr.Dataset.sdiff = xr_sdiff
 xr.DataArray.sdiff = xr_sdiff
+
+
+# --------------------------------------------------------------------------- #
+#                      Unevenly spaced finite difference                      #
+# ---------------------------------------------------------------------------
+
+@numba.jit(nopython=True)
+def usdiff(fx, x):
+    """
+    Singh, Ashok K., and B. S. Bhadauria. "Finite difference formulae for
+    unequal sub-intervals using lagrange’s interpolation formula."
+    International Journal of Mathematics and Analysis 3.17 (2009): 815-827.
+    """
+    n = len(x)
+    dfx = np.empty(n)
+
+    # Forward difference for first point
+    h1 = x[1] - x[0]
+    h2 = x[2] - x[1]
+    dfx[0] = (- fx[0] * (2 * h1 + h2) / (h1 * (h1 + h2)) +
+              fx[1] * (h1 + h2) / (h1 * h2) -
+              fx[2] * h1 / ((h1 + h2) * h2))
+
+    # Central difference for middle points
+    for i in range(1, n - 1):
+        h1 = x[i] - x[i - 1]
+        h2 = x[i + 1] - x[i]
+        dfx[i] = (- fx[i - 1] * h2 / (h1 * (h1 + h2)) -
+                  fx[i] * (h1 - h2) / (h1 * h2) +
+                  fx[i + 1] * h1 / (h2 * (h1 + h2)))
+
+    # Backwards difference for last point
+    h1 = x[n - 2] - x[n - 3]
+    h2 = x[n - 1] - x[n - 2]
+    dfx[n - 1] = (fx[n - 3] * h2 / (h1 * (h1 + h2)) -
+                  fx[n - 2] * (h1 + h2) / (h1 * h2) +
+                  fx[n - 1] * (h1 + 2 * h2) / (h2 * (h1 + h2)))
+
+    return dfx
+
+
+def xr_usdiff(xobj, dim):
+    """Unever-third-order finite difference derivative.
+    """
+    func = functools.partial(usdiff, x=xobj[dim].values)
+    return xr_1d_apply(func, xobj, dim, new_dim=False)
+
+
+xr.Dataset.usdiff = xr_usdiff
+xr.DataArray.usdiff = xr_usdiff
 
 
 # --------------------------------------------------------------------------- #
@@ -388,10 +404,10 @@ xr.DataArray.interp = xr_interp1d
 
 def xr_filter_wiener(xobj, dim, *args, **kwargs):
     func = functools.partial(signal.wiener, *args, **kwargs)
-    return xr_1d_apply(func, xobj, dim, new_dim=None)
+    return xr_1d_apply(func, xobj, dim, new_dim=False)
 
 
-xr.DataArray.filtfilt = xr_filter_wiener
+xr.DataArray.wiener = xr_filter_wiener
 xr.Dataset.wiener = xr_filter_wiener
 
 
@@ -402,8 +418,40 @@ def xr_filtfilt(xobj, dim, filt='butter', *args, **kwargs):
     def func(x):
         return signal.filtfilt(b, a, x, method='gust')
 
-    return xr_1d_apply(func, xobj, dim, new_dim=None)
+    return xr_1d_apply(func, xobj, dim, new_dim=False)
 
 
 xr.DataArray.filtfilt = xr_filtfilt
 xr.Dataset.filtfilt = xr_filtfilt
+
+
+# --------------------------------------------------------------------------- #
+#                               idxmax idxmin                                 #
+# --------------------------------------------------------------------------- #
+
+def xr_idxmax(xobj, dim):
+    coox = xobj[dim].values
+
+    def func(x):
+        indx = np.argmax(x)
+        return coox[indx]
+
+    return xr_1d_apply(func, xobj, dim, new_dim=None)
+
+
+xr.DataArray.idxmax = xr_idxmax
+xr.Dataset.idxmax = xr_idxmax
+
+
+def xr_idxmin(xobj, dim):
+    coox = xobj[dim].values
+
+    def func(x):
+        indx = np.argmin(x)
+        return coox[indx]
+
+    return xr_1d_apply(func, xobj, dim, new_dim=None)
+
+
+xr.DataArray.idxmin = xr_idxmin
+xr.Dataset.idxmin = xr_idxmin

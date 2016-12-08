@@ -39,7 +39,6 @@ from .manage import (
     auto_xyz_ds,
 )
 from .signal import (
-    xr_gradient,
     wfdiff,
     xr_wfdiff,
     xr_sdiff,
@@ -101,7 +100,6 @@ __all__ = ["Runner",
            "unzip",
            "progbar",
            "xrsmoosh",
-           "xr_gradient",
            "wfdiff",
            "xr_wfdiff",
            "xr_sdiff"]
