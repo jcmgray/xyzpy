@@ -184,6 +184,7 @@ class Runner(object):
             attrs=self.attrs,
             parse=False,
             **{**self.default_runner_settings, **runner_settings})
+        return self.last_ds
 
     def run_cases(self, cases, **runner_settings):
         """Run cases using the function map and save to dataset.
@@ -208,6 +209,7 @@ class Runner(object):
             attrs=self.attrs,
             parse=False,
             **{**self.default_runner_settings, **runner_settings})
+        return self.last_ds
 
 
 # --------------------------------------------------------------------------- #

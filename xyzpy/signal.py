@@ -10,7 +10,6 @@
 # TODO: only optionally handle nan
 # TODO: check which methods should be parsing nan
 
-from operator import eq
 import functools
 
 import numpy as np
@@ -18,13 +17,26 @@ from scipy import interpolate, signal
 import xarray as xr
 import numba
 
+from .utils import argwhere
 
-def argwhere(x, y, key=eq):
-    """Returns the first index of where y matches an element of x using key.
+
+def nan_wrap(fn):
+    """Take a function that accepts two vector arguments y and x and wrap it
+    such that only non-nan sections are supplied to it.
     """
-    for i, el in enumerate(x):
-        if key(el, y):
-            return i
+    def nanified(fx, x, *args, **kwargs):
+        isnan = np.isnan(fx)
+        if np.all(isnan):
+            return np.tile(np.nan, fx.shape)
+        elif np.any(isnan):
+            res = np.tile(np.nan, fx.shape)
+            notnan = ~isnan
+            res[notnan] = fn(fx[notnan], x[notnan])
+            return res
+        else:
+            return fn(fx, x)
+
+    return nanified
 
 
 def xr_1d_apply(func, xobj, dim, new_dim=False, leave_nan=False):
@@ -34,27 +46,29 @@ def xr_1d_apply(func, xobj, dim, new_dim=False, leave_nan=False):
     if leave_nan:
         nnfunc = func
     else:  # modify function to only act on nonnull data
-        def nnfunc(x):
-            isnull = np.isnan(x)
+        def nnfunc(fx):
+            """Nan wrap a function, but accepting changes to the coordinates.
+            """
+            isnull = np.isnan(fx)
             # Just use function normally if no missing data
             if not np.any(isnull):
-                return func(x)
+                return func(fx)
 
             # If all null, match new output dimension with np.nan
             elif np.all(isnull):
                 if new_dim is None:
                     return np.nan
                 if new_dim is False:
-                    return np.tile(np.nan, x.size)
+                    return np.tile(np.nan, fx.size)
                 else:
                     return np.tile(np.nan, new_dim.size)
 
             # Partially null: apply function only on not null data
             else:
                 nonnull = ~isnull
-                part_res = func(x[nonnull])
+                part_res = func(fx[nonnull])
                 if new_dim is False:  # match old shape
-                    res = np.empty(x.shape, dtype=part_res.dtype)
+                    res = np.empty(fx.shape, dtype=part_res.dtype)
                     res[isnull] = np.nan
                     res[nonnull] = part_res
                     return res
@@ -92,8 +106,12 @@ def xr_1d_apply(func, xobj, dim, new_dim=False, leave_nan=False):
 
     # convert back to dataarray if originally given, strip temp name
     if isinstance(xobj, xr.DataArray):
-        new_xobj = new_xobj.to_array()
+        # new_xobj = new_xobj.to_array()
+        # new_xobj.name = xobj.name
+        # new_xobj = new_xobj.rename({'__temp_name__': xobj.name})
+        new_xobj = new_xobj['__temp_name__']
         new_xobj.name = xobj.name
+
     return new_xobj
 
 
@@ -101,7 +119,8 @@ def xr_1d_apply(func, xobj, dim, new_dim=False, leave_nan=False):
 #                    fornberg's finite difference algortihm                   #
 # --------------------------------------------------------------------------- #
 
-@numba.jit(["float64(float64[:],float64[:],float64,int64)"], nopython=True)
+@numba.jit(["float64(float64[:],float64[:],float64,int64)"],
+           nopython=True)  # pragma: no cover
 def finite_difference_fornberg(fx, x, z, order):
     """Fornberg finite difference method for single poitn `z`.
     """
@@ -138,7 +157,7 @@ def finite_difference_fornberg(fx, x, z, order):
     return np.dot(c[:, order], fx)
 
 
-@numba.jit(nopython=True)
+@numba.jit(nopython=True)  # pragma: no cover
 def finite_diff_array(fx, x, ix, order, window):
     """Fornberg finite difference method for array of points `ix`.
     """
@@ -318,6 +337,7 @@ xr.DataArray.sdiff = xr_sdiff
 #                      Unevenly spaced finite difference                      #
 # ---------------------------------------------------------------------------
 
+@nan_wrap
 @numba.jit(nopython=True)
 def usdiff(fx, x):
     """
@@ -354,10 +374,10 @@ def usdiff(fx, x):
 
 
 def xr_usdiff(xobj, dim):
-    """Unever-third-order finite difference derivative.
+    """Uneven-third-order finite difference derivative.
     """
     func = functools.partial(usdiff, x=xobj[dim].values)
-    return xr_1d_apply(func, xobj, dim, new_dim=False)
+    return xr_1d_apply(func, xobj, dim, new_dim=False, leave_nan=True)
 
 
 xr.Dataset.usdiff = xr_usdiff
@@ -391,11 +411,44 @@ def xr_interp1d(xobj, dim, ix=100, kind='cubic', **kwargs):
     # make re-useable single arg function
     fn = array_interp1d(None, x=x, ix=ix, kind=kind,
                         return_func=True, **kwargs)
-    return xr_1d_apply(fn, xobj, dim, new_dim=ix)
+    return xr_1d_apply(fn, xobj, dim, new_dim=ix, leave_nan=True)
 
 
 xr.Dataset.interp = xr_interp1d
 xr.DataArray.interp = xr_interp1d
+
+
+# --------------------------------------------------------------------------- #
+#                            pchip interpolation                              #
+# --------------------------------------------------------------------------- #
+
+def array_pchip(fx, x, ix, return_func=False):
+
+    if isinstance(ix, int):
+        ix = np.linspace(x[0], x[-1], ix)
+
+    def fx_interp(fx):
+        ifn = interpolate.PchipInterpolator(x, fx)
+        return ifn(ix)
+
+    if return_func:
+        return fx_interp
+    return fx_interp(fx)
+
+
+def xr_pchip(xobj, dim, ix=100):
+    # original grid
+    x = xobj[dim].data
+    # generate interpolation grid if not given as array, and set as coords
+    if isinstance(ix, int):
+        ix = np.linspace(x[0], x[-1], ix)
+    # make re-useable single arg function
+    fn = array_interp1d(None, x=x, ix=ix, return_func=True)
+    return xr_1d_apply(fn, xobj, dim, new_dim=ix, leave_nan=True)
+
+
+xr.Dataset.pchip = xr_pchip
+xr.DataArray.pchip = xr_pchip
 
 
 # --------------------------------------------------------------------------- #

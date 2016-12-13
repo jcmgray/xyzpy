@@ -133,7 +133,7 @@ def _combo_runner(fn, combos, constants,
                 pbar.update()
             results = _nested_get(futures, ndim, _distributed_get)
 
-    elif pool:
+    elif pool is not None:
         with progbar(total=n, disable=hide_progbar) as pbar:
             getter = _getter_with_progress(pbar)
             futures = _nested_submit(fn, combos, constants, pool=pool)
