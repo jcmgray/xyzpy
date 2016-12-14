@@ -74,6 +74,12 @@ def _distributed_client(n=None):
 
 
 def _distributed_get(future):
+    res = future.result()
+    future.release()
+    return res
+
+
+def _distributed_get_as_completed(future):
     try:
         future._stored_result = future.result()
         future.release()

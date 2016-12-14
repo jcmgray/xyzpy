@@ -22,6 +22,7 @@ from .dask_stuff import (
     DaskTqdmProgbar,
     _dask_scheduler_get,
     _distributed_get,
+    _distributed_get_as_completed,
 )
 from .prepare import (
     _parse_var_names,
@@ -127,11 +128,16 @@ def _combo_runner(fn, combos, constants,
     if isinstance(pool, distributed.Client):
         with progbar(total=n, disable=hide_progbar) as pbar:
             futures = _nested_submit(fn, combos, constants, pool=pool)
-            for f in distributed.as_completed(flatten(futures, ndim)):
-                f._stored_result = f.result()
-                f.release()
-                pbar.update()
-            results = _nested_get(futures, ndim, _distributed_get)
+            if parallel == 'as_completed':
+                for f in distributed.as_completed(flatten(futures, ndim)):
+                    f._stored_result = f.result()
+                    f.release()
+                    pbar.update()
+                results = _nested_get(futures, ndim,
+                                      _distributed_get_as_completed)
+            else:
+                getter = update_upon_eval(_distributed_get, pbar)
+                results = _nested_get(futures, ndim, getter)
 
     elif pool is not None:
         with progbar(total=n, disable=hide_progbar) as pbar:
@@ -167,7 +173,7 @@ def _combo_runner(fn, combos, constants,
 def combo_runner(fn, combos, constants=None,
                  split=False,
                  parallel=False,
-                 scheduler='t',
+                 scheduler='m',
                  pool=None,
                  num_workers=None,
                  hide_progbar=False):
