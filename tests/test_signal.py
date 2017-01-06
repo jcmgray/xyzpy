@@ -4,7 +4,7 @@ from numpy.testing import assert_allclose
 import xarray as xr
 
 from xyzpy import Runner
-from xyzpy.signal import nan_wrap
+from xyzpy.signal import nan_wrap_const_length
 
 
 # ------------------------------ fixtures ----------------------------------- #
@@ -75,7 +75,7 @@ class TestNanWrap:
         def tfoo(a, b):
             return a + b
 
-        ntfoo = nan_wrap(tfoo)
+        ntfoo = nan_wrap_const_length(tfoo)
 
         a = np.array([1, 2, 3])
         b = np.array([10, 20, 30])
