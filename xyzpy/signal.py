@@ -20,7 +20,7 @@ import numba
 from .utils import argwhere
 
 
-def nan_wrap(fn):
+def nan_wrap_const_length(fn):
     """Take a function that accepts two vector arguments y and x and wrap it
     such that only non-nan sections are supplied to it.
     """
@@ -31,10 +31,10 @@ def nan_wrap(fn):
         elif np.any(isnan):
             res = np.tile(np.nan, fx.shape)
             notnan = ~isnan
-            res[notnan] = fn(fx[notnan], x[notnan])
+            res[notnan] = fn(fx[notnan], x[notnan], *args, **kwargs)
             return res
         else:
-            return fn(fx, x)
+            return fn(fx, x, *args, **kwargs)
 
     return nanified
 
@@ -337,7 +337,7 @@ xr.DataArray.sdiff = xr_sdiff
 #                      Unevenly spaced finite difference                      #
 # ---------------------------------------------------------------------------
 
-@nan_wrap
+@nan_wrap_const_length
 @numba.jit(nopython=True)
 def usdiff(fx, x):
     """
@@ -387,6 +387,7 @@ xr.DataArray.usdiff = xr_usdiff
 # --------------------------------------------------------------------------- #
 #                            spline interpolation                             #
 # --------------------------------------------------------------------------- #
+
 
 def array_interp1d(fx, x, ix, kind='cubic', return_func=False, **kwargs):
 

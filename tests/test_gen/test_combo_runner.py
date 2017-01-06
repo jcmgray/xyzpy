@@ -245,5 +245,5 @@ class TestComboRunnerToDS:
                                 constants={'t': [10, 20, 30]},
                                 var_names=['x'],
                                 var_dims=[['t']])
-        assert 't' in ds.coords
+        assert 't' in ds.dims
         assert 't' not in ds.attrs

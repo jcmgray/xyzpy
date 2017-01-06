@@ -255,7 +255,7 @@ def _combos_to_ds(results, combos, var_names, var_dims, var_coords,
     # Add constants to attrs, but filter out those which are already coords
     if constants:
         ds.attrs.update({k: v for k, v in constants.items()
-                         if k not in ds.coords})
+                         if k not in ds.dims})
     return ds
 
 

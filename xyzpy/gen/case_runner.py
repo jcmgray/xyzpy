@@ -184,7 +184,7 @@ def _cases_to_ds(results, fn_args, cases, var_names, add_to_ds=None,
                                        for x in results[0]))
         if constants:
             ds.attrs.update({k: v for k, v in constants.items()
-                             if k not in ds.coords})
+                             if k not in ds.dims})
 
     # Go through cases, overwriting nan with results
     for res, cfg in zip(results, cases):
@@ -281,7 +281,7 @@ def find_missing_cases(ds, ignore_dims=None, show_progbar=False):
                    set(ignore_dims) if ignore_dims else set())
 
     # Find all configurations
-    fn_args = tuple(coo for coo in ds.coords if coo not in ignore_dims)
+    fn_args = tuple(coo for coo in ds.dims if coo not in ignore_dims)
     var_names = tuple(ds.data_vars)
     all_cases = itertools.product(*(ds[arg].data for arg in fn_args))
 
