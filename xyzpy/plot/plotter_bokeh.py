@@ -8,7 +8,8 @@ def _init_bokeh_nb():
     """Cache this so it doesn't happen over and over again.
     """
     from bokeh.plotting import output_notebook
-    output_notebook()
+    from bokeh.resources import INLINE
+    output_notebook(resources=INLINE)
 
 
 def bshow(figs, nb=True, **kwargs):
