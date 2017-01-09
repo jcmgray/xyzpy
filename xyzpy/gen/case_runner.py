@@ -8,7 +8,7 @@ import numpy as np
 import xarray as xr
 from dask.delayed import delayed, compute
 
-from .dask_stuff import DaskTqdmProgbar, _dask_scheduler_get
+from .dask_stuff import DaskTqdmProgbar, dask_scheduler_get
 from ..utils import _get_fn_name, progbar
 from .prepare import (
     _parse_fn_args,
@@ -38,8 +38,8 @@ def _case_runner(fn, fn_args, cases, constants,
             jobs = [delayed(fn)(**constants, **dict(zip(fn_args, case)))
                     for case in cases]
             if scheduler and isinstance(scheduler, str):
-                scheduler = _dask_scheduler_get(scheduler,
-                                                num_workers=num_workers)
+                scheduler = dask_scheduler_get(scheduler,
+                                               num_workers=num_workers)
             results = compute(*jobs, get=scheduler, num_workers=num_workers)
 
     # Evaluate configurations sequentially

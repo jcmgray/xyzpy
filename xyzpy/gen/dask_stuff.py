@@ -1,8 +1,8 @@
 """Parallel work and scheduling.
 """
+import time
 import functools
 from dask.callbacks import Callback
-from distributed.client import CancelledError
 from ..utils import progbar
 
 
@@ -45,7 +45,7 @@ class DaskTqdmProgbar(Callback):
         self.pbar.close()
 
 
-def _dask_scheduler_get(get_mode, num_workers=None):
+def dask_scheduler_get(get_mode, num_workers=None):
     """
     """
     if get_mode.upper() in {'T', 'THREADED'}:
@@ -73,16 +73,46 @@ def _distributed_client(n=None):
     return client
 
 
-def _distributed_get(future):
+def distributed_getter(future):
     res = future.result()
     future.release()
     return res
 
 
-def _distributed_get_as_completed(future):
-    try:
+def distributed_getter_stored(future):
+    while True:
+        if hasattr(future, '_stored_result'):
+            return future._stored_result
+        else:
+            time.sleep(0.1)
+
+
+def make_distributed_submit_with_callback(pbar):
+
+    def releaser(future):
         future._stored_result = future.result()
         future.release()
-        return future._stored_result
-    except (CancelledError, TypeError):
-        return future._stored_result
+        pbar.update()
+        return
+
+    def submitter(pool, fn, *args, **kwargs):
+        future = pool.submit(fn, *args, **kwargs)
+        future.add_done_callback(releaser)
+        return future
+
+    return submitter
+
+
+def make_distributed_submit_with_callback_replicate(pbar, client):
+
+    def replicator(future):
+        client.replicate(future)
+        pbar.update()
+        return
+
+    def submitter(pool, fn, *args, **kwargs):
+        future = pool.submit(fn, *args, **kwargs)
+        future.add_done_callback(replicator)
+        return future
+
+    return submitter

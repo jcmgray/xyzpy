@@ -20,9 +20,11 @@ from ..utils import (
 )
 from .dask_stuff import (
     DaskTqdmProgbar,
-    _dask_scheduler_get,
-    _distributed_get,
-    _distributed_get_as_completed,
+    dask_scheduler_get,
+    distributed_getter,
+    distributed_getter_stored,
+    make_distributed_submit_with_callback,
+    make_distributed_submit_with_callback_replicate,
 )
 from .prepare import (
     _parse_var_names,
@@ -45,8 +47,8 @@ def _default_submit(pool, fn, *args, **kwds):
     return future
 
 
-def _nested_submit(fn, combos, kwds, delay=False, pool=None,
-                   submitter=_default_submit):
+def nested_submit(fn, combos, kwds, delay=False, pool=None,
+                  submitter=_default_submit):
     """Recursively submit jobs directly, as delayed objects or to a pool.
 
     Parameters
@@ -76,11 +78,11 @@ def _nested_submit(fn, combos, kwds, delay=False, pool=None,
         else:
             return [fn(**kwds, **{arg: x}) for x in inputs]
     else:
-        return [_nested_submit(fn, combos[1:], {**kwds, arg: x}, delay=delay,
-                               pool=pool) for x in inputs]
+        return [nested_submit(fn, combos[1:], {**kwds, arg: x}, delay=delay,
+                              pool=pool) for x in inputs]
 
 
-def _getter_with_progress(pbar=None):
+def getter_with_progress(pbar=None):
     """
     """
     def getter(future):
@@ -94,21 +96,21 @@ def _getter_with_progress(pbar=None):
     return getter
 
 
-def _nested_get(futures, ndim, getter):
+def nested_get(futures, ndim, getter):
     """Recusively get results from nested futures.
     """
     return ([getter(fut) for fut in futures] if ndim == 1 else
-            [_nested_get(fut, ndim - 1, getter) for fut in futures])
+            [nested_get(fut, ndim - 1, getter) for fut in futures])
 
 
 def _mpi_combo_runner_pool(fn, combos, constants, hide_progbar, n,
                            num_workers=None):
     from mpi4py.futures import MPIPoolExecutor
     with progbar(total=n, disable=hide_progbar) as pbar:
-        getter = _getter_with_progress(pbar)
+        getter = getter_with_progress(pbar)
         with MPIPoolExecutor(num_workers) as pool:
-            futures = _nested_submit(fn, combos, constants, pool=pool)
-            results = _nested_get(futures, len(combos), getter)
+            futures = nested_submit(fn, combos, constants, pool=pool)
+            results = nested_get(futures, len(combos), getter)
     return results
 
 
@@ -127,23 +129,37 @@ def _combo_runner(fn, combos, constants,
     # Use a supplied pool to run combos
     if isinstance(pool, distributed.Client):
         with progbar(total=n, disable=hide_progbar) as pbar:
-            futures = _nested_submit(fn, combos, constants, pool=pool)
             if parallel == 'as_completed':
+                futures = nested_submit(fn, combos, constants, pool=pool)
                 for f in distributed.as_completed(flatten(futures, ndim)):
                     f._stored_result = f.result()
                     f.release()
                     pbar.update()
-                results = _nested_get(futures, ndim,
-                                      _distributed_get_as_completed)
+                results = nested_get(futures, ndim, distributed_getter_stored)
+
+            elif parallel == 'callback':
+                submitter = make_distributed_submit_with_callback(pbar)
+                futures = nested_submit(fn, combos, constants, pool=pool,
+                                        submitter=submitter)
+                results = nested_get(futures, ndim, distributed_getter_stored)
+
+            elif parallel == 'replicate':
+                submitter = make_distributed_submit_with_callback_replicate(
+                    pbar, pool)
+                futures = nested_submit(fn, combos, constants, pool=pool,
+                                        submitter=submitter)
+                results = nested_get(futures, ndim, lambda f: f.result())
+
             else:
-                getter = update_upon_eval(_distributed_get, pbar)
-                results = _nested_get(futures, ndim, getter)
+                futures = nested_submit(fn, combos, constants, pool=pool)
+                getter = update_upon_eval(distributed_getter, pbar)
+                results = nested_get(futures, ndim, getter)
 
     elif pool is not None:
         with progbar(total=n, disable=hide_progbar) as pbar:
-            getter = _getter_with_progress(pbar)
-            futures = _nested_submit(fn, combos, constants, pool=pool)
-            results = _nested_get(futures, ndim, getter)
+            futures = nested_submit(fn, combos, constants, pool=pool)
+            getter = getter_with_progress(pbar)
+            results = nested_get(futures, ndim, getter)
 
     # Spawn an mpi pool to run combos
     elif parallel == 'mpi_spawn':
@@ -154,10 +170,10 @@ def _combo_runner(fn, combos, constants,
     elif parallel or num_workers:
         fn_name = _get_fn_name(fn)
         with DaskTqdmProgbar(fn_name, disable=hide_progbar):
-            jobs = _nested_submit(fn, combos, constants, delay=True)
+            jobs = nested_submit(fn, combos, constants, delay=True)
             if scheduler and isinstance(scheduler, str):
-                scheduler = _dask_scheduler_get(scheduler,
-                                                num_workers=num_workers)
+                scheduler = dask_scheduler_get(scheduler,
+                                               num_workers=num_workers)
             results = compute(*jobs, get=scheduler, num_workers=num_workers)
 
     # Evaluate combos sequentially
@@ -165,7 +181,7 @@ def _combo_runner(fn, combos, constants,
         with progbar(total=n, disable=hide_progbar) as p:
             # Wrap the function such that the progbar is updated upon each call
             fn = update_upon_eval(fn, p)
-            results = _nested_submit(fn, combos, constants)
+            results = nested_submit(fn, combos, constants)
 
     return list(unzip(results, ndim)) if split else results
 
