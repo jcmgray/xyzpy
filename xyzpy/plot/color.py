@@ -2,19 +2,6 @@
 Helper functions for generating color spectrums.
 """
 
-from math import log
-import itertools
-import numpy as np
-import matplotlib.cm as cm
-from matplotlib.colors import LinearSegmentedColormap
-
-
-def _COLORS_MATPLOTLIB_TO_PLOTLY(cols):
-    for col in cols:
-        if len(col) == 3:  # append alpha value
-            col = itertools.chain(col, (1,))
-        yield "rgba" + str(tuple(int(255 * rgb) for rgb in col))
-
 
 def _COLORS_MATPLOTLIB_TO_BOKEH(cols):
     for col in cols:
@@ -22,7 +9,6 @@ def _COLORS_MATPLOTLIB_TO_BOKEH(cols):
 
 
 _COLOR_CONVERT_METHODS = {
-    ('MATPLOTLIB', 'PLOTLY'): _COLORS_MATPLOTLIB_TO_PLOTLY,
     ('MATPLOTLIB', 'BOKEH'): _COLORS_MATPLOTLIB_TO_BOKEH,
 }
 
@@ -38,6 +24,9 @@ def convert_colors(cols, outformat, informat='MATPLOTLIB'):
 def _xyz_colormaps(name):
     """Custom-defined colormaps
     """
+    import matplotlib.cm as cm
+    from matplotlib.colors import LinearSegmentedColormap
+
     cmaps = {
         'xyz': {'red': ((0.00, 0 / 255, 0 / 255),
                         (0.36, 44 / 255, 44 / 255),
@@ -104,46 +93,3 @@ def _xyz_colormaps(name):
         return LinearSegmentedColormap(name, cmaps[name])
     except KeyError:
         return getattr(cm, name)
-
-
-def calc_colors(ds, z_coo, colormap="xyz", log_scale=False,
-                reverse=False, outformat='MATPLOTLIB', zlims=(None, None)):
-    """Calculate colors for a set of lines given their relative position
-    in the range of `z_coo`.
-
-    Parameters
-    ----------
-        ds: xarray dataset
-        z_coo: coordinate describing the range of lines
-        colormap: which matplotlib colormap style to use
-        log_scale: find relative logarithmic position
-        reverse: reverse the relative ordering
-        plotly: modify string for plotly compatibility
-
-    Returns
-    -------
-        list of colors corresponding to each line in `z_coo`.
-    """
-    cmap = _xyz_colormaps(colormap)
-
-    try:
-        zmin = zlims[0]
-        if zmin is None:
-            zmin = ds[z_coo].values.min()
-        zmax = zlims[1]
-        if zmax is None:
-            zmax = ds[z_coo].values.max()
-
-        # Relative function
-        f = log if log_scale else lambda a: a
-        # Relative place in range according to function
-        rvals = [1 - (f(z) - f(zmin)) / (f(zmax) - f(zmin))
-                 for z in ds[z_coo].values]
-    except TypeError:  # no relative coloring possible e.g. for strings
-        rvals = np.linspace(0, 1.0, ds[z_coo].size)
-
-    # Map to mpl colormap, reversing if required
-    cols = [cmap(1 - rval if reverse else rval) for rval in rvals]
-    cols = convert_colors(cols, outformat)
-
-    return cols

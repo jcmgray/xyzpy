@@ -15,7 +15,6 @@ setup(
         'h5netcdf>=0.2.2',
         'tqdm>=4.7.6',
         'matplotlib>=1.5.0',
-        'plotly>=1.9.0',
         'bokeh>=0.12.3',
     ],
     classifiers=[

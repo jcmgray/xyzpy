@@ -6,7 +6,7 @@ import matplotlib
 
 from xyzpy.plot.color import convert_colors
 from xyzpy.plot.plotter_matplotlib import lineplot
-from xyzpy.plot.plotter_plotly import ilineplot
+from xyzpy.plot.plotter_bokeh import ilineplot
 
 
 DISPLAY_PRESENT = 'DISPLAY' in os.environ
@@ -34,9 +34,9 @@ def dataset_3d():
 
 class TestConvertColors:
     def test_simple(self):
-        cols = [(1, 0, 0), (0, 0.5, 0)]
-        new_cols = list(convert_colors(cols, outformat='PLOTLY'))
-        assert new_cols == ["rgba(255, 0, 0, 255)", "rgba(0, 127, 0, 255)"]
+        cols = [(1, 0, 0, 1), (0, 0.5, 0, 0.5)]
+        new_cols = list(convert_colors(cols, outformat='BOKEH'))
+        assert new_cols == [(255, 0, 0, 1), (0, 127, 0, 0.5)]
 
 
 # --------------------------------------------------------------------------- #

@@ -16,7 +16,7 @@
 ### Manage & Plot
   - Combine, save & load datasets on all platforms (using `xarray` and the netcdf format).
   - Plot data using names rather than remembering axes etc.
-    - Use [`plotly`](https://github.com/plotly/plotly.py) for interactive and remote html plotting.
+    - Use [`bokeh`](https://github.com/bokeh/bokeh) for interactive plotting.
     - Use [`matplotlib`](https://github.com/matplotlib/matplotlib) for creating complex high quality figures...
     - ... but share a common interface between them as much as possible.
 
@@ -24,9 +24,9 @@
 ## Installation
 The easiest method of installing `xyzpy`'s dependencies is via [`conda`](http://conda.pydata.org/miniconda.html) and [`conda-forge`](https://conda-forge.github.io/):
 ```bash
-$ conda install numpy xarray h5py matplotlib
+$ conda install numpy xarray h5py matplotlib bokeh
 $ conda config --append channels conda-forge
-$ conda install h5netcdf plotly tqdm 
+$ conda install h5netcdf tqdm 
 ```
 After which this repo can be directly installed using `pip`.
 

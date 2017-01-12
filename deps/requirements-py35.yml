@@ -15,7 +15,6 @@ dependencies:
   - pytest-cov
   - tqdm
   - matplotlib
-  - plotly
   - cytoolz
   - coverage
   - pip:

@@ -45,7 +45,6 @@ from .signal import (
 )
 from .plot.color import (
     convert_colors,
-    calc_colors
 )
 # Making static plots with matplotlib
 from .plot.plotter_matplotlib import (
@@ -53,20 +52,10 @@ from .plot.plotter_matplotlib import (
     xyz_lineplot,
     visualize_matrix
 )
-# Making interactive plots with plotly
-from .plot.plotter_plotly import (
-    ishow,
-    ilineplot,
-    xyz_ilineplot,
-    iheatmap,
-    iscatter,
-    ihist,
-    ivisualize_matrix
-)
 # Making interactive plots with bokeh
 from .plot.plotter_bokeh import (
-    blineplot,
-    xyz_blineplot
+    ilineplot,
+    xyz_ilineplot
 )
 
 __all__ = ["Runner",
@@ -84,19 +73,11 @@ __all__ = ["Runner",
            "load_ds",
            "auto_xyz_ds",
            "convert_colors",
-           "calc_colors",
            "lineplot",
-           "xyz_lineplot",
-           "visualize_matrix",
-           "ishow",
            "ilineplot",
+           "xyz_lineplot",
            "xyz_ilineplot",
-           "iheatmap",
-           "iscatter",
-           "ihist",
-           "ivisualize_matrix",
-           "blineplot",
-           "xyz_blineplot",
+           "visualize_matrix",
            "unzip",
            "progbar",
            "xrsmoosh",
