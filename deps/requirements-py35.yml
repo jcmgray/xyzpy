@@ -12,6 +12,7 @@ dependencies:
   - zict >= 0.1.1
   - joblib >=0.10.2
   - netcdf4
+  - hdf4
   - h5py
   - h5netcdf
   - pytest
