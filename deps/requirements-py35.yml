@@ -4,6 +4,7 @@ channels:
 dependencies:
   - python=3.5
   - numpy
+  - numba
   - scipy
   - xarray
   - dask >= 0.13.0
