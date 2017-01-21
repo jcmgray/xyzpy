@@ -234,7 +234,7 @@ class Harvester(object):
         self.runner = runner
         self.data_name = data_name
         self.engine = engine
-        self.full_ds = None
+        self.full_ds = full_ds
 
     @property
     def last_ds(self):
