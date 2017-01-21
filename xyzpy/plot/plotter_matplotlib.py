@@ -76,6 +76,9 @@ class LinePlotterMPL(LinePlotter):
         if self._ytitle:
             self._axes.set_ylabel(self._ytitle, fontsize=self.fontsize_ytitle)
             self._axes.yaxis.labelpad = self.ytitle_pad
+            if self.ytitle_right:
+                self._axes.yaxis.tick_right()
+                self._axes.yaxis.set_label_position("right")
 
     def set_axes_scale(self):
         """
@@ -96,17 +99,20 @@ class LinePlotterMPL(LinePlotter):
         """
         if self.vlines is not None:
             for x in self.vlines:
-                self._axes.axvline(x, color="0.5", linestyle="dashed")
+                self._axes.axvline(x, color="0.5", linestyle=self.span_style)
         if self.hlines is not None:
             for y in self.hlines:
-                self._axes.axhline(y, color="0.5", linestyle="dashed")
+                self._axes.axhline(y, color="0.5", linestyle=self.span_style)
 
     def set_gridlines(self):
         """
         """
         if self.gridlines:
             self._axes.set_axisbelow(True)  # ensures gridlines below all
-            self._axes.grid(True, color="0.666")
+            self._axes.grid(True, color="0.7", which='major',
+                            linestyle=self.gridline_style)
+            self._axes.grid(True, color="0.8", which='minor',
+                            linestyle=self.gridline_style)
 
     def set_tick_marks(self):
         """
@@ -114,11 +120,11 @@ class LinePlotterMPL(LinePlotter):
         import matplotlib as mpl
 
         if self.xticks is not None:
-            self._axes.set_xticks(self.xticks)
+            self._axes.set_xticks(self.xticks, minor=False)
             (self._axes.get_xaxis()
              .set_major_formatter(mpl.ticker.ScalarFormatter()))
         if self.yticks is not None:
-            self._axes.set_yticks(self.yticks)
+            self._axes.set_yticks(self.yticks, minor=False)
             (self._axes.get_yaxis()
              .set_major_formatter(mpl.ticker.ScalarFormatter()))
         if self.xticklabels_hide:
@@ -132,17 +138,25 @@ class LinePlotterMPL(LinePlotter):
     def plot_lines(self):
         """
         """
-        for x, y in self._gen_xy():
+        for data in self._gen_xy():
             col = next(self._cols)
 
-            # add line to axes, with options cycled through
-            self._axes.plot(x, y, next(self._lines),
-                            c=col,
-                            lw=next(self._lws),
-                            marker=next(self._mrkrs),
-                            markeredgecolor=col,
-                            label=next(self._zlbls),
-                            zorder=next(self._zordrs))
+            line_opts = {'c': col,
+                         'lw': next(self._lws),
+                         'marker': next(self._mrkrs),
+                         'markeredgecolor': col,
+                         'markersize': self.markersize,
+                         'label': next(self._zlbls),
+                         'zorder': next(self._zordrs)}
+
+            if len(data) > 2:
+                self._axes.errorbar(data[0], data[1], fmt=next(self._lines),
+                                    yerr=data[2], ecolor=col, capthick=0,
+                                    elinewidth=0.5, **line_opts)
+            else:
+                # add line to axes, with options cycled through
+                self._axes.plot(data[0], data[1], next(self._lines),
+                                **line_opts)
 
     def plot_legend(self):
         """Add a legend
@@ -152,7 +166,12 @@ class LinePlotterMPL(LinePlotter):
                                             else self.ztitle),
                                      loc=self.legend_loc,
                                      fontsize=self.fontsize_zlabels,
-                                     frameon=False,
+                                     frameon=self.legend_frame,
+                                     numpoints=1,
+                                     scatterpoints=1,
+                                     markerscale=self.legend_markerscale,
+                                     labelspacing=self.legend_labelspacing,
+                                     columnspacing=self.legend_columnspacing,
                                      bbox_to_anchor=self.legend_bbox,
                                      ncol=self.legend_ncol)
             lgnd.get_title().set_fontsize(self.fontsize_ztitle)

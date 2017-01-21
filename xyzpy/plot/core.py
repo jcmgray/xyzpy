@@ -3,23 +3,25 @@ Helper functions for preparing data to be plotted.
 """
 # TODO: Error bars ********************************************************** #
 # TODO: allow dataArray ***************************************************** #
+# TODO: x-err, upper and lower errors *************************************** #
 
 import math
 import itertools
 import numpy as np
+import xarray as xr
 from .color import convert_colors, _xyz_colormaps
 from .marker import _MARKERS, _SINGLE_LINE_MARKER
 
 
 class LinePlotter:
-    def __init__(self, ds, y_coo, x_coo, z_coo=None,
+    def __init__(self, ds, y_coo, x_coo, z_coo=None, y_err=None,
                  engine='MATPLOTLIB',
                  # Figure options
-                 figsize=(8, 6),          # absolute figure size
-                 axes_loc=None,           # axes location within fig
-                 add_to_axes=None,        # add to existing axes
-                 add_to_fig=None,         # add plot to an exisitng figure
-                 subplot=None,            # make plot in subplot
+                 figsize=(8, 6),           # absolute figure size
+                 axes_loc=None,            # axes location within fig
+                 add_to_axes=None,         # add to existing axes
+                 add_to_fig=None,          # add plot to an exisitng figure
+                 subplot=None,             # make plot in subplot
                  fignum=1,
                  title=None,
                  # Line coloring options
@@ -27,14 +29,19 @@ class LinePlotter:
                  colormap="xyz",
                  colormap_log=False,
                  colormap_reverse=False,
+                 colorbar=False,
                  # Legend options
-                 legend=None,
-                 legend_loc=0,            # legend location
-                 ztitle=None,             # legend title
-                 zlabels=None,            # legend labels
-                 zlims=(None, None),      # Scaling limits for the colormap
-                 legend_ncol=1,           # number of columns in the legend
-                 legend_bbox=None,        # Where to anchor the legend to
+                 ztitle=None,               # legend title
+                 zlabels=None,              # legend labels
+                 zlims=(None, None),        # Scaling limits for the colormap
+                 legend=None,               # shoow legend or not
+                 legend_loc=0,              # legend location
+                 legend_ncol=1,             # number of columns in the legend
+                 legend_bbox=None,          # Where to anchor the legend to
+                 legend_markerscale=None,   # size of the legend markers
+                 legend_labelspacing=None,  # vertical spacing
+                 legend_columnspacing=3,    # horizontal spacing
+                 legend_frame=False,
                  # x-axis options
                  xtitle=None,
                  xtitle_pad=10,           # distance between label and axes
@@ -45,20 +52,24 @@ class LinePlotter:
                  # y-axis options
                  ytitle=None,
                  ytitle_pad=10,           # distance between label and axes
+                 ytitle_right=False,      # draw ytitle on right handside
                  ylims=None,              # plotting range on y-axis
                  yticks=None,             # where to place y ticks
                  yticklabels_hide=False,  # hide labels but not actual ticks
                  ylog=False,              # logarithmic y scale
                  # Shapes
-                 markers=None,            # use markers for each plotted point
-                 line_styles=None,        # iterable of line-styles, e.g. '--'
-                 line_widths=None,        # iterable of line-widths
-                 zorders=None,            # draw order
+                 markers=None,      # use markers for each plotted point
+                 markersize=None,   # size of markers
+                 line_styles=None,  # iterable of line-styles, e.g. '--'
+                 line_widths=None,  # iterable of line-widths
+                 zorders=None,      # draw order
                  # Misc options
-                 padding=None,            # plot range padding (as fraction)
-                 vlines=None,             # vertical line positions to plot
-                 hlines=None,             # horizontal line positions to plot
-                 gridlines=True,
+                 padding=None,        # plot range padding (as fraction)
+                 vlines=None,         # vertical line positions to plot
+                 hlines=None,         # horizontal line positions to plot
+                 span_style='--',     # style of the above lines
+                 gridlines=True,      # show gridlines or not
+                 gridline_style=':',  # linestyle of the gridlines
                  font=('Source Sans Pro', 'PT Sans',
                        'Liberation Sans', 'Arial'),
                  fontsize_title=20,
@@ -70,10 +81,14 @@ class LinePlotter:
                  return_fig=True):
         """
         """
-        self.ds = ds
+        if isinstance(ds, xr.DataArray):
+            self.ds = ds.to_dataset()
+        else:
+            self.ds = ds
         self.y_coo = y_coo
         self.x_coo = x_coo
         self.z_coo = z_coo
+        self.y_err = y_err
         self.figsize = figsize
         self.axes_loc = axes_loc
         self.add_to_axes = add_to_axes
@@ -85,13 +100,18 @@ class LinePlotter:
         self.colormap = colormap
         self.colormap_log = colormap_log
         self.colormap_reverse = colormap_reverse
-        self.legend = legend
-        self.legend_loc = legend_loc
+        self.colorbar = colorbar
         self.ztitle = ztitle
         self.zlabels = zlabels
         self.zlims = zlims
+        self.legend = legend
+        self.legend_loc = legend_loc
         self.legend_ncol = legend_ncol
         self.legend_bbox = legend_bbox
+        self.legend_markerscale = legend_markerscale
+        self.legend_labelspacing = legend_labelspacing
+        self.legend_columnspacing = legend_columnspacing
+        self.legend_frame = legend_frame
         self.xtitle = xtitle
         self.xtitle_pad = xtitle_pad
         self.xlims = xlims
@@ -100,18 +120,22 @@ class LinePlotter:
         self.xlog = xlog
         self.ytitle = ytitle
         self.ytitle_pad = ytitle_pad
+        self.ytitle_right = ytitle_right
         self.ylims = ylims
         self.yticks = yticks
         self.yticklabels_hide = yticklabels_hide
         self.ylog = ylog
         self.markers = markers
+        self.markersize = markersize
         self.line_styles = line_styles
         self.line_widths = line_widths
         self.zorders = zorders
         self.padding = padding
         self.vlines = vlines
         self.hlines = hlines
+        self.span_style = span_style
         self.gridlines = gridlines
+        self.gridline_style = gridline_style
         self.font = font
         self.fontsize_title = fontsize_title
         self.fontsize_ticks = fontsize_ticks
@@ -122,7 +146,7 @@ class LinePlotter:
         self.return_fig = return_fig
 
         # Internal
-        self._multi_var = False
+        self._data_range_calculated = False
 
         # Prepare
         self.prepare_z_vals()
@@ -137,8 +161,11 @@ class LinePlotter:
         self.calc_plot_range()
 
     def prepare_z_vals(self):
+        """Work out what the 'z-coordinate', if any, should be.
         """
-        """
+        # TODO: process multi-var errors at same time
+        self._multi_var = False
+
         if self.z_coo is not None:
             self._z_vals = self.ds[self.z_coo].values
         elif not isinstance(self.y_coo, str):
@@ -148,44 +175,61 @@ class LinePlotter:
             self._z_vals = (None,)
 
     def prepare_axes_labels(self):
-        """
+        """Work out what the axes titles should be.
         """
         self._xtitle = self.x_coo if self.xtitle is None else self.xtitle
-        if self.ytitle is None and isinstance(self.y_coo, str):
-            self._ytitle = self.y_coo
+        if self.ytitle is None:
+            if isinstance(self.y_coo, str):
+                self._ytitle = self.y_coo
+            else:
+                self._ytitle = None
         else:
-            self._ytitle = None
+            self._ytitle = self.ytitle
 
     def prepare_xy_vals(self):
-        """
+        """Select and flatten the data appropriately to iterate over.
         """
 
         def gen_xy():
             for z in self._z_vals:
-                # Select data for current z coord - flatten for singletons
+                # multiple data variables rather than z coordinate
                 if self._multi_var:
-                    # multiple data variables rather than z coordinate
                     x = self.ds[self.x_coo].values.flatten()
                     y = self.ds[z].values.flatten()
+
+                    if self.y_err is not None:
+                        raise ValueError('Multi-var errors not implemented.')
+
+                # z-coordinate to iterate over
                 elif z is not None:
-                    # z-coordinate to iterate over
-                    x = (self.ds.loc[{self.z_coo: z}][self.x_coo]
-                                .values.flatten())
-                    y = (self.ds.loc[{self.z_coo: z}][self.y_coo]
-                                .values.flatten())
+                    sub_ds = self.ds.loc[{self.z_coo: z}]
+                    x = sub_ds[self.x_coo].values.flatten()
+                    y = sub_ds[self.y_coo].values.flatten()
+
+                    if self.y_err is not None:
+                        ye = sub_ds[self.y_err].values.flatten()
+
+                # nothing to iterate over
                 else:
-                    # nothing to iterate over
                     x = self.ds[self.x_coo].values.flatten()
                     y = self.ds[self.y_coo].values.flatten()
 
+                    if self.y_err is not None:
+                        ye = self.ds[self.y_err].values.flatten()
+
                 # Trim out missing data
-                notnull = ~np.isnan(x) & ~np.isnan(y)
-                yield x[notnull], y[notnull]
+                not_null = np.isfinite(x)
+                not_null &= np.isfinite(y)
+
+                if self.y_err is not None:
+                    yield x[not_null], y[not_null], ye[not_null]
+                else:
+                    yield x[not_null], y[not_null]
 
         self._gen_xy = gen_xy
 
     def prepare_z_labels(self):
-        """
+        """Work out what the labels for the z-coordinate should be.
         """
         if self.zlabels is not None:
             self._zlbls = iter(self.zlabels)
@@ -195,13 +239,15 @@ class LinePlotter:
             self._zlbls = itertools.repeat(None)
 
     def calc_use_legend(self):
+        """Work out whether to use a legend.
+        """
         if self.legend is None:
             self._lgnd = (1 < len(self._z_vals) <= 10)
         else:
             self._lgnd = self.legend
 
     def prepare_colors(self, engine):
-        """
+        """Prepare the colors for the lines, based on the z-coordinate.
         """
         if self.colors is True:
             self.calc_colors(engine=engine)
@@ -216,7 +262,7 @@ class LinePlotter:
                 self._cols = itertools.repeat(None)
 
     def calc_colors(self, engine):
-        """
+        """Helper function for calculating what each color should be.
         """
         cmap = _xyz_colormaps(self.colormap)
 
@@ -242,7 +288,7 @@ class LinePlotter:
         self._cols = iter(convert_colors(self._cols, outformat=engine))
 
     def prepare_markers(self, engine):
-        """
+        """Prepare the markers to be used for each line.
         """
         if self.markers is None:
             self.markers = len(self.ds[self.x_coo]) <= 51
@@ -275,42 +321,61 @@ class LinePlotter:
         else:
             self._zordrs = itertools.cycle([3])
 
+    def calc_data_range(self, force=False):
+        """
+        """
+        if not self._data_range_calculated or force:
+            # x data range
+            self._data_xmin = float(self.ds[self.x_coo].min())
+            self._data_xmax = float(self.ds[self.x_coo].max())
+
+            # y data range
+            if self._multi_var:
+                self._data_ymin = float(min(self.ds[var].min()
+                                            for var in self.y_coo))
+                self._data_ymax = float(max(self.ds[var].max()
+                                            for var in self.y_coo))
+            else:
+                self._data_ymin = float(self.ds[self.y_coo].min())
+                self._data_ymax = float(self.ds[self.y_coo].max())
+
+            self._data_range_calculated = True
+
     def calc_plot_range(self):
         """Logic for processing limits and padding into plot ranges.
         """
+        # Leave as default
         if self.xlims is None and self.padding is None:
-            # Leave as default
             self._xlims = None
         else:
             if self.xlims is not None:
                 xmin, xmax = self.xlims
             else:
-                xmax, xmin = (self.ds[self.x_coo].max(),
-                              self.ds[self.x_coo].min())
-                xmin, xmax = float(xmin), float(xmax)
+                self.calc_data_range()
+                xmin, xmax = self._data_xmin, self._data_xmax
+
+            # increase plot range if padding specified
             if self.padding is not None:
                 xrnge = xmax - xmin
                 self._xlims = (xmin - self.padding * xrnge,
                                xmax + self.padding * xrnge)
             else:
-                self._xlims = self.xlims
+                self._xlims = xmin, xmax
 
-        if self.ylims is not None or self.padding is not None:
+        if self.ylims is None and self.padding is None:
+            # Leave as default
+            self._ylims = None
+        else:
             if self.ylims is not None:
                 ymin, ymax = self.ylims
             else:
-                if isinstance(self.y_coo, str):
-                    ymax, ymin = (self.ds[self.y_coo].max(),
-                                  self.ds[self.y_coo].min())
-                else:
-                    ymax = max(self.ds[var].max() for var in self.y_coo)
-                    ymin = min(self.ds[var].min() for var in self.y_coo)
-            ymin, ymax = float(ymin), float(ymax)
+                self.calc_data_range()
+                ymin, ymax = self._data_ymin, self._data_ymax
+
+            # increase plot range if padding specified
             if self.padding is not None:
                 yrnge = ymax - ymin
                 self._ylims = (ymin - self.padding * yrnge,
                                ymax + self.padding * yrnge)
             else:
-                self._ylims = self.ylims
-        else:
-            self._ylims = None
+                self._ylims = ymin, ymax
