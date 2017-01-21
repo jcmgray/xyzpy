@@ -5,6 +5,7 @@
 # TODO: add straight to array, ds ... --------------------------------------- #
 # TODO: allow combo_runner_to_ds to use output vars as coords --------------- #
 # TODO: better checks for var_name compatilibtiy with fn_args eg. ----------- #
+# TODO: allow nan results in combo_runner --> write to cases file? ---------- #
 
 import xarray as xr
 import numpy as np
@@ -129,31 +130,10 @@ def _combo_runner(fn, combos, constants,
     # Use a supplied pool to run combos
     if isinstance(pool, distributed.Client):
         with progbar(total=n, disable=hide_progbar) as pbar:
-            if parallel == 'as_completed':
-                futures = nested_submit(fn, combos, constants, pool=pool)
-                for f in distributed.as_completed(flatten(futures, ndim)):
-                    f._stored_result = f.result()
-                    f.release()
-                    pbar.update()
-                results = nested_get(futures, ndim, distributed_getter_stored)
-
-            elif parallel == 'callback':
-                submitter = make_distributed_submit_with_callback(pbar)
-                futures = nested_submit(fn, combos, constants, pool=pool,
-                                        submitter=submitter)
-                results = nested_get(futures, ndim, distributed_getter_stored)
-
-            elif parallel == 'replicate':
-                submitter = make_distributed_submit_with_callback_replicate(
-                    pbar, pool)
-                futures = nested_submit(fn, combos, constants, pool=pool,
-                                        submitter=submitter)
-                results = nested_get(futures, ndim, lambda f: f.result())
-
-            else:
-                futures = nested_submit(fn, combos, constants, pool=pool)
-                getter = update_upon_eval(distributed_getter, pbar)
-                results = nested_get(futures, ndim, getter)
+            futures = nested_submit(fn, combos, constants, pool=pool)
+            for f in distributed.as_completed(flatten(futures, ndim)):
+                pbar.update()
+            results = nested_get(futures, ndim, lambda f: f.result())
 
     elif pool is not None:
         with progbar(total=n, disable=hide_progbar) as pbar:
