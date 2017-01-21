@@ -10,8 +10,8 @@
   - Perform the runs in any number of parallel processes.
   - Display nested progress and estimated completion time (using [`tqdm`](<https://github.com/tqdm/tqdm>)).
   - Allow output of any number of multi-dimensional variables, storing the result in a self-describing [`xarray`](<https://github.com/pydata/xarray>) Dataset.
-  - (*Coming soon*) [Telegram](https://telegram.org/) notifications when a run is complete.
-  - (*Coming soon*) Detailed logging of every run's parameters.
+  - (*Planned*) [Telegram](https://telegram.org/) notifications when a run is complete.
+  - (*Planned*) Detailed logging of every run's parameters.
 
 ### Manage & Plot
   - Combine, save & load datasets on all platforms (using `xarray` and the netcdf format).
