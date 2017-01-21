@@ -3,8 +3,6 @@
 # TODO: fornberg, exact number of points
 # TODO: singh     higher different order and k
 # TODO: cwt
-# TODO: idxmax
-# TODO: idxmin
 # TODO: peak_find == cwt + interp + idxmax
 # TODO: allow reductions with new_dim=None
 # TODO: only optionally handle nan
@@ -22,19 +20,22 @@ from .utils import argwhere
 
 def nan_wrap_const_length(fn):
     """Take a function that accepts two vector arguments y and x and wrap it
-    such that only non-nan sections are supplied to it.
+    such that only non-nan sections are supplied to it. Assume output vector is
+    the same length as input.
     """
     def nanified(fx, x, *args, **kwargs):
-        isnan = np.isnan(fx)
-        if np.all(isnan):
-            return np.tile(np.nan, fx.shape)
-        elif np.any(isnan):
+        notnull = np.isfinite(fx)
+        if np.all(notnull):
+            # All data present
+            return fn(fx, x, *args, **kwargs)
+        elif np.any(notnull):
+            # Some missing data,
             res = np.tile(np.nan, fx.shape)
-            notnan = ~isnan
-            res[notnan] = fn(fx[notnan], x[notnan], *args, **kwargs)
+            res[notnull] = fn(fx[notnull], x[notnull], *args, **kwargs)
             return res
         else:
-            return fn(fx, x, *args, **kwargs)
+            # No valid data, just return nans
+            return np.tile(np.nan, fx.shape)
 
     return nanified
 
@@ -44,31 +45,33 @@ def xr_1d_apply(func, xobj, dim, new_dim=False, leave_nan=False):
     xarray dimensions.
     """
     if leave_nan:
+        # Assume function can handle nan values itself.
         nnfunc = func
     else:  # modify function to only act on nonnull data
-        def nnfunc(fx):
+        def nnfunc(xin):
             """Nan wrap a function, but accepting changes to the coordinates.
             """
-            isnull = np.isnan(fx)
+            isnull = ~np.isfinite(xin)
             # Just use function normally if no missing data
             if not np.any(isnull):
-                return func(fx)
+                return func(xin)
 
             # If all null, match new output dimension with np.nan
             elif np.all(isnull):
                 if new_dim is None:
                     return np.nan
                 if new_dim is False:
-                    return np.tile(np.nan, fx.size)
+                    return np.tile(np.nan, xin.size)
                 else:
                     return np.tile(np.nan, new_dim.size)
 
             # Partially null: apply function only on not null data
             else:
                 nonnull = ~isnull
-                part_res = func(fx[nonnull])
-                if new_dim is False:  # match old shape
-                    res = np.empty(fx.shape, dtype=part_res.dtype)
+                part_res = func(xin[nonnull])
+                if new_dim is False:
+                    # just match old shape
+                    res = np.empty(xin.shape, dtype=part_res.dtype)
                     res[isnull] = np.nan
                     res[nonnull] = part_res
                     return res
@@ -80,7 +83,7 @@ def xr_1d_apply(func, xobj, dim, new_dim=False, leave_nan=False):
     if isinstance(xobj, xr.DataArray):
         new_xobj = new_xobj.to_dataset(name='__temp_name__')
 
-    # if the dimenion is changing, create a temporary one
+    # if the dimension is changing, create a temporary one
     if not (new_dim is None or new_dim is False):
         new_xobj.coords['__temp_dim__'] = new_dim
 
@@ -384,6 +387,51 @@ xr.Dataset.usdiff = xr_usdiff
 xr.DataArray.usdiff = xr_usdiff
 
 
+@nan_wrap_const_length
+@numba.jit(nopython=True)
+def usdiff_err(efx, x):
+    """
+    Propagate unvertainties using uneven finite difference formula.
+    """
+    n = len(x)
+    edfx = np.empty(n)
+
+    # Forward difference for first point
+    h1 = x[1] - x[0]
+    h2 = x[2] - x[1]
+    edfx[0] = ((efx[0] * (2 * h1 + h2) / (h1 * (h1 + h2)))**2 +
+               (efx[1] * (h1 + h2) / (h1 * h2))**2 +
+               (efx[2] * h1 / ((h1 + h2) * h2))**2)**0.5
+
+    # Central difference for middle points
+    for i in range(1, n - 1):
+        h1 = x[i] - x[i - 1]
+        h2 = x[i + 1] - x[i]
+        edfx[i] = ((efx[i - 1] * h2 / (h1 * (h1 + h2)))**2 +
+                   (efx[i] * (h1 - h2) / (h1 * h2))**2 +
+                   (efx[i + 1] * h1 / (h2 * (h1 + h2)))**2)**0.5
+
+    # Backwards difference for last point
+    h1 = x[n - 2] - x[n - 3]
+    h2 = x[n - 1] - x[n - 2]
+    edfx[n - 1] = ((efx[n - 3] * h2 / (h1 * (h1 + h2)))**2 +
+                   (efx[n - 2] * (h1 + h2) / (h1 * h2))**2 +
+                   (efx[n - 1] * (h1 + 2 * h2) / (h2 * (h1 + h2)))**2)**0.5
+
+    return edfx
+
+
+def xr_usdiff_err(xobj, dim):
+    """Uneven-third-order finite difference derivative.
+    """
+    func = functools.partial(usdiff_err, x=xobj[dim].values)
+    return xr_1d_apply(func, xobj, dim, new_dim=False, leave_nan=True)
+
+
+xr.Dataset.usdiff_err = xr_usdiff_err
+xr.DataArray.usdiff_err = xr_usdiff_err
+
+
 # --------------------------------------------------------------------------- #
 #                            spline interpolation                             #
 # --------------------------------------------------------------------------- #
@@ -412,7 +460,7 @@ def xr_interp1d(xobj, dim, ix=100, kind='cubic', **kwargs):
     # make re-useable single arg function
     fn = array_interp1d(None, x=x, ix=ix, kind=kind,
                         return_func=True, **kwargs)
-    return xr_1d_apply(fn, xobj, dim, new_dim=ix, leave_nan=True)
+    return xr_1d_apply(fn, xobj, dim, new_dim=ix, leave_nan=False)
 
 
 xr.Dataset.interp = xr_interp1d
@@ -445,7 +493,7 @@ def xr_pchip(xobj, dim, ix=100):
         ix = np.linspace(x[0], x[-1], ix)
     # make re-useable single arg function
     fn = array_interp1d(None, x=x, ix=ix, return_func=True)
-    return xr_1d_apply(fn, xobj, dim, new_dim=ix, leave_nan=True)
+    return xr_1d_apply(fn, xobj, dim, new_dim=ix, leave_nan=False)
 
 
 xr.Dataset.pchip = xr_pchip
@@ -472,7 +520,7 @@ def xr_filtfilt(xobj, dim, filt='butter', *args, **kwargs):
     def func(x):
         return signal.filtfilt(b, a, x, method='gust')
 
-    return xr_1d_apply(func, xobj, dim, new_dim=False)
+    return xr_1d_apply(func, xobj, dim, new_dim=False, leave_nan=False)
 
 
 xr.DataArray.filtfilt = xr_filtfilt
