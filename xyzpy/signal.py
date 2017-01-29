@@ -13,6 +13,7 @@ import functools
 import numpy as np
 from scipy import interpolate, signal
 import xarray as xr
+from xarray.core.computation import apply_ufunc
 import numba
 
 from .utils import argwhere
@@ -531,28 +532,34 @@ xr.Dataset.filtfilt = xr_filtfilt
 #                               idxmax idxmin                                 #
 # --------------------------------------------------------------------------- #
 
-def xr_idxmax(xobj, dim):
-    coox = xobj[dim].values
+def gufunc_idxmax(x, y, **kwargs):
+    indx = np.argmax(x, **kwargs)
+    res = np.take(y, indx)
+    return res
 
-    def func(x):
-        indx = np.argmax(x)
-        return coox[indx]
 
-    return xr_1d_apply(func, xobj, dim, new_dim=None)
+def xr_idxmax(obj, dim):
+    sig = ([(dim,), (dim,)], [()])
+    kwargs = {'axis': -1}
+    return apply_ufunc(gufunc_idxmin, obj, obj[dim],
+                       signature=sig, kwargs=kwargs)
 
 
 xr.DataArray.idxmax = xr_idxmax
 xr.Dataset.idxmax = xr_idxmax
 
 
-def xr_idxmin(xobj, dim):
-    coox = xobj[dim].values
+def gufunc_idxmin(x, y, **kwargs):
+    indx = np.argmin(x, **kwargs)
+    res = np.take(y, indx)
+    return res
 
-    def func(x):
-        indx = np.argmin(x)
-        return coox[indx]
 
-    return xr_1d_apply(func, xobj, dim, new_dim=None)
+def xr_idxmin(obj, dim):
+    sig = ([(dim,), (dim,)], [()])
+    kwargs = {'axis': -1}
+    return apply_ufunc(gufunc_idxmin, obj, obj[dim],
+                       signature=sig, kwargs=kwargs)
 
 
 xr.DataArray.idxmin = xr_idxmin
