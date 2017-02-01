@@ -87,6 +87,22 @@ def distributed_getter_stored(future):
             time.sleep(0.1)
 
 
+def try_stored_then_result(future):
+    if hasattr(future, '_stored_result'):
+        return future._stored_result
+    else:
+        return future.result()
+
+
+def try_stored_then_result_and_release(future):
+    if hasattr(future, '_stored_result'):
+        res = future._stored_result
+    else:
+        res = future.result()
+    future.release()
+    return res
+
+
 def make_distributed_submit_with_callback(pbar):
 
     def releaser(future):

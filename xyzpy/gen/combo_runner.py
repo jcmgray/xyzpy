@@ -23,6 +23,7 @@ from .dask_stuff import (
     DaskTqdmProgbar,
     dask_scheduler_get,
     distributed_getter_stored,
+    try_stored_then_result,
 )
 from .prepare import (
     _parse_var_names,
@@ -130,14 +131,16 @@ def _combo_runner(fn, combos, constants,
             futures = nested_submit(fn, combos, constants, pool=pool)
             if parallel == 'release':
                 for f in distributed.as_completed(flatten(futures, ndim)):
-                    f._store_result = f.result()
+                    f._stored_result = f.result()
                     pbar.update()
                 results = nested_get(futures, ndim, distributed_getter_stored)
 
             else:
                 for f in distributed.as_completed(flatten(futures, ndim)):
+                    # Eagerly gather
+                    f._stored_result = f.result()
                     pbar.update()
-                results = nested_get(futures, ndim, lambda f: f.result())
+                results = nested_get(futures, ndim, try_stored_then_result)
 
     elif pool is not None:
         with progbar(total=n, disable=hide_progbar) as pbar:
