@@ -15,7 +15,8 @@ from scipy import interpolate, signal
 import xarray as xr
 from xarray.core.computation import apply_ufunc
 import numba
-
+from numba import guvectorize, double, int64
+from scipy.interpolate import LSQUnivariateSpline
 from .utils import argwhere
 
 
@@ -532,35 +533,176 @@ xr.Dataset.filtfilt = xr_filtfilt
 #                               idxmax idxmin                                 #
 # --------------------------------------------------------------------------- #
 
-def gufunc_idxmax(x, y, **kwargs):
-    indx = np.argmax(x, **kwargs)
-    res = np.take(y, indx)
-    return res
+def _index_from_1d_array(array, indices):
+    return array.take(indices)
+
+
+def gufunc_idxmax(x, y, axis=None):
+    import dask.array as da
+    indx = x.argmax(axis=axis)
+    func = functools.partial(_index_from_1d_array, y)
+
+    if isinstance(x, da.Array):
+        return da.map_blocks(func, indx, dtype=indx.dtype)
+    else:
+        return func(indx)
 
 
 def xr_idxmax(obj, dim):
     sig = ([(dim,), (dim,)], [()])
     kwargs = {'axis': -1}
-    return apply_ufunc(gufunc_idxmin, obj, obj[dim],
-                       signature=sig, kwargs=kwargs)
+    allna = obj.isnull().all(dim)
+    return apply_ufunc(gufunc_idxmax, obj.fillna(-np.inf), obj[dim],
+                       signature=sig, kwargs=kwargs,
+                       dask_array='allowed').where(~allna)
 
 
 xr.DataArray.idxmax = xr_idxmax
 xr.Dataset.idxmax = xr_idxmax
 
 
-def gufunc_idxmin(x, y, **kwargs):
-    indx = np.argmin(x, **kwargs)
-    res = np.take(y, indx)
-    return res
+def gufunc_idxmin(x, y, axis=None):
+    import dask.array as da
+    indx = x.argmin(axis=axis)
+    func = functools.partial(_index_from_1d_array, y)
+
+    if isinstance(x, da.Array):
+        return da.map_blocks(func, indx, dtype=indx.dtype)
+    else:
+        return func(indx)
 
 
 def xr_idxmin(obj, dim):
     sig = ([(dim,), (dim,)], [()])
     kwargs = {'axis': -1}
-    return apply_ufunc(gufunc_idxmin, obj, obj[dim],
-                       signature=sig, kwargs=kwargs)
+    allna = obj.isnull().all(dim)
+    return apply_ufunc(gufunc_idxmax, obj.fillna(np.inf), obj[dim],
+                       signature=sig, kwargs=kwargs,
+                       dask_array='allowed').where(~allna)
 
 
 xr.DataArray.idxmin = xr_idxmin
 xr.Dataset.idxmin = xr_idxmin
+
+
+# --------------------------------------------------------------------------- #
+#                      Univariate spline interpolation                        #
+# --------------------------------------------------------------------------- #
+
+@guvectorize([(double[:], double[:], double[:], int64[:], double[:])],
+             '(n),(n),(n),()->(n)')
+def _gufunc_unispline_err(x, y, err, num_knots, out):
+    xi = x.min()
+    xf = x.max()
+    t = np.linspace(xi, xf, num_knots)[1:-1]
+    fn_interp = LSQUnivariateSpline(x, y, t=t, w=1 / err)
+    out[:] = fn_interp(x)
+
+
+@guvectorize([(double[:], double[:], int64[:], double[:])],
+             '(n),(n),()->(n)')
+def _gufunc_unispline_noerr(x, y, num_knots, out):
+    xi = x.min()
+    xf = x.max()
+    t = np.linspace(xi, xf, num_knots)[1:-1]
+    fn_interp = LSQUnivariateSpline(x, y, t=t)
+    out[:] = fn_interp(x)
+
+
+@guvectorize([(double[:], double[:], double[:],
+               int64[:], double[:], double[:])],
+             '(n),(n),(n),(),(m),(m)')
+def _gufunc_unispline_err_upscale(x, y, err, num_knots, ix, out):
+    xi = x.min()
+    xf = x.max()
+    t = np.linspace(xi, xf, num_knots)[1:-1]
+    fn_interp = LSQUnivariateSpline(x, y, t=t, w=1 / err)
+    out[:] = fn_interp(ix)
+
+
+@guvectorize([(double[:], double[:], int64[:], double[:], double[:])],
+             '(n),(n),(),(m),(m)')
+def _gufunc_unispline_noerr_upscale(x, y, num_knots, ix, out):
+    xi = x.min()
+    xf = x.max()
+    t = np.linspace(xi, xf, num_knots)[1:-1]
+    fn_interp = LSQUnivariateSpline(x, y, t=t)
+    out[:] = fn_interp(ix)
+
+
+def gufunc_unispline(x, y, err=None, num_knots=11, ix=None, axis=-1):
+    """Dispatch to the correct numba gufunc.
+    """
+    if axis != -1:
+        y = y.swapaxes(axis, -1)
+
+    if ix is None:
+        if err is None:
+            return _gufunc_unispline_noerr(x, y, num_knots)
+        else:
+            return _gufunc_unispline_err(x, y, err, num_knots)
+    else:
+        # prepare interpolaing array to pass in
+        if isinstance(ix, int):
+            ix = np.linspace(x.min(), x.max(), ix)
+
+        # prepare output data to pass in
+        if axis < 0:
+            axis += y.ndim
+        out_shape = y.shape[:-1] + ix.shape
+        out = np.empty(out_shape, dtype=x.dtype)
+
+        if err is None:
+            _gufunc_unispline_noerr_upscale(x, y, num_knots, ix, out)
+        else:
+            _gufunc_unispline_err_upscale(x, y, err, num_knots, ix, out)
+        return out
+
+
+def xr_unispline(obj, dim, err=None, num_knots=11, ix=None):
+    """Fit a univariate spline along a dimension.
+
+    Parameters
+    ----------
+        obj : Dataset or DataArray
+            Object to fit spline to.
+        dim : str
+            Dimension to fit spline along
+        err : Dataset, DataArray or str (optional)
+            Error in variables, with with to weight spline fitting. If `err`
+            is a string, use the corresponding variable found within `obj`.
+        num_knots : int
+            Number of linearly spaced interior knots to form spline with.
+        ix : array-like or int (optional)
+            Which points to evaluate the newly fitted spline. If int, `ix` many
+            points will be chosen linearly spaced across the datas range. If
+            None, spline will be evaluated at original coordinates.
+    """
+    if isinstance(err, str):
+        err = obj[err]
+
+    if ix is None:
+        kwargs = {'num_knots': num_knots, 'axis': -1}
+        if err is None:
+            sig = ([(dim,), (dim,)], [(dim,)])
+            args = (obj[dim], obj)
+        else:
+            sig = ([(dim,), (dim,), (dim,)], [(dim,)])
+            args = (obj[dim], obj, err)
+        return apply_ufunc(gufunc_unispline, *args,
+                           signature=sig, kwargs=kwargs)
+    else:
+        if isinstance(ix, int):
+            ix = np.linspace(float(obj[dim].min()), float(obj[dim].max()), ix)
+        kwargs = {'num_knots': num_knots, 'axis': -1, 'ix': ix}
+
+        if err is None:
+            sig = ([(dim,), (dim,)], [('__temp_dim__',)])
+            args = (obj[dim], obj)
+        else:
+            sig = ([(dim,), (dim,), (dim,)], [('__temp_dim__',)])
+            args = (obj[dim], obj, err)
+        result = apply_ufunc(gufunc_unispline, *args,
+                             signature=sig, kwargs=kwargs)
+        result['__temp_dim__'] = ix
+        return result.rename({'__temp_dim__': dim})
