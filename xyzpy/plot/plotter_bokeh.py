@@ -45,17 +45,21 @@ class LinePlotterBokeh(LinePlotter):
         """
         from bokeh.plotting import figure
 
-        # Currently axes scale type must be set at figure creation?
-        self._plot = figure(width=int(self.figsize[0] * 80 + 100),
-                            height=int(self.figsize[1] * 80),
-                            x_axis_type=('log' if self.xlog else 'linear'),
-                            y_axis_type=('log' if self.ylog else 'linear'),
-                            title=self.title,
-                            toolbar_location="above",
-                            toolbar_sticky=False,
-                            active_scroll="wheel_zoom",
-                            logo=None,
-                            webgl=False)
+        if self.add_to_axes is not None:
+            self._plot = self.add_to_axes
+
+        else:
+            # Currently axes scale type must be set at figure creation?
+            self._plot = figure(width=int(self.figsize[0] * 80 + 100),
+                                height=int(self.figsize[1] * 80),
+                                x_axis_type=('log' if self.xlog else 'linear'),
+                                y_axis_type=('log' if self.ylog else 'linear'),
+                                title=self.title,
+                                toolbar_location="above",
+                                toolbar_sticky=False,
+                                active_scroll="wheel_zoom",
+                                logo=None,
+                                webgl=False)
 
     def set_axes_labels(self):
         """Set the labels on the axes.
