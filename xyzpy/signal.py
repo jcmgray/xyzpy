@@ -706,3 +706,7 @@ def xr_unispline(obj, dim, err=None, num_knots=11, ix=None):
                              signature=sig, kwargs=kwargs)
         result['__temp_dim__'] = ix
         return result.rename({'__temp_dim__': dim})
+
+
+xr.DataArray.unispline = xr_unispline
+xr.Dataset.unispline = xr_unispline
