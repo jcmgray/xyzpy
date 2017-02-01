@@ -11,6 +11,7 @@
 # TODO: try auto_combine before merge
 
 import os
+import shutil
 
 from .prepare import (
     _parse_fn_args,
@@ -234,7 +235,21 @@ class Harvester(object):
         self.runner = runner
         self.data_name = data_name
         self.engine = engine
-        self.full_ds = full_ds
+        self._full_ds = full_ds
+
+    def load_ds(self):
+        """Load the full dataset from disk.
+        """
+        self._full_ds = load_ds(self.data_name, engine=self.engine)
+        return self._full_ds
+
+    @property
+    def full_ds(self):
+        """Get the dataset containing all saved runs.
+        """
+        if self._full_ds is None:
+            self.load_ds()
+        return self._full_ds
 
     @property
     def last_ds(self):
@@ -242,13 +257,21 @@ class Harvester(object):
         """
         return self.runner.last_ds
 
+    def delete_ds(self, backup=True):
+        """Delete the on-disk dataset.
+        """
+        if backup:
+            shutil.copy(self.data_name, self.data_name + 'BAK')
+        else:
+            os.remove(self.data_name)
+
     def merge_into_full_ds(self, new_ds):
         """Merge a new dataset into the in-memory full dataset.
         """
-        if self.full_ds is None:
-            self.full_ds = new_ds.copy(deep=True)
+        if self._full_ds is None:
+            self._full_ds = new_ds.copy(deep=True)
         else:
-            self.full_ds.merge(new_ds, compat='no_conflicts', inplace=True)
+            self._full_ds.merge(new_ds, compat='no_conflicts', inplace=True)
 
     def merge_save(self, new_ds):
         """Merge a new dataset into the full, on-disk dataset.
@@ -256,17 +279,17 @@ class Harvester(object):
         # Check file exists and can be written to
         if os.access(self.data_name, os.W_OK):
             # Open, merge new data and close.
-            self.full_ds = load_ds(self.data_name, engine=self.engine)
-            self.full_ds.merge(new_ds, compat='no_conflicts', inplace=True)
-            save_ds(self.full_ds, self.data_name, engine=self.engine)
+            self._full_ds = load_ds(self.data_name, engine=self.engine)
+            self._full_ds.merge(new_ds, compat='no_conflicts', inplace=True)
+            save_ds(self._full_ds, self.data_name, engine=self.engine)
         # Check that it is not read-only
         elif os.path.isfile(self.data_name):  # pragma: no cover
             raise OSError("The file '{}' exists but cannot be written "
                           "to".format(self.data_name))
         # Else just create it new
         else:
-            self.full_ds = new_ds.copy(deep=True)
-            self.full_ds.to_netcdf(self.data_name, engine=self.engine)
+            self._full_ds = new_ds.copy(deep=True)
+            self._full_ds.to_netcdf(self.data_name, engine=self.engine)
 
     def harvest_combos(self, combos, save=True, **runner_settings):
         """Run combos, automatically merging into an on-disk dataset.
