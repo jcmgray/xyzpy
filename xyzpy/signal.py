@@ -393,7 +393,7 @@ xr.DataArray.usdiff = xr_usdiff
 @numba.jit(nopython=True)
 def usdiff_err(efx, x):
     """
-    Propagate unvertainties using uneven finite difference formula.
+    Propagate uncertainties using uneven finite difference formula.
     """
     n = len(x)
     edfx = np.empty(n)
@@ -576,7 +576,7 @@ def xr_idxmin(obj, dim):
     sig = ([(dim,), (dim,)], [()])
     kwargs = {'axis': -1}
     allna = obj.isnull().all(dim)
-    return apply_ufunc(gufunc_idxmax, obj.fillna(np.inf), obj[dim],
+    return apply_ufunc(gufunc_idxmin, obj.fillna(np.inf), obj[dim],
                        signature=sig, kwargs=kwargs,
                        dask_array='allowed').where(~allna)
 
