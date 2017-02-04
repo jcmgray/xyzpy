@@ -164,7 +164,7 @@ class Runner(object):
 
     # Running methods ------------------------------------------------------- #
 
-    def run_combos(self, combos, **runner_settings):
+    def run_combos(self, combos, constants=(), **runner_settings):
         """Run combos using the function map and save to dataset.
 
         Parameters
@@ -180,7 +180,7 @@ class Runner(object):
             self.fn, combos, self._var_names,
             var_dims=self._var_dims,
             var_coords=self._var_coords,
-            constants=self._constants,
+            constants={**self._constants, **dict(constants)},
             resources=self._resources,
             attrs=self.attrs,
             parse=False,
