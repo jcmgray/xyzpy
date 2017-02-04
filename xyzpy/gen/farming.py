@@ -261,9 +261,10 @@ class Harvester(object):
         """Delete the on-disk dataset.
         """
         if backup:
-            shutil.copy(self.data_name, self.data_name + 'BAK')
-        else:
-            os.remove(self.data_name)
+            import datetime
+            ts = '{:%Y%m%d-%H%M%S}'.format(datetime.datetime.now())
+            shutil.copy(self.data_name, self.data_name + '.BAK-{}'.format(ts))
+        os.remove(self.data_name)
 
     def merge_into_full_ds(self, new_ds):
         """Merge a new dataset into the in-memory full dataset.
