@@ -82,9 +82,9 @@ class LinePlotter:
         """
         """
         if isinstance(ds, xr.DataArray):
-            self.ds = ds.to_dataset()
+            self._ds = ds.to_dataset()
         else:
-            self.ds = ds
+            self._ds = ds
         self.y_coo = y_coo
         self.x_coo = x_coo
         self.z_coo = z_coo
@@ -160,6 +160,25 @@ class LinePlotter:
         self.prepare_zorders()
         self.calc_plot_range()
 
+    # ----------------------------- properties ------------------------------ #
+
+    def _get_ds(self):
+        return self._ds
+
+    def _set_ds(self, ds):
+        self._ds = ds
+        self.prepare_z_vals()
+        self.prepare_xy_vals()
+        self.calc_plot_range()
+
+    def _del_ds(self):
+        self._ds = None
+
+    ds = property(_get_ds, _set_ds, _del_ds,
+                  "The dataset used to plot graph.")
+
+    # ------------------------------- methods ------------------------------- #
+
     def prepare_z_vals(self):
         """Work out what the 'z-coordinate', if any, should be.
         """
@@ -167,7 +186,7 @@ class LinePlotter:
         self._multi_var = False
 
         if self.z_coo is not None:
-            self._z_vals = self.ds[self.z_coo].values
+            self._z_vals = self._ds[self.z_coo].values
         elif not isinstance(self.y_coo, str):
             self._multi_var = True
             self._z_vals = self.y_coo
@@ -194,15 +213,15 @@ class LinePlotter:
             for z in self._z_vals:
                 # multiple data variables rather than z coordinate
                 if self._multi_var:
-                    x = self.ds[self.x_coo].values.flatten()
-                    y = self.ds[z].values.flatten()
+                    x = self._ds[self.x_coo].values.flatten()
+                    y = self._ds[z].values.flatten()
 
                     if self.y_err is not None:
                         raise ValueError('Multi-var errors not implemented.')
 
                 # z-coordinate to iterate over
                 elif z is not None:
-                    sub_ds = self.ds.loc[{self.z_coo: z}]
+                    sub_ds = self._ds.loc[{self.z_coo: z}]
                     x = sub_ds[self.x_coo].values.flatten()
                     y = sub_ds[self.y_coo].values.flatten()
 
@@ -211,11 +230,11 @@ class LinePlotter:
 
                 # nothing to iterate over
                 else:
-                    x = self.ds[self.x_coo].values.flatten()
-                    y = self.ds[self.y_coo].values.flatten()
+                    x = self._ds[self.x_coo].values.flatten()
+                    y = self._ds[self.y_coo].values.flatten()
 
                     if self.y_err is not None:
-                        ye = self.ds[self.y_err].values.flatten()
+                        ye = self._ds[self.y_err].values.flatten()
 
                 # Trim out missing data
                 not_null = np.isfinite(x)
@@ -269,18 +288,18 @@ class LinePlotter:
         try:
             zmin = self.zlims[0]
             if zmin is None:
-                zmin = self.ds[self.z_coo].values.min()
+                zmin = self._ds[self.z_coo].values.min()
             zmax = self.zlims[1]
             if zmax is None:
-                zmax = self.ds[self.z_coo].values.max()
+                zmax = self._ds[self.z_coo].values.max()
 
             # Relative function
             f = math.log if self.colormap_log else lambda a: a
             # Relative place in range according to function
             rvals = [1 - (f(z) - f(zmin)) / (f(zmax) - f(zmin))
-                     for z in self.ds[self.z_coo].values]
+                     for z in self._ds[self.z_coo].values]
         except TypeError:  # no relative coloring possible e.g. for strings
-            rvals = np.linspace(0, 1.0, self.ds[self.z_coo].size)
+            rvals = np.linspace(0, 1.0, self._ds[self.z_coo].size)
 
         # Map to mpl colormap, reversing if required
         self._cols = [cmap(1 - rval if self.colormap_reverse else rval)
@@ -291,7 +310,7 @@ class LinePlotter:
         """Prepare the markers to be used for each line.
         """
         if self.markers is None:
-            self.markers = len(self.ds[self.x_coo]) <= 51
+            self.markers = len(self._ds[self.x_coo]) <= 51
 
         if self.markers:
             if len(self._z_vals) > 1:
@@ -304,7 +323,8 @@ class LinePlotter:
     def prepare_line_styles(self, engine):
         """Line widths and styles.
         """
-        self._lines = (itertools.repeat("-") if self.line_styles is None else
+        self._lines = (itertools.repeat("solid")
+                       if self.line_styles is None else
                        itertools.cycle(self.line_styles))
 
         # Set custom widths for each line
@@ -326,18 +346,18 @@ class LinePlotter:
         """
         if not self._data_range_calculated or force:
             # x data range
-            self._data_xmin = float(self.ds[self.x_coo].min())
-            self._data_xmax = float(self.ds[self.x_coo].max())
+            self._data_xmin = float(self._ds[self.x_coo].min())
+            self._data_xmax = float(self._ds[self.x_coo].max())
 
             # y data range
             if self._multi_var:
-                self._data_ymin = float(min(self.ds[var].min()
+                self._data_ymin = float(min(self._ds[var].min()
                                             for var in self.y_coo))
-                self._data_ymax = float(max(self.ds[var].max()
+                self._data_ymax = float(max(self._ds[var].max()
                                             for var in self.y_coo))
             else:
-                self._data_ymin = float(self.ds[self.y_coo].min())
-                self._data_ymax = float(self.ds[self.y_coo].max())
+                self._data_ymin = float(self._ds[self.y_coo].min())
+                self._data_ymax = float(self._ds[self.y_coo].max())
 
             self._data_range_calculated = True
 

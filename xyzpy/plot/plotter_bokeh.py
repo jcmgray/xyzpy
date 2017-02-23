@@ -76,17 +76,19 @@ class LinePlotterBokeh(LinePlotter):
 
         self.calc_data_range()
 
-        plt_x_centre = (self._data_xmax + self._data_xmin) / 2
-        plt_x_range = self._data_xmax - self._data_xmin
-        xbounds = (plt_x_centre - plt_x_range, plt_x_centre + plt_x_range)
+        # plt_x_centre = (self._data_xmax + self._data_xmin) / 2
+        # plt_x_range = self._data_xmax - self._data_xmin
+        # xbounds = (plt_x_centre - plt_x_range, plt_x_centre + plt_x_range)
+        xbounds = None
         self._plot.x_range = (DataRange1d(start=self._xlims[0],
                                           end=self._xlims[1],
                                           bounds=xbounds) if self._xlims else
                               DataRange1d(bounds=xbounds))
 
-        plt_y_centre = (self._data_ymax + self._data_ymin) / 2
-        plt_y_range = abs(self._data_ymax - self._data_ymin)
-        ybounds = (plt_y_centre - plt_y_range, plt_y_centre + plt_y_range)
+        # plt_y_centre = (self._data_ymax + self._data_ymin) / 2
+        # plt_y_range = abs(self._data_ymax - self._data_ymin)
+        # ybounds = (plt_y_centre - plt_y_range, plt_y_centre + plt_y_range)
+        ybounds = None
         self._plot.y_range = (DataRange1d(start=self._ylims[0],
                                           end=self._ylims[1],
                                           bounds=ybounds) if self._ylims else
@@ -141,26 +143,39 @@ class LinePlotterBokeh(LinePlotter):
         for data in self._gen_xy():
             col = next(self._cols)
             zlabel = next(self._zlbls)
-            source = ColumnDataSource(data={'x': data[0], 'y': data[1],
-                                            'z_coo': [zlabel] * len(data[0])})
-
-            line = self._plot.line('x', 'y', source=source,
-                                   line_width=next(self._lws) * 1.5,
-                                   color=col)
+            source = ColumnDataSource(
+                data={'x': data[0],
+                      'y': data[1],
+                      'z_coo': [zlabel] * len(data[0])}
+            )
+            line = self._plot.line(
+                'x', 'y',
+                source=source,
+                line_dash=next(self._lines),
+                line_width=next(self._lws) * 1.5,
+                color=col
+            )
             legend_pics = [line]
 
             if self.markers:
                 marker = next(self._mrkrs)
-                m = getattr(self._plot, marker)('x', 'y', source=source,
-                                                name=zlabel, color=col)
+                m = getattr(self._plot, marker)(
+                    'x', 'y',
+                    source=source,
+                    name=zlabel,
+                    color=col
+                )
                 legend_pics.append(m)
 
+            # Check if errors specified as well
             if len(data) > 2:
                 y_err_p = data[1] + data[2]
                 y_err_m = data[1] - data[2]
-                err = self._plot.multi_line(list(zip(data[0], data[0])),
-                                            list(zip(y_err_p, y_err_m)),
-                                            color=col)
+                err = self._plot.multi_line(
+                    list(zip(data[0], data[0])),
+                    list(zip(y_err_p, y_err_m)),
+                    color=col
+                )
                 legend_pics.append(err)
 
             if self._lgnd:

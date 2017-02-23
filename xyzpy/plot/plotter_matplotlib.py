@@ -147,16 +147,16 @@ class LinePlotterMPL(LinePlotter):
                          'markeredgecolor': col,
                          'markersize': self.markersize,
                          'label': next(self._zlbls),
-                         'zorder': next(self._zordrs)}
+                         'zorder': next(self._zordrs),
+                         'linestyle': next(self._lines)}
 
             if len(data) > 2:
-                self._axes.errorbar(data[0], data[1], fmt=next(self._lines),
+                self._axes.errorbar(data[0], data[1],
                                     yerr=data[2], ecolor=col, capthick=0,
                                     elinewidth=0.5, **line_opts)
             else:
                 # add line to axes, with options cycled through
-                self._axes.plot(data[0], data[1], next(self._lines),
-                                **line_opts)
+                self._axes.plot(data[0], data[1], **line_opts)
 
     def plot_legend(self):
         """Add a legend
