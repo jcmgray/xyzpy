@@ -9,7 +9,7 @@ setup(
     install_requires=[
         'numpy>=1.10.0',
         'dask>=0.11.1',
-        'distributed>=1.13.2',
+        'distributed>=1.15.2',
         'xarray>=0.8.0',
         'h5py>=2.6.0',
         'h5netcdf>=0.2.2',

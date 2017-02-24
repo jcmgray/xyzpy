@@ -10,7 +10,6 @@
 import xarray as xr
 import numpy as np
 from dask.delayed import delayed, compute
-import distributed
 from ..utils import (
     unzip,
     flatten,
@@ -126,7 +125,8 @@ def _combo_runner(fn, combos, constants,
     ndim = len(combos)
 
     # Use a supplied pool to run combos
-    if isinstance(pool, distributed.Client):
+    if hasattr(pool, 'scheduler'):
+        import distributed
         with progbar(total=n, disable=hide_progbar) as pbar:
             futures = nested_submit(fn, combos, constants, pool=pool)
             if parallel == 'release':

@@ -124,8 +124,7 @@ def xr_1d_apply(func, xobj, dim, new_dim=False, leave_nan=False):
 #                    fornberg's finite difference algortihm                   #
 # --------------------------------------------------------------------------- #
 
-@numba.jit(["float64(float64[:],float64[:],float64,int64)"],
-           nopython=True)  # pragma: no cover
+@numba.jit(nopython=True)  # pragma: no cover
 def finite_difference_fornberg(fx, x, z, order):
     """Fornberg finite difference method for single poitn `z`.
     """
