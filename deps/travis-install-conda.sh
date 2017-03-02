@@ -15,6 +15,10 @@ if [ ! -d "$HOME/conda/bin" ]; then
   conda info -a
   conda env create --name test-environment --file $DIR/requirements-py35.yml
   source activate test-environment
+
+  # need up-to-date xarray
+  pip install git+git://github.com/pydata/xarray.git -U --no-deps
+
 else
   export PATH="$HOME/conda/bin:$PATH"
   hash -r
