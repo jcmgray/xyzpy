@@ -60,16 +60,17 @@ class LinePlotter:
                  # Shapes
                  markers=None,      # use markers for each plotted point
                  markersize=None,   # size of markers
+                 lines=True,
                  line_styles=None,  # iterable of line-styles, e.g. '--'
                  line_widths=None,  # iterable of line-widths
                  zorders=None,      # draw order
                  # Misc options
-                 padding=None,        # plot range padding (as fraction)
-                 vlines=None,         # vertical line positions to plot
-                 hlines=None,         # horizontal line positions to plot
-                 span_style='--',     # style of the above lines
-                 gridlines=True,      # show gridlines or not
-                 gridline_style=':',  # linestyle of the gridlines
+                 padding=None,           # plot range padding (as fraction)
+                 vlines=None,            # vertical line positions to plot
+                 hlines=None,            # horizontal line positions to plot
+                 span_style='--',        # style of the above lines
+                 gridlines=True,         # show gridlines or not
+                 gridline_style=(1, 3),  # linestyle of the gridlines
                  font=('Source Sans Pro', 'PT Sans',
                        'Liberation Sans', 'Arial'),
                  fontsize_title=20,
@@ -78,6 +79,7 @@ class LinePlotter:
                  fontsize_ytitle=20,
                  fontsize_ztitle=20,
                  fontsize_zlabels=18,
+                 math_serif=False,       # Use serif fonts for math text
                  return_fig=True):
         """
         """
@@ -127,6 +129,7 @@ class LinePlotter:
         self.ylog = ylog
         self.markers = markers
         self.markersize = markersize
+        self.lines = lines
         self.line_styles = line_styles
         self.line_widths = line_widths
         self.zorders = zorders
@@ -143,6 +146,7 @@ class LinePlotter:
         self.fontsize_ytitle = fontsize_ytitle
         self.fontsize_ztitle = fontsize_ztitle
         self.fontsize_zlabels = fontsize_zlabels
+        self.math_serif = math_serif
         self.return_fig = return_fig
 
         # Internal
@@ -168,8 +172,10 @@ class LinePlotter:
     def _set_ds(self, ds):
         self._ds = ds
         self.prepare_z_vals()
+        self.prepare_z_labels()
         self.prepare_xy_vals()
         self.calc_plot_range()
+        self.update()
 
     def _del_ds(self):
         self._ds = None
@@ -275,8 +281,8 @@ class LinePlotter:
                                                         outformat=engine))
         else:
             if engine == 'BOKEH':
-                from bokeh.palettes import Dark2_8
-                self._cols = itertools.cycle(Dark2_8)
+                from bokeh.palettes import Category10_9
+                self._cols = itertools.cycle(Category10_9)
             else:
                 self._cols = itertools.repeat(None)
 
@@ -310,7 +316,12 @@ class LinePlotter:
         """Prepare the markers to be used for each line.
         """
         if self.markers is None:
-            self.markers = len(self._ds[self.x_coo]) <= 51
+            # If no lines, always draw markers
+            if self.lines is False:
+                self.markers = True
+            # Else decide on how many points
+            else:
+                self.markers = len(self._ds[self.x_coo]) <= 51
 
         if self.markers:
             if len(self._z_vals) > 1:
@@ -323,9 +334,10 @@ class LinePlotter:
     def prepare_line_styles(self, engine):
         """Line widths and styles.
         """
-        self._lines = (itertools.repeat("solid")
-                       if self.line_styles is None else
-                       itertools.cycle(self.line_styles))
+        self._lines = (
+            itertools.repeat(" ") if self.lines is False else
+            itertools.repeat("solid") if self.line_styles is None else
+            itertools.cycle(self.line_styles))
 
         # Set custom widths for each line
         if self.line_widths is not None:

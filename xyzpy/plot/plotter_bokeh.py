@@ -1,4 +1,5 @@
 import functools
+import itertools
 from ..manage import auto_xyz_ds
 from .core import LinePlotter
 
@@ -12,11 +13,11 @@ def _init_bokeh_nb():
     output_notebook(resources=INLINE)
 
 
-def bshow(figs, nb=True, **kwargs):
+def bshow(figs, nb=True, interactive=False, **kwargs):
     from bokeh.plotting import show
     if nb:
         _init_bokeh_nb()
-        show(figs)
+        show(figs, notebook_handle=interactive)
     else:
         show(figs)
 
@@ -36,9 +37,12 @@ class LinePlotterBokeh(LinePlotter):
         self.set_spans()
         self.set_gridlines()
         self.set_tick_marks()
+        self.set_sources()
         self.plot_lines()
         self.plot_legend()
         self.set_tools()
+
+        self._interactive = kwargs.pop('interactive', False)
 
     def prepare_plot_and_set_axes_scale(self):
         """Make the bokeh plot figure and set options.
@@ -50,16 +54,18 @@ class LinePlotterBokeh(LinePlotter):
 
         else:
             # Currently axes scale type must be set at figure creation?
-            self._plot = figure(width=int(self.figsize[0] * 80 + 100),
-                                height=int(self.figsize[1] * 80),
-                                x_axis_type=('log' if self.xlog else 'linear'),
-                                y_axis_type=('log' if self.ylog else 'linear'),
-                                title=self.title,
-                                toolbar_location="above",
-                                toolbar_sticky=False,
-                                active_scroll="wheel_zoom",
-                                logo=None,
-                                webgl=False)
+            self._plot = figure(
+                width=int(self.figsize[0] * 80 + 100),
+                height=int(self.figsize[1] * 80),
+                x_axis_type=('log' if self.xlog else 'linear'),
+                y_axis_type=('log' if self.ylog else 'linear'),
+                title=self.title,
+                toolbar_location="above",
+                toolbar_sticky=False,
+                active_scroll="wheel_zoom",
+                logo=None,
+                webgl=False
+            )
 
     def set_axes_labels(self):
         """Set the labels on the axes.
@@ -119,8 +125,8 @@ class LinePlotterBokeh(LinePlotter):
             self._plot.xgrid.visible = False
             self._plot.ygrid.visible = False
         else:
-            self._plot.xgrid.grid_line_dash = [2, 3]
-            self._plot.ygrid.grid_line_dash = [2, 3]
+            self._plot.xgrid.grid_line_dash = self.gridline_style
+            self._plot.ygrid.grid_line_dash = self.gridline_style
 
     def set_tick_marks(self):
         """Set custom locations for the tick marks.
@@ -132,50 +138,53 @@ class LinePlotterBokeh(LinePlotter):
         if self.yticks:
             self._plot.yaxis[0].ticker = FixedTicker(ticks=self.yticks)
 
+    def set_sources(self):
+        """Set the source dictionaries to be used by the plotter functions.
+        """
+        self._zlbls, szlbs = itertools.tee(self._zlbls)
+
+        if not hasattr(self, "_sources"):
+            from bokeh.plotting import ColumnDataSource
+            self._sources = [ColumnDataSource(dict())
+                             for _ in range(len(self._z_vals))]
+
+        for i, (zlabel, data) in enumerate(zip(szlbs, self._gen_xy())):
+            self._sources[i].data['x'] = data[0]
+            self._sources[i].data['y'] = data[1]
+            self._sources[i].data['z_coo'] = [zlabel] * len(data[0])
+            if self.y_err:
+                y_err_p = data[1] + data[2]
+                y_err_m = data[1] - data[2]
+                self._sources[i].data['y_err_xs'] = list(zip(data[0], data[0]))
+                self._sources[i].data['y_err_ys'] = list(zip(y_err_p, y_err_m))
+
     def plot_lines(self):
         """Plot the data and a corresponding legend.
         """
-        from bokeh.plotting import ColumnDataSource
-
         if self._lgnd:
             self._lgnd_items = []
 
-        for data in self._gen_xy():
+        for src in self._sources:
             col = next(self._cols)
             zlabel = next(self._zlbls)
-            source = ColumnDataSource(
-                data={'x': data[0],
-                      'y': data[1],
-                      'z_coo': [zlabel] * len(data[0])}
-            )
-            line = self._plot.line(
-                'x', 'y',
-                source=source,
-                line_dash=next(self._lines),
-                line_width=next(self._lws) * 1.5,
-                color=col
-            )
-            legend_pics = [line]
+            legend_pics = []
+
+            if self.lines:
+                line = self._plot.line('x', 'y', source=src, color=col,
+                                       line_dash=next(self._lines),
+                                       line_width=next(self._lws) * 1.5)
+                legend_pics.append(line)
 
             if self.markers:
                 marker = next(self._mrkrs)
-                m = getattr(self._plot, marker)(
-                    'x', 'y',
-                    source=source,
-                    name=zlabel,
-                    color=col
-                )
+                m = getattr(self._plot, marker)('x', 'y', source=src,
+                                                name=zlabel, color=col)
                 legend_pics.append(m)
 
             # Check if errors specified as well
-            if len(data) > 2:
-                y_err_p = data[1] + data[2]
-                y_err_m = data[1] - data[2]
+            if self.y_err:
                 err = self._plot.multi_line(
-                    list(zip(data[0], data[0])),
-                    list(zip(y_err_p, y_err_m)),
-                    color=col
-                )
+                    xs='y_err_xs', ys='y_err_ys', source=src, color=col)
                 legend_pics.append(err)
 
             if self._lgnd:
@@ -199,22 +208,29 @@ class LinePlotterBokeh(LinePlotter):
         self._plot.add_tools(HoverTool(tooltips=[
             ("({}, {})".format(self.x_coo, self.y_coo
                                if isinstance(self.y_coo, str) else None),
-             "($x, $y)"), (self.z_coo, "@z_coo")]))
+             "(@x, @y)"), (self.z_coo, "@z_coo")]))
 
-    def show(self):
+    def update(self):
+        from bokeh.io import push_notebook
+        self.set_sources()
+        push_notebook()
+
+    def show(self, **kwargs):
         """Show the produced figure.
         """
         if self.return_fig:
             return self._plot
-        bshow(self._plot)
+        bshow(self._plot, **kwargs)
+        return self
 
 
-def ilineplot(ds, y_coo, x_coo, z_coo=None, return_fig=False, **kwargs):
+def ilineplot(ds, y_coo, x_coo, z_coo=None, return_fig=False,
+              interactive=False, **kwargs):
     """
     """
     p = LinePlotterBokeh(ds, y_coo, x_coo, z_coo,
                          return_fig=return_fig, **kwargs)
-    return p.show()
+    return p.show(interactive=interactive)
 
 
 # --------------------------------------------------------------------------- #
