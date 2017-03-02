@@ -36,8 +36,11 @@ class LinePlotterMPL(LinePlotter):
         """
         """
         import matplotlib as mpl
+        if self.math_serif:
+            mpl.rcParams['mathtext.fontset'] = 'cm'
+            mpl.rcParams['mathtext.rm'] = 'serif'
+        mpl.rcParams['font.family'] = self.font
         import matplotlib.pyplot as plt
-        mpl.rc("font", family=self.font)
 
         # Add a new set of axes to an existing plot
         if self.add_to_fig is not None and self.subplot is None:
@@ -107,12 +110,17 @@ class LinePlotterMPL(LinePlotter):
     def set_gridlines(self):
         """
         """
+        for axis in ('top', 'bottom', 'left', 'right'):
+            self._axes.spines[axis].set_linewidth(1.0)
+
         if self.gridlines:
+            # matplotlib has coarser gridine style than bokeh
+            self._gridline_style = [x / 2 for x in self.gridline_style]
             self._axes.set_axisbelow(True)  # ensures gridlines below all
-            self._axes.grid(True, color="0.7", which='major',
-                            linestyle=self.gridline_style)
-            self._axes.grid(True, color="0.8", which='minor',
-                            linestyle=self.gridline_style)
+            self._axes.grid(True, color="0.9", which='major',
+                            linestyle=(0, self._gridline_style))
+            self._axes.grid(True, color="0.95", which='minor',
+                            linestyle=(0, self._gridline_style))
 
     def set_tick_marks(self):
         """
@@ -133,7 +141,8 @@ class LinePlotterMPL(LinePlotter):
         if self.yticklabels_hide:
             (self._axes.get_yaxis()
              .set_major_formatter(mpl.ticker.NullFormatter()))
-        self._axes.tick_params(labelsize=self.fontsize_ticks, direction='out')
+        self._axes.tick_params(labelsize=self.fontsize_ticks, direction='out',
+                               bottom=True, top=True, left=True, right=True)
 
     def plot_lines(self):
         """
