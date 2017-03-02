@@ -33,9 +33,10 @@ from .gen.farming import (
 )
 from .manage import (
     cache_to_disk,
-    xrsmoosh,
     save_ds,
     load_ds,
+    trimna,
+    check_runs,
     auto_xyz_ds,
 )
 from .signal import (
@@ -71,6 +72,8 @@ __all__ = ["Runner",
            "cache_to_disk",
            "save_ds",
            "load_ds",
+           "trimna",
+           "check_runs",
            "auto_xyz_ds",
            "convert_colors",
            "lineplot",
@@ -80,7 +83,6 @@ __all__ = ["Runner",
            "visualize_matrix",
            "unzip",
            "progbar",
-           "xrsmoosh",
            "wfdiff",
            "xr_wfdiff",
            "xr_sdiff"]

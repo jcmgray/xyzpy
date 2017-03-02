@@ -86,63 +86,50 @@ xrsave = save_ds
 xrload = load_ds
 
 
-def nonnull_compatible(first, second):
-    """Check whether two (aligned) datasets have any conflicting values.
+def trimna(obj):
+    """Drop values across all dimensions for which all values are NaN.
     """
-    # TODO assert common coordinates are aligned?
-    both_not_null = first.notnull() & second.notnull()
-    return first.where(both_not_null).equals(second.where(both_not_null))
+    trimmed_obj = obj.copy()
+    for d in obj.dims:
+        trimmed_obj = trimmed_obj.dropna(d, how='all')
+    return trimmed_obj
 
 
-def aggregate(*datasets, overwrite=False, accept_newer=False):
-    """Aggregates xarray Datasets and DataArrays
+def check_runs(obj, dim='run', var=None, sel=()):
+    """Print out information about the range and any missing values for an
+    integer dimension.
 
     Parameters
     ----------
-        *datasets: sequence of datasets to combine
-        overwrite: whether to overwrite conflicting values
-        accept_newer: if overwriting whether to accept newer values, i.e.
-            to prefer values in latter datasets.
-
-    Returns
-    -------
-        ds: single Dataset containing data from all `datasets`
+        obj : xarray object
+            Data to check.
+        dim : str (optional)
+            Dimension to check, defaults to 'run'.
+        var : str (optional)
+            Subselect this data variable first.
+        sel : mapping (optional)
+            Subselect these other coordinates first.
     """
+    if sel:
+        obj = obj.loc[sel]
+    if var:
+        obj = obj[var]
 
-    datasets = iter(datasets)
-    ds1 = next(datasets)
+    obj = trimna(obj)
+    obj = obj.dropna(dim, how='all')
+    obj = obj[dim].values
 
-    for ds2 in datasets:
-        # Expand both to have same coordinates, padding with nan
-        ds1, ds2 = (xr.align(ds1, ds2, join='outer') if accept_newer else
-                    xr.align(ds2, ds1, join='outer'))
+    if obj.dtype != int:
+        raise TypeError("check_runs can only check integer dimesions.")
 
-        # Check no data-loss will occur if overwrite not set
-        if not overwrite and not nonnull_compatible(ds1, ds2):
-            raise ValueError("Conflicting values in datasets. "
-                             "Consider setting `overwrite=True`.")
-
-        # Fill out missing values in initial dataset for common variables
-        common_vars = (var for var in ds1.data_vars if var in ds2.data_vars)
-        for var in common_vars:
-            ds1[var] = ds1[var].fillna(ds2[var])
-
-        # Add completely missing data_variables
-        new_vars = (var for var in ds2.data_vars if var not in ds1.data_vars)
-        for var in new_vars:
-            ds1[var] = ds2[var]
-
-        # TODO: check if result var is all non-nan and could be all same dtype
-        # TODO:     - only really makes sense for int currently? and string?
-
-    return ds1
-
-
-def xrsmoosh(*objs, overwrite=False, accept_newer=False):
-    try:
-        return xr.merge(objs, compat='no_conflicts')
-    except (ValueError, xr.MergeError):
-        return aggregate(*objs, overwrite=overwrite, accept_newer=accept_newer)
+    xmin, xmax = obj.min(), obj.max() + 1
+    xmiss_start = obj[:-1][obj[1:] != obj[:-1] + 1] + 1
+    xmiss_end = obj[1:][obj[1:] != obj[:-1] + 1]
+    xmissing = list(zip(xmiss_start, xmiss_end))
+    msg = "RANGE:  {:>7} -> {:<7} | TOTAL:  {:^7}".format(xmin, xmax, len(obj))
+    if xmissing:
+        msg += " | MISSING: {}".format(xmissing)
+    print(msg)
 
 
 def auto_xyz_ds(x, y_z):

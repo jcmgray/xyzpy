@@ -1,12 +1,11 @@
 import os
 import tempfile
 
-from pytest import fixture, raises, mark
+from pytest import fixture, mark
 import numpy as np
 import xarray as xr
 
 from xyzpy.manage import (
-    xrsmoosh,
     load_ds,
     save_ds,
 )
@@ -60,39 +59,6 @@ def ds_real():
             'x': (('b', 'a'), np.random.randn(2, 3)),
             'isodd': ('a', np.asarray([True, False, True]))},
         attrs={'qux': 'corge'})
-
-
-class TestAggregate:
-    def test_simple(self, ds1, ds2):
-        fds = xrsmoosh(ds1, ds2)
-        assert fds['x'].dtype == complex
-        assert fds['x'].dtype == complex
-        assert (fds.loc[{'a': 3, 'b': "l2"}]['x'].data ==
-                ds1.loc[{'a': 3, 'b': "l2"}]['x'].data)
-        assert (fds.loc[{'a': 5, 'b': "l5"}]['x'].data ==
-                ds2.loc[{'a': 5, 'b': "l5"}]['x'].data)
-        assert np.isnan(fds.loc[{'a': 2, 'b': "l5"}]['x'].data)
-        assert np.isnan(fds.loc[{'a': 5, 'b': "l1"}]['x'].data)
-
-    def test_no_overwrite(self, ds2, ds3):
-        with raises(ValueError):
-            xrsmoosh(ds2, ds3)
-
-    def test_overwrite(self):
-        # TODO ************************************************************** #
-        pass
-
-    def test_accept_newer(self):
-        # TODO ************************************************************** #
-        pass
-
-    def test_dataarrays(self):
-        # TODO ************************************************************** #
-        pass
-
-    def test_type_propagation_new_variables(self):
-        # TODO ************************************************************** #
-        pass
 
 
 class TestSaveAndLoad:
