@@ -172,6 +172,9 @@ class Runner(object):
             combos : tuple of form ((str, seq), *)
                 The values of each function argument with which to evaluate
                 all combinations.
+            constants : dict (optional)
+                Extra constant arguments for this run, repeated arguments will
+                take precedence over stored constants but for this run only.
             **runner_settings :
                 Keyword arguments supplied to `combo_runner`
         """
@@ -237,18 +240,12 @@ class Harvester(object):
         self.engine = engine
         self._full_ds = full_ds
 
-    def load_ds(self):
-        """Load the full dataset from disk.
-        """
-        self._full_ds = load_ds(self.data_name, engine=self.engine)
-        return self._full_ds
-
     @property
     def full_ds(self):
         """Get the dataset containing all saved runs.
         """
         if self._full_ds is None:
-            self.load_ds()
+            self.load_from_disk()
         return self._full_ds
 
     @property
@@ -256,6 +253,25 @@ class Harvester(object):
         """The dataset containing last runs data.
         """
         return self.runner.last_ds
+
+    def save_to_disk(self):
+        """Save `full_ds` onto disk.
+        """
+        save_ds(self._full_ds, self.data_name, engine=self.engine)
+
+    def load_from_disk(self):
+        """Load the disk dataset into `full_ds`.
+        """
+        # Check file exists and can be written to
+        if os.access(self.data_name, os.W_OK):
+            self._full_ds = load_ds(self.data_name, engine=self.engine)
+        # Do nothing if file does not exist at all
+        elif not os.path.isfile(self.data_name):  # pragma: no cover
+            pass
+        # Catch read-only errors etc.
+        else:
+            raise OSError("The file '{}' exists but cannot be written "
+                          "to".format(self.data_name))
 
     def delete_ds(self, backup=True):
         """Delete the on-disk dataset.
@@ -266,46 +282,41 @@ class Harvester(object):
             shutil.copy(self.data_name, self.data_name + '.BAK-{}'.format(ts))
         os.remove(self.data_name)
 
-    def merge_into_full_ds(self, new_ds):
+    def merge_into_full_ds(self, new_ds, overwrite=False):
         """Merge a new dataset into the in-memory full dataset.
         """
         if self._full_ds is None:
             self._full_ds = new_ds.copy(deep=True)
         else:
-            self._full_ds.merge(new_ds, compat='no_conflicts', inplace=True)
+            if overwrite:
+                self._full_ds = new_ds.combine_first(self._full_ds)
+            else:
+                self._full_ds.merge(new_ds, compat='no_conflicts',
+                                    inplace=True)
 
-    def merge_save(self, new_ds):
+    def merge_into_disk_ds(self, new_ds, overwrite=False):
         """Merge a new dataset into the full, on-disk dataset.
         """
-        # Check file exists and can be written to
-        if os.access(self.data_name, os.W_OK):
-            # Open, merge new data and close.
-            self._full_ds = load_ds(self.data_name, engine=self.engine)
-            self._full_ds.merge(new_ds, compat='no_conflicts', inplace=True)
-            save_ds(self._full_ds, self.data_name, engine=self.engine)
-        # Check that it is not read-only
-        elif os.path.isfile(self.data_name):  # pragma: no cover
-            raise OSError("The file '{}' exists but cannot be written "
-                          "to".format(self.data_name))
-        # Else just create it new
-        else:
-            self._full_ds = new_ds.copy(deep=True)
-            self._full_ds.to_netcdf(self.data_name, engine=self.engine)
+        self.load_from_disk()
+        self.merge_into_full_ds(new_ds, overwrite=overwrite)
+        self.save_to_disk()
 
-    def harvest_combos(self, combos, save=True, **runner_settings):
+    def harvest_combos(self, combos, save=True, overwrite=False,
+                       **runner_settings):
         """Run combos, automatically merging into an on-disk dataset.
         """
         self.runner.run_combos(combos, **runner_settings)
         if save:
-            self.merge_save(self.runner.last_ds)
+            self.merge_into_disk_ds(self.last_ds, overwrite=overwrite)
         else:
-            self.merge_into_full_ds(self.runner.last_ds)
+            self.merge_into_full_ds(self.last_ds, overwrite=overwrite)
 
-    def harvest_cases(self, cases, save=True, **runner_settings):
+    def harvest_cases(self, cases, save=True, overwrite=False,
+                      **runner_settings):
         """Run cases, automatically merging into an on-disk dataset.
         """
         self.runner.run_cases(cases, **runner_settings)
         if save:
-            self.merge_save(self.runner.last_ds)
+            self.merge_into_disk_ds(self.last_ds, overwrite=overwrite)
         else:
-            self.merge_into_full_ds(self.runner.last_ds)
+            self.merge_into_full_ds(self.last_ds, overwrite=overwrite)

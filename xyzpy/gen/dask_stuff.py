@@ -45,7 +45,7 @@ class DaskTqdmProgbar(Callback):
         self.pbar.close()
 
 
-def dask_scheduler_get(get_mode, num_workers=None):
+def dask_scheduler_get(get_mode='m', num_workers=None):
     """
     """
     if get_mode.upper() in {'T', 'THREADED'}:

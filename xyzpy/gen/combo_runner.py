@@ -7,6 +7,7 @@
 # TODO: better checks for var_name compatilibtiy with fn_args eg. ----------- #
 # TODO: allow nan results in combo_runner --> write to cases file? ---------- #
 
+from concurrent import futures as cf
 import xarray as xr
 import numpy as np
 from dask.delayed import delayed, compute
@@ -21,7 +22,6 @@ from ..utils import (
 from .dask_stuff import (
     DaskTqdmProgbar,
     dask_scheduler_get,
-    distributed_getter_stored,
     try_stored_then_result,
 )
 from .prepare import (
@@ -35,7 +35,7 @@ from .prepare import (
 )
 
 
-def _default_submit(pool, fn, *args, **kwds):
+def default_submitter(pool, fn, *args, **kwds):
     """Default method for submitting to a pool.
     """
     try:
@@ -45,8 +45,10 @@ def _default_submit(pool, fn, *args, **kwds):
     return future
 
 
-def nested_submit(fn, combos, kwds, delay=False, pool=None,
-                  submitter=_default_submit):
+def nested_submit(fn, combos, kwds,
+                  delay=False,
+                  pool=None,
+                  submitter=default_submitter):
     """Recursively submit jobs directly, as delayed objects or to a pool.
 
     Parameters
@@ -80,17 +82,24 @@ def nested_submit(fn, combos, kwds, delay=False, pool=None,
                               pool=pool) for x in inputs]
 
 
-def getter_with_progress(pbar=None):
+def default_getter(pbar=None):
     """
     """
-    def getter(future):
-        try:
-            res = future.result()
-        except AttributeError:
-            res = future.get()
-        pbar.update()
-        return res
-
+    if pbar:
+        def getter(future):
+            try:
+                res = future.result()
+            except AttributeError:
+                res = future.get()
+            pbar.update()
+            return res
+    else:
+        def getter(future):
+            try:
+                res = future.result()
+            except AttributeError:
+                res = future.get()
+            return res
     return getter
 
 
@@ -101,11 +110,11 @@ def nested_get(futures, ndim, getter):
             [nested_get(fut, ndim - 1, getter) for fut in futures])
 
 
-def _mpi_combo_runner_pool(fn, combos, constants, hide_progbar, n,
-                           num_workers=None):
+def mpi_combo_runner_pool(fn, combos, constants, hide_progbar, n,
+                          num_workers=None):
     from mpi4py.futures import MPIPoolExecutor
     with progbar(total=n, disable=hide_progbar) as pbar:
-        getter = getter_with_progress(pbar)
+        getter = default_getter(pbar)
         with MPIPoolExecutor(num_workers) as pool:
             futures = nested_submit(fn, combos, constants, pool=pool)
             results = nested_get(futures, len(combos), getter)
@@ -116,7 +125,7 @@ def _combo_runner(fn, combos, constants,
                   split=False,
                   parallel=False,
                   num_workers=None,
-                  scheduler='m',
+                  scheduler=None,
                   pool=None,
                   hide_progbar=False):
     """Core combo runner, i.e. no parsing of arguments.
@@ -124,37 +133,29 @@ def _combo_runner(fn, combos, constants,
     n = prod(len(x) for _, x in combos)
     ndim = len(combos)
 
-    # Use a supplied pool to run combos
-    if hasattr(pool, 'scheduler'):
-        import distributed
-        with progbar(total=n, disable=hide_progbar) as pbar:
-            futures = nested_submit(fn, combos, constants, pool=pool)
-            if parallel == 'release':
+    # TODO: tests
+    if pool is not None:
+        if hasattr(pool, 'scheduler'):  # assume dask.distributed pool
+            import distributed
+            with progbar(total=n, disable=hide_progbar) as pbar:
+                futures = nested_submit(fn, combos, constants, pool=pool)
                 for f in distributed.as_completed(flatten(futures, ndim)):
-                    f._stored_result = f.result()
-                    pbar.update()
-                results = nested_get(futures, ndim, distributed_getter_stored)
-
-            else:
-                for f in distributed.as_completed(flatten(futures, ndim)):
-                    # Eagerly gather
                     f._stored_result = f.result()
                     pbar.update()
                 results = nested_get(futures, ndim, try_stored_then_result)
-
-    elif pool is not None:
-        with progbar(total=n, disable=hide_progbar) as pbar:
-            futures = nested_submit(fn, combos, constants, pool=pool)
-            getter = getter_with_progress(pbar)
-            results = nested_get(futures, ndim, getter)
+        else:
+            with progbar(total=n, disable=hide_progbar) as pbar:
+                futures = nested_submit(fn, combos, constants, pool=pool)
+                getter = default_getter(pbar)
+                results = nested_get(futures, ndim, getter)
 
     # Spawn an mpi pool to run combos
-    elif parallel == 'mpi_spawn':
-        results = _mpi_combo_runner_pool(fn, combos, constants, hide_progbar,
-                                         n=n, num_workers=num_workers)
+    elif parallel == 'mpi':
+        results = mpi_combo_runner_pool(
+            fn, combos, constants, hide_progbar, n=n, num_workers=num_workers)
 
     # Evaluate combos using dask
-    elif parallel or num_workers:
+    elif parallel == 'dask' or scheduler:
         fn_name = _get_fn_name(fn)
         with DaskTqdmProgbar(fn_name, disable=hide_progbar):
             jobs = nested_submit(fn, combos, constants, delay=True)
@@ -162,6 +163,15 @@ def _combo_runner(fn, combos, constants,
                 scheduler = dask_scheduler_get(scheduler,
                                                num_workers=num_workers)
             results = compute(*jobs, get=scheduler, num_workers=num_workers)
+
+    # By default use a process pool exceutor
+    elif parallel or num_workers:
+        with cf.ProcessPoolExecutor(max_workers=num_workers) as pool:
+            with progbar(total=n, disable=hide_progbar) as pbar:
+                futures = nested_submit(fn, combos, constants, pool=pool)
+                for f in cf.as_completed(flatten(futures, ndim)):
+                    pbar.update()
+                results = nested_get(futures, ndim, default_getter())
 
     # Evaluate combos sequentially
     else:
@@ -173,10 +183,11 @@ def _combo_runner(fn, combos, constants,
     return list(unzip(results, ndim)) if split else results
 
 
-def combo_runner(fn, combos, constants=None,
+def combo_runner(fn, combos,
+                 constants=None,
                  split=False,
                  parallel=False,
-                 scheduler='m',
+                 scheduler=None,
                  pool=None,
                  num_workers=None,
                  hide_progbar=False):
