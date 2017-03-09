@@ -91,12 +91,14 @@ class PlotterMatplotlib(LinePlotter):
         """
         if self.vlines is not None:
             for x in self.vlines:
-                self._axes.axvline(x, color="0.5", linestyle=self.span_style,
-                                   lw=self.span_width)
+                self._axes.axvline(x, lw=self.span_width,
+                                   color=self.span_color,
+                                   linestyle=self.span_style)
         if self.hlines is not None:
             for y in self.hlines:
-                self._axes.axhline(y, color="0.5", linestyle=self.span_style,
-                                   lw=self.span_width)
+                self._axes.axhline(y, lw=self.span_width,
+                                   color=self.span_color,
+                                   linestyle=self.span_style)
 
     def set_gridlines(self):
         """
@@ -229,14 +231,21 @@ class PlotterMatplotlib(LinePlotter):
         self._cbar = self._fig.colorbar(self._heatmap_ax,
                                         **opts, **self.colorbar_opts)
         self._cbar.ax.tick_params(labelsize=self.fontsize_zlabels)
-        self._cbar.ax.set_title(self.z_coo if self.ztitle is None else
-                                self.ztitle).set_fontsize(self.fontsize_ztitle)
+        self._cbar.ax.set_title(
+            self.z_coo if self.ztitle is None else self.ztitle,
+            color=self.colorbar_color if self.colorbar_color else None,
+        ).set_fontsize(self.fontsize_ztitle)
+
+        if self.colorbar_color:
+            self._cbar.ax.yaxis.set_tick_params(color=self.colorbar_color,
+                                                labelcolor=self.colorbar_color)
+            self._cbar.outline.set_edgecolor(self.colorbar_color)
 
     def set_panel_label(self):
         if self.panel_label is not None:
             self._axes.text(*self.panel_label_loc, self.panel_label,
                             transform=self._axes.transAxes,
-                            fontsize=self.fontize_panel_label)
+                            fontsize=self.fontsize_panel_label)
 
     def show(self):
         import matplotlib.pyplot as plt
@@ -284,25 +293,26 @@ def lineplot(ds, y_coo, x_coo, z_coo=None, return_fig=True, **kwargs):
     return LinePlot(ds, y_coo, x_coo, z_coo, return_fig=return_fig, **kwargs)()
 
 
+_HEATMAP_ALT_DEFAULTS = (
+    ('colorbar', True),
+    ('colormap', 'inferno'),
+    ('method', 'pcolormesh'),
+    ('gridlines', False),
+)
+
+
 class HeatMap(PlotterMatplotlib):
     """
     """
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        # set some heatmap specific options and alternative defaults
-        self.vmin = kwargs.pop('vmin', None)
-        self.vmax = kwargs.pop('vmax', None)
-        self.colorbar = kwargs.pop('colorbar', True)
-        self.method = kwargs.pop('method', 'pcolormesh')
+    def __init__(self, ds, x_coo, y_coo, var, **kwargs):
+        # set some heatmap specific options
+        for k, default in _HEATMAP_ALT_DEFAULTS:
+            if k not in kwargs:
+                kwargs[k] = default
+        super().__init__(ds, y_coo, x_coo, var, **kwargs)
 
-        self.colormap = kwargs.pop('colormap', 'inferno')
-        self.gridlines = kwargs.pop('gridlines', False)
-        self.colorbar_opts = kwargs.pop('colorbar_opts', dict())
-        self.colorbar_relative_position = \
-            kwargs.pop('colorbar_relative_position', None)
-
-    def __call__(self, *args):
+    def __call__(self):
 
         # Core preparation
         self.prepare_axes_labels()

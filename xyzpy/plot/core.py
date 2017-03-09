@@ -13,6 +13,92 @@ import xarray as xr
 from .color import convert_colors, xyz_colormaps
 from .marker import _MARKERS, _SINGLE_LINE_MARKER
 
+_PLOTTER_DEFAULTS = {
+    # Figure options
+    'backend': 'MATPLOTLIB',
+    'figsize': (7, 6),
+    'axes_loc': None,
+    'add_to_axes': None,
+    'add_to_fig': None,
+    'subplot': None,
+    'fignum': 1,
+    'return_fig': True,
+    # Coloring options
+    'colors': None,
+    'colormap': "xyz",
+    'colormap_log': False,
+    'colormap_reverse': False,
+    # Colorbar options
+    'colorbar': False,
+    'vmin': None,
+    'vmax': None,
+    'colorbar_relative_position': None,
+    'colorbar_opts': dict(),
+    'method': None,
+    'colorbar_color': "black",
+    # 'z-axis' options: for legend or colorbar
+    'ztitle': None,
+    'zlabels': None,
+    'zlims': (None, None),
+    'zticks': None,
+    'legend': None,
+    'legend_loc': 0,
+    'legend_ncol': 1,
+    'legend_bbox': None,
+    'legend_marker_scale': None,
+    'legend_label_spacing': None,
+    'legend_column_spacing': 1,
+    'legend_frame': False,
+    'legend_handlelength': None,
+    # x-axis options
+    'xtitle': None,
+    'xtitle_pad': 5,
+    'xlims': None,
+    'xticks': None,
+    'xticklabels_hide': False,
+    'xlog': False,
+    # y-axis options
+    'ytitle': None,
+    'ytitle_pad': 5,
+    'ytitle_right': False,
+    'ylims': None,
+    'yticks': None,
+    'yticklabels_hide': False,
+    'ylog': False,
+    # Titles and text
+    'title': None,
+    'panel_label': None,
+    'panel_label_loc': (0.05, 0.85),
+    # Styling options
+    'markers': None,
+    'markersize': None,
+    'lines': True,
+    'line_styles': None,
+    'line_widths': None,
+    'zorders': None,
+    'padding': None,
+    'vlines': None,
+    'hlines': None,
+    'span_style': '--',
+    'span_width': 1,
+    'span_color': "0.5",
+    'gridlines': True,
+    'gridline_style': (1, 2),
+    'ticks_where': ('bottom', 'left', 'top', 'right'),
+    # Font options
+    'font': ('Source Sans Pro', 'PT Sans', 'Liberation Sans', 'Arial'),
+    'fontsize_title': 18,
+    'fontsize_ticks': 14,
+    'fontsize_xtitle': 18,
+    'fontsize_ytitle': 18,
+    'fontsize_ztitle': 18,
+    'fontsize_zlabels': 16,
+    'fontsize_panel_label': 18,
+    'math_serif': False,
+}
+
+_PLOTTER_OPTS = list(_PLOTTER_DEFAULTS.keys())
+
 
 class LinePlotter:
     def __init__(self, ds, y_coo, x_coo, z_coo=None, y_err=None, **kwargs):
@@ -27,84 +113,18 @@ class LinePlotter:
         self.z_coo = z_coo
         self.y_err = y_err
         # Figure options
-        self.backend = kwargs.pop('backend', 'MATPLOTLIB')
-        self.figsize = kwargs.pop('figsize', (7, 6))  # aboslute figure size
-        self.axes_loc = kwargs.pop('axes_loc', None)   # axes location in fig
-        self.add_to_axes = kwargs.pop('add_to_axes', None)  # existing axes
-        self.add_to_fig = kwargs.pop('add_to_fig', None)
-        self.subplot = kwargs.pop('subplot', None)
-        self.fignum = kwargs.pop('fignum', 1)
-        self.return_fig = kwargs.pop('return_fig', True)
-        # Coloring options
-        self.colors = kwargs.pop('colors', None)
-        self.colormap = kwargs.pop('colormap', "xyz")
-        self.colormap_log = kwargs.pop('colormap_log', False)
-        self.colormap_reverse = kwargs.pop('colormap_reverse', False)
-        self.colorbar = kwargs.pop('colorbar', False)
-        # 'z-axis' options: for legend or colorbar
-        self.ztitle = kwargs.pop('ztitle', None)
-        self.zlabels = kwargs.pop('zlabels', None)
-        self.zlims = kwargs.pop('zlims', (None, None))
-        self.zticks = kwargs.pop('zticks', None)
-        self.legend = kwargs.pop('legend', None)
-        self.legend_loc = kwargs.pop('legend_loc', 0)
-        self.legend_ncol = kwargs.pop('legend_ncol', 1)
-        self.legend_bbox = kwargs.pop('legend_bbox', None)
-        self.legend_marker_scale = kwargs.pop('legend_marker_scale', None)
-        self.legend_label_spacing = kwargs.pop('legend_label_spacing', None)
-        self.legend_column_spacing = kwargs.pop('legend_column_spacing', 1)
-        self.legend_frame = kwargs.pop('legend_frame', False)
-        self.legend_handlelength = kwargs.pop('legend_handlelength', None)
-        # x-axis options
-        self.xtitle = kwargs.pop('xtitle', None)
-        self.xtitle_pad = kwargs.pop('xtitle_pad', 5)
-        self.xlims = kwargs.pop('xlims', None)
-        self.xticks = kwargs.pop('xticks', None)
-        self.xticklabels_hide = kwargs.pop('xticklabels_hide', False)
-        self.xlog = kwargs.pop('xlog', False)
-        # y-axis options
-        self.ytitle = kwargs.pop('ytitle', None)
-        self.ytitle_pad = kwargs.pop('ytitle_pad', 5)
-        self.ytitle_right = kwargs.pop('ytitle_right', False)
-        self.ylims = kwargs.pop('ylims', None)
-        self.yticks = kwargs.pop('yticks', None)
-        self.yticklabels_hide = kwargs.pop('yticklabels_hide', False)
-        self.ylog = kwargs.pop('ylog', False)
-        # Titles and text
-        self.title = kwargs.pop('title', None)
-        self.panel_label = kwargs.pop('panel_label', None)
-        self.panel_label_loc = kwargs.pop('panel_label_loc', (0.05, 0.85))
-        # Styling options
-        self.markers = kwargs.pop('markers', None)
-        self.markersize = kwargs.pop('markersize', None)
-        self.lines = kwargs.pop('lines', True)
-        self.line_styles = kwargs.pop('line_styles', None)
-        self.line_widths = kwargs.pop('line_widths', None)
-        self.zorders = kwargs.pop('zorders', None)
-        self.padding = kwargs.pop('padding', None)
-        self.vlines = kwargs.pop('vlines', None)
-        self.hlines = kwargs.pop('hlines', None)
-        self.span_style = kwargs.pop('span_style', '--')
-        self.span_width = kwargs.pop('span_width', 1)
-        self.gridlines = kwargs.pop('gridlines', True)
-        self.gridline_style = kwargs.pop('gridline_style', (1, 2))
-        self.ticks_where = kwargs.pop('ticks_where', ('bottom', 'left',
-                                                      'top', 'right'))
-        # Font options
-        self.font = kwargs.pop('font', ('Source Sans Pro', 'PT Sans',
-                                        'Liberation Sans', 'Arial'))
-        self.fontsize_title = kwargs.pop('fontsize_title', 18)
-        self.fontsize_ticks = kwargs.pop('fontsize_ticks', 14)
-        self.fontsize_xtitle = kwargs.pop('fontsize_xtitle', 18)
-        self.fontsize_ytitle = kwargs.pop('fontsize_ytitle', 18)
-        self.fontsize_ztitle = kwargs.pop('fontsize_ztitle', 18)
-        self.fontsize_zlabels = kwargs.pop('fontsize_zlabels', 16)
-        self.fontize_panel_label = kwargs.pop('fontsize_panel_label', 18)
-        self.math_serif = kwargs.pop('math_serif', False)
+        settings = {**_PLOTTER_DEFAULTS, **kwargs}
+        for opt in _PLOTTER_OPTS:
+            setattr(self, opt, settings.pop(opt))
 
-        if len(kwargs) > 0:
-            raise ValueError("Option(s) {} not valid"
-                             .format(list(kwargs.keys())))
+        if len(settings) > 0:
+            import difflib
+            wrong_opts = list(settings.keys())
+            right_opts = [difflib.get_close_matches(opt, _PLOTTER_OPTS, n=3)
+                          for opt in wrong_opts]
+
+            raise ValueError("Option(s) {} not valid.\n Did you mean: {}?"
+                             .format(wrong_opts, right_opts))
 
         # Internal
         self._data_range_calculated = False

@@ -52,6 +52,7 @@ from .plot.color import (
 from .plot.plotter_matplotlib import (
     LinePlot,
     lineplot,
+    HeatMap,
     heatmap,
     xyz_lineplot,
     visualize_matrix
@@ -81,6 +82,7 @@ __all__ = ["Runner",
            "convert_colors",
            "LinePlot",
            "lineplot",
+           "HeatMap",
            "heatmap",
            "ilineplot",
            "xyz_lineplot",
@@ -94,7 +96,7 @@ __all__ = ["Runner",
 
 
 @xr.register_dataset_accessor('xyz')
-class GeoAccessor(object):
+class XYZPY(object):
     def __init__(self, xarray_obj):
         self._obj = xarray_obj
 
@@ -112,3 +114,6 @@ class GeoAccessor(object):
 
     def heatmap(self, *args, **kwargs):
         return heatmap(self._obj, *args, **kwargs)
+
+    def HeatMap(self, *args, **kwargs):
+        return HeatMap(self._obj, *args, **kwargs)
