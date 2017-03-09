@@ -10,6 +10,7 @@ XYZPY
 # TODO: logging ------------------------------------------------------------- #
 # TODO: pause / finish early interactive commands. -------------------------- #
 # TODO: set global progbar options e.g. notebook mode ----------------------- #
+import xarray as xr
 
 from .utils import (
     unzip,
@@ -49,7 +50,9 @@ from .plot.color import (
 )
 # Making static plots with matplotlib
 from .plot.plotter_matplotlib import (
+    LinePlot,
     lineplot,
+    heatmap,
     xyz_lineplot,
     visualize_matrix
 )
@@ -76,7 +79,9 @@ __all__ = ["Runner",
            "check_runs",
            "auto_xyz_ds",
            "convert_colors",
+           "LinePlot",
            "lineplot",
+           "heatmap",
            "ilineplot",
            "xyz_lineplot",
            "xyz_ilineplot",
@@ -86,3 +91,24 @@ __all__ = ["Runner",
            "wfdiff",
            "xr_wfdiff",
            "xr_sdiff"]
+
+
+@xr.register_dataset_accessor('xyz')
+class GeoAccessor(object):
+    def __init__(self, xarray_obj):
+        self._obj = xarray_obj
+
+    def trimna(self):
+        return trimna(self._obj)
+
+    def LinePlot(self, *args, **kwargs):
+        return LinePlot(self._obj, *args, **kwargs)
+
+    def lineplot(self, *args, **kwargs):
+        return lineplot(self._obj, *args, **kwargs)
+
+    def ilineplot(self, *args, **kwargs):
+        return ilineplot(self._obj, *args, **kwargs)
+
+    def heatmap(self, *args, **kwargs):
+        return heatmap(self._obj, *args, **kwargs)

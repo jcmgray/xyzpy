@@ -28,6 +28,21 @@ def dataset_3d():
     return ds
 
 
+@fixture
+def dataset_heatmap():
+    x = np.linspace(10, 20, 11)
+    y = np.linspace(20, 40, 21)
+    xx, yy = np.meshgrid(x, y)
+    c = np.cos(((xx**2 + yy**2)**0.5) / 2)
+    s = np.cos(((xx**2 + yy**2)**0.5) / 2)
+    ds = xr.Dataset(
+        coords={'x': x,
+                'y': y},
+        data_vars={'c': (('y', 'x'), c),
+                   's': (('y', 'x'), s)})
+    return ds.where(ds.y < 35)
+
+
 # --------------------------------------------------------------------------- #
 # TEST COLORS                                                                 #
 # --------------------------------------------------------------------------- #
@@ -126,3 +141,8 @@ class TestCommonInterface:
         # TODO: ytitle
         # TODO: padding, and lims
         pass
+
+
+class TestHeatmap:
+    def test_simple(self, dataset_heatmap):
+        dataset_heatmap.xyz.heatmap('x', 'y', 'c', return_fig=True)

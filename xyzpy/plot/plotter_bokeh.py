@@ -26,22 +26,11 @@ def bshow(figs, nb=True, interactive=False, **kwargs):
 #                     Main lineplot interface for bokeh                       #
 # --------------------------------------------------------------------------- #
 
-class LinePlotterBokeh(LinePlotter):
+class PlotterBokeh(LinePlotter):
     def __init__(self, *args, **kwargs):
         """
         """
-        super().__init__(*args, engine='BOKEH', **kwargs)
-        self.prepare_plot_and_set_axes_scale()
-        self.set_axes_labels()
-        self.set_axes_range()
-        self.set_spans()
-        self.set_gridlines()
-        self.set_tick_marks()
-        self.set_sources()
-        self.plot_lines()
-        self.plot_legend()
-        self.set_tools()
-
+        super().__init__(*args, **kwargs, backend='BOKEH')
         self._interactive = kwargs.pop('interactive', False)
 
     def prepare_plot_and_set_axes_scale(self):
@@ -110,13 +99,13 @@ class LinePlotterBokeh(LinePlotter):
                 self._plot.add_layout(Span(location=hl, dimension='width',
                                            level='glyph', line_dash='dashed',
                                            line_color=(127, 127, 127),
-                                           line_width=1))
+                                           line_width=self.span_width))
         if self.vlines:
             for vl in self.vlines:
                 self._plot.add_layout(Span(location=vl, dimension='height',
                                            level='glyph', line_dash='dashed',
                                            line_color=(127, 127, 127),
-                                           line_width=1))
+                                           line_width=self.span_width))
 
     def set_gridlines(self):
         """Set whether to use gridlines or not.
@@ -177,8 +166,13 @@ class LinePlotterBokeh(LinePlotter):
 
             if self.markers:
                 marker = next(self._mrkrs)
-                m = getattr(self._plot, marker)('x', 'y', source=src,
-                                                name=zlabel, color=col)
+                m = getattr(self._plot, marker)('x', 'y',
+                                                source=src,
+                                                name=zlabel,
+                                                color=col,
+                                                fill_alpha=0.5,
+                                                line_width=0.5,
+                                                size=self._markersize)
                 legend_pics.append(m)
 
             # Check if errors specified as well
@@ -228,8 +222,30 @@ def ilineplot(ds, y_coo, x_coo, z_coo=None, return_fig=False,
               interactive=False, **kwargs):
     """
     """
-    p = LinePlotterBokeh(ds, y_coo, x_coo, z_coo,
-                         return_fig=return_fig, **kwargs)
+    p = PlotterBokeh(ds, y_coo, x_coo, z_coo,
+                     return_fig=return_fig, **kwargs)
+    # Core preparation
+    p.prepare_z_vals()
+    p.prepare_axes_labels()
+    p.prepare_z_labels()
+    p.calc_use_legend()
+    p.prepare_xy_vals()
+    p.prepare_colors()
+    p.prepare_markers()
+    p.prepare_line_styles()
+    p.prepare_zorders()
+    p.calc_plot_range()
+    # Bokeh preparation
+    p.prepare_plot_and_set_axes_scale()
+    p.set_axes_labels()
+    p.set_axes_range()
+    p.set_spans()
+    p.set_gridlines()
+    p.set_tick_marks()
+    p.set_sources()
+    p.plot_lines()
+    p.plot_legend()
+    p.set_tools()
     return p.show(interactive=interactive)
 
 

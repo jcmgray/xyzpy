@@ -21,7 +21,7 @@ def convert_colors(cols, outformat, informat='MATPLOTLIB'):
     return _COLOR_CONVERT_METHODS[(informat, outformat)](cols)
 
 
-def _xyz_colormaps(name):
+def xyz_colormaps(name):
     """Custom-defined colormaps
     """
     import matplotlib.cm as cm
@@ -89,7 +89,13 @@ def _xyz_colormaps(name):
         #    0.75    #fcd500    rgb(252, 213,   0)
         #    1.00    #89e996    rgb(137, 233, 150)
     }
-    try:
+    # Custom xyzpy colormaps
+    if name in cmaps:
         return LinearSegmentedColormap(name, cmaps[name])
-    except KeyError:
+    # colorcet colormaps
+    try:
+        import colorcet
+        return colorcet.cm[name]
+    # matplotlib colormaps
+    except (ImportError, KeyError):
         return getattr(cm, name)

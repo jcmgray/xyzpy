@@ -1,36 +1,25 @@
 """
 Functions for plotting datasets nicely.
 """                                  #
-# TODO: error bars                                                            #
-# TODO: mshow? Remove any auto, context sensitive (use backend etc.)          #
 # TODO: custom xtick labels                                                   #
 # TODO: annotations, arbitrary text                                           #
 # TODO: docs                                                                  #
-# TODO: mpl heatmap                                                           #
-# TODO: detect zeros in plotting coordinates and adjust padding auto          #
 
 
 import numpy as np
 from ..manage import auto_xyz_ds
 from .core import LinePlotter
+from .color import xyz_colormaps
 
 
 # ----------------- Main lineplot interface for matplotlib ------------------ #
 
-class LinePlotterMPL(LinePlotter):
+class PlotterMatplotlib(LinePlotter):
+    """
+    """
+
     def __init__(self, *args, **kwargs):
-        """
-        """
-        super().__init__(*args, engine='MATPLOTLIB', **kwargs)
-        self.prepare_plot()
-        self.set_axes_labels()
-        self.set_axes_scale()
-        self.set_axes_range()
-        self.set_spans()
-        self.set_gridlines()
-        self.set_tick_marks()
-        self.plot_lines()
-        self.plot_legend()
+        super().__init__(*args, **kwargs, backend='MATPLOTLIB')
 
     def prepare_plot(self):
         """
@@ -51,7 +40,7 @@ class LinePlotterMPL(LinePlotter):
         # Add lines to an existing set of axes
         elif self.add_to_axes is not None:
             self._fig = self.add_to_axes
-            self._axes = self._fig.get_axes()[0]
+            self._axes = self._fig.get_axes()[-1]
 
         elif self.subplot is not None:
             # Add new axes as subplot to existing subplot
@@ -102,10 +91,12 @@ class LinePlotterMPL(LinePlotter):
         """
         if self.vlines is not None:
             for x in self.vlines:
-                self._axes.axvline(x, color="0.5", linestyle=self.span_style)
+                self._axes.axvline(x, color="0.5", linestyle=self.span_style,
+                                   lw=self.span_width)
         if self.hlines is not None:
             for y in self.hlines:
-                self._axes.axhline(y, color="0.5", linestyle=self.span_style)
+                self._axes.axhline(y, color="0.5", linestyle=self.span_style,
+                                   lw=self.span_width)
 
     def set_gridlines(self):
         """
@@ -142,7 +133,24 @@ class LinePlotterMPL(LinePlotter):
             (self._axes.get_yaxis()
              .set_major_formatter(mpl.ticker.NullFormatter()))
         self._axes.tick_params(labelsize=self.fontsize_ticks, direction='out',
-                               bottom=True, top=True, left=True, right=True)
+                               bottom='bottom' in self.ticks_where,
+                               top='top' in self.ticks_where,
+                               left='left' in self.ticks_where,
+                               right='right' in self.ticks_where)
+
+    def _cax_rel2abs_rect(self, rel_rect, cax=None):
+        if cax is None:
+            cax = self._axes
+        bbox = cax.get_position()
+        l, b, w, h = bbox.x0, bbox.y0, bbox.width, bbox.height
+        cl = l + w * rel_rect[0]
+        cb = b + h * rel_rect[1]
+        try:
+            cw = w * rel_rect[2]
+            ch = h * rel_rect[3]
+        except IndexError:
+            return cl, cb
+        return cl, cb, cw, ch
 
     def plot_lines(self):
         """
@@ -154,8 +162,8 @@ class LinePlotterMPL(LinePlotter):
                          'lw': next(self._lws),
                          'marker': next(self._mrkrs),
                          'markeredgecolor': col,
-                         'markersize': self.markersize,
-                         'label': next(self._zlbls),
+                         'markersize': self._markersize,
+                         'label': next(self._zlbls) if self._lgnd else None,
                          'zorder': next(self._zordrs),
                          'linestyle': next(self._lines)}
 
@@ -171,36 +179,154 @@ class LinePlotterMPL(LinePlotter):
         """Add a legend
         """
         if self._lgnd:
-            lgnd = self._axes.legend(title=(self.z_coo if self.ztitle is None
-                                            else self.ztitle),
-                                     loc=self.legend_loc,
-                                     fontsize=self.fontsize_zlabels,
-                                     frameon=self.legend_frame,
-                                     numpoints=1,
-                                     scatterpoints=1,
-                                     markerscale=self.legend_markerscale,
-                                     labelspacing=self.legend_labelspacing,
-                                     columnspacing=self.legend_columnspacing,
-                                     bbox_to_anchor=self.legend_bbox,
-                                     ncol=self.legend_ncol)
+            lgnd = self._axes.legend(
+                title=(self.z_coo if self.ztitle is None else self.ztitle),
+                loc=self.legend_loc,
+                fontsize=self.fontsize_zlabels,
+                frameon=self.legend_frame,
+                numpoints=1,
+                scatterpoints=1,
+                handlelength=self.legend_handlelength,
+                markerscale=self.legend_marker_scale,
+                labelspacing=self.legend_label_spacing,
+                columnspacing=self.legend_column_spacing,
+                bbox_to_anchor=self.legend_bbox,
+                ncol=self.legend_ncol)
             lgnd.get_title().set_fontsize(self.fontsize_ztitle)
 
-    def show(self):
+    def plot_heatmap(self):
+        """Plot the data as a heatmap.
         """
-        """
-        import matplotlib.pyplot as plt
+        import matplotlib as mpl
+        if self.colormap_log:
+            self._heatmap_norm = mpl.colors.LogNorm(vmin=self.vmin,
+                                                    vmax=self.vmax)
+        else:
+            self._heatmap_norm = mpl.colors.Normalize(vmin=self.vmin,
+                                                      vmax=self.vmax)
+        self._heatmap_ax = getattr(self._axes, self.method)(
+            self._heatmap_x,
+            self._heatmap_y,
+            self._heatmap_var,
+            norm=self._heatmap_norm,
+            cmap=xyz_colormaps(self.colormap))
 
+    def add_colorbar(self):
+        """Add a colorbar to the data.
+        """
+        extendmin = (self.vmin is not None) and (self.vmin > self._zmin)
+        extendmax = (self.vmax is not None) and (self.vmax < self._zmax)
+        extend = ('both' if extendmin and extendmax else
+                  'min' if extendmin else
+                  'max' if extendmax else
+                  'neither')
+        opts = {'extend': extend,
+                'ticks': self.zticks,
+                'norm': self._heatmap_norm}
+        if self.colorbar_relative_position:
+            opts['cax'] = self._fig.add_axes(
+                self._cax_rel2abs_rect(self.colorbar_relative_position))
+        self._cbar = self._fig.colorbar(self._heatmap_ax,
+                                        **opts, **self.colorbar_opts)
+        self._cbar.ax.tick_params(labelsize=self.fontsize_zlabels)
+        self._cbar.ax.set_title(self.z_coo if self.ztitle is None else
+                                self.ztitle).set_fontsize(self.fontsize_ztitle)
+
+    def set_panel_label(self):
+        if self.panel_label is not None:
+            self._axes.text(*self.panel_label_loc, self.panel_label,
+                            transform=self._axes.transAxes,
+                            fontsize=self.fontize_panel_label)
+
+    def show(self):
+        import matplotlib.pyplot as plt
         if self.return_fig:
             plt.close(self._fig)
             return self._fig
 
 
+class LinePlot(PlotterMatplotlib):
+    """
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def __call__(self):
+        # Core preparation
+        self.prepare_z_vals()
+        self.prepare_axes_labels()
+        self.prepare_z_labels()
+        self.calc_use_legend()
+        self.prepare_xy_vals()
+        self.prepare_colors()
+        self.prepare_markers()
+        self.prepare_line_styles()
+        self.prepare_zorders()
+        self.calc_plot_range()
+        # matplotlib preparation
+        self.prepare_plot()
+        self.set_axes_labels()
+        self.set_axes_scale()
+        self.set_axes_range()
+        self.set_spans()
+        self.set_gridlines()
+        self.set_tick_marks()
+        self.plot_lines()
+        self.plot_legend()
+        self.set_panel_label()
+        return self.show()
+
+
 def lineplot(ds, y_coo, x_coo, z_coo=None, return_fig=True, **kwargs):
     """
     """
-    p = LinePlotterMPL(ds, y_coo, x_coo, z_coo,
-                       return_fig=return_fig, **kwargs)
-    return p.show()
+    return LinePlot(ds, y_coo, x_coo, z_coo, return_fig=return_fig, **kwargs)()
+
+
+class HeatMap(PlotterMatplotlib):
+    """
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # set some heatmap specific options and alternative defaults
+        self.vmin = kwargs.pop('vmin', None)
+        self.vmax = kwargs.pop('vmax', None)
+        self.colorbar = kwargs.pop('colorbar', True)
+        self.method = kwargs.pop('method', 'pcolormesh')
+
+        self.colormap = kwargs.pop('colormap', 'inferno')
+        self.gridlines = kwargs.pop('gridlines', False)
+        self.colorbar_opts = kwargs.pop('colorbar_opts', dict())
+        self.colorbar_relative_position = \
+            kwargs.pop('colorbar_relative_position', None)
+
+    def __call__(self, *args):
+
+        # Core preparation
+        self.prepare_axes_labels()
+        self.prepare_heatmap_data()
+        self.calc_plot_range()
+        # matplotlib preparation
+        self.prepare_plot()
+        self.set_axes_labels()
+        self.set_axes_scale()
+        self.set_axes_range()
+        self.set_spans()
+        self.set_gridlines()
+        self.set_tick_marks()
+        self.plot_heatmap()
+        if self.colorbar:
+            self.add_colorbar()
+        self.set_panel_label()
+        return self.show()
+
+
+def heatmap(ds, x_coo, y_coo, var, **kwargs):
+    """
+    """
+    return HeatMap(ds, x_coo, y_coo, var, **kwargs)()
 
 
 def xyz_lineplot(x, y_z, **lineplot_opts):
@@ -249,7 +375,6 @@ def visualize_matrix(x, figsize=(4, 4),
             Whether to return the figure created or just show it.
     """
     import matplotlib.pyplot as plt
-    from xyzpy.plot.color import _xyz_colormaps
 
     fig = plt.figure(figsize=figsize, dpi=100)
     if isinstance(x, np.ndarray):
@@ -265,7 +390,7 @@ def visualize_matrix(x, figsize=(4, 4),
     for img, subplot in zip(x, subplots):
 
         ax = fig.add_subplot(*subplot)
-        ax.imshow(img, cmap=_xyz_colormaps(colormap), interpolation='nearest',
+        ax.imshow(img, cmap=xyz_colormaps(colormap), interpolation='nearest',
                   vmin=zlims[0], vmax=zlims[1])
         # Hide the right and top spines
         ax.spines['right'].set_visible(False)

@@ -8,79 +8,14 @@ Helper functions for preparing data to be plotted.
 import math
 import itertools
 import numpy as np
+import numpy.ma as ma
 import xarray as xr
-from .color import convert_colors, _xyz_colormaps
+from .color import convert_colors, xyz_colormaps
 from .marker import _MARKERS, _SINGLE_LINE_MARKER
 
 
 class LinePlotter:
-    def __init__(self, ds, y_coo, x_coo, z_coo=None, y_err=None,
-                 engine='MATPLOTLIB',
-                 # Figure options
-                 figsize=(8, 6),           # absolute figure size
-                 axes_loc=None,            # axes location within fig
-                 add_to_axes=None,         # add to existing axes
-                 add_to_fig=None,          # add plot to an exisitng figure
-                 subplot=None,             # make plot in subplot
-                 fignum=1,
-                 title=None,
-                 # Line coloring options
-                 colors=None,
-                 colormap="xyz",
-                 colormap_log=False,
-                 colormap_reverse=False,
-                 colorbar=False,
-                 # Legend options
-                 ztitle=None,               # legend title
-                 zlabels=None,              # legend labels
-                 zlims=(None, None),        # Scaling limits for the colormap
-                 legend=None,               # shoow legend or not
-                 legend_loc=0,              # legend location
-                 legend_ncol=1,             # number of columns in the legend
-                 legend_bbox=None,          # Where to anchor the legend to
-                 legend_markerscale=None,   # size of the legend markers
-                 legend_labelspacing=None,  # vertical spacing
-                 legend_columnspacing=3,    # horizontal spacing
-                 legend_frame=False,
-                 # x-axis options
-                 xtitle=None,
-                 xtitle_pad=10,           # distance between label and axes
-                 xlims=None,              # plotting range on x axis
-                 xticks=None,             # where to place x ticks
-                 xticklabels_hide=False,  # hide labels but not actual ticks
-                 xlog=False,              # logarithmic x scale
-                 # y-axis options
-                 ytitle=None,
-                 ytitle_pad=10,           # distance between label and axes
-                 ytitle_right=False,      # draw ytitle on right handside
-                 ylims=None,              # plotting range on y-axis
-                 yticks=None,             # where to place y ticks
-                 yticklabels_hide=False,  # hide labels but not actual ticks
-                 ylog=False,              # logarithmic y scale
-                 # Shapes
-                 markers=None,      # use markers for each plotted point
-                 markersize=None,   # size of markers
-                 lines=True,
-                 line_styles=None,  # iterable of line-styles, e.g. '--'
-                 line_widths=None,  # iterable of line-widths
-                 zorders=None,      # draw order
-                 # Misc options
-                 padding=None,           # plot range padding (as fraction)
-                 vlines=None,            # vertical line positions to plot
-                 hlines=None,            # horizontal line positions to plot
-                 span_style='--',        # style of the above lines
-                 gridlines=True,         # show gridlines or not
-                 gridline_style=(1, 3),  # linestyle of the gridlines
-                 font=('Source Sans Pro', 'PT Sans',
-                       'Liberation Sans', 'Arial'),
-                 fontsize_title=20,
-                 fontsize_ticks=16,
-                 fontsize_xtitle=20,
-                 fontsize_ytitle=20,
-                 fontsize_ztitle=20,
-                 fontsize_zlabels=18,
-                 math_serif=False,       # Use serif fonts for math text
-                 return_fig=True):
+    def __init__(self, ds, y_coo, x_coo, z_coo=None, y_err=None, **kwargs):
         """
         """
         if isinstance(ds, xr.DataArray):
@@ -91,78 +26,88 @@ class LinePlotter:
         self.x_coo = x_coo
         self.z_coo = z_coo
         self.y_err = y_err
-        self.figsize = figsize
-        self.axes_loc = axes_loc
-        self.add_to_axes = add_to_axes
-        self.add_to_fig = add_to_fig
-        self.subplot = subplot
-        self.fignum = fignum
-        self.title = title
-        self.colors = colors
-        self.colormap = colormap
-        self.colormap_log = colormap_log
-        self.colormap_reverse = colormap_reverse
-        self.colorbar = colorbar
-        self.ztitle = ztitle
-        self.zlabels = zlabels
-        self.zlims = zlims
-        self.legend = legend
-        self.legend_loc = legend_loc
-        self.legend_ncol = legend_ncol
-        self.legend_bbox = legend_bbox
-        self.legend_markerscale = legend_markerscale
-        self.legend_labelspacing = legend_labelspacing
-        self.legend_columnspacing = legend_columnspacing
-        self.legend_frame = legend_frame
-        self.xtitle = xtitle
-        self.xtitle_pad = xtitle_pad
-        self.xlims = xlims
-        self.xticks = xticks
-        self.xticklabels_hide = xticklabels_hide
-        self.xlog = xlog
-        self.ytitle = ytitle
-        self.ytitle_pad = ytitle_pad
-        self.ytitle_right = ytitle_right
-        self.ylims = ylims
-        self.yticks = yticks
-        self.yticklabels_hide = yticklabels_hide
-        self.ylog = ylog
-        self.markers = markers
-        self.markersize = markersize
-        self.lines = lines
-        self.line_styles = line_styles
-        self.line_widths = line_widths
-        self.zorders = zorders
-        self.padding = padding
-        self.vlines = vlines
-        self.hlines = hlines
-        self.span_style = span_style
-        self.gridlines = gridlines
-        self.gridline_style = gridline_style
-        self.font = font
-        self.fontsize_title = fontsize_title
-        self.fontsize_ticks = fontsize_ticks
-        self.fontsize_xtitle = fontsize_xtitle
-        self.fontsize_ytitle = fontsize_ytitle
-        self.fontsize_ztitle = fontsize_ztitle
-        self.fontsize_zlabels = fontsize_zlabels
-        self.math_serif = math_serif
-        self.return_fig = return_fig
+        # Figure options
+        self.backend = kwargs.pop('backend', 'MATPLOTLIB')
+        self.figsize = kwargs.pop('figsize', (7, 6))  # aboslute figure size
+        self.axes_loc = kwargs.pop('axes_loc', None)   # axes location in fig
+        self.add_to_axes = kwargs.pop('add_to_axes', None)  # existing axes
+        self.add_to_fig = kwargs.pop('add_to_fig', None)
+        self.subplot = kwargs.pop('subplot', None)
+        self.fignum = kwargs.pop('fignum', 1)
+        self.return_fig = kwargs.pop('return_fig', True)
+        # Coloring options
+        self.colors = kwargs.pop('colors', None)
+        self.colormap = kwargs.pop('colormap', "xyz")
+        self.colormap_log = kwargs.pop('colormap_log', False)
+        self.colormap_reverse = kwargs.pop('colormap_reverse', False)
+        self.colorbar = kwargs.pop('colorbar', False)
+        # 'z-axis' options: for legend or colorbar
+        self.ztitle = kwargs.pop('ztitle', None)
+        self.zlabels = kwargs.pop('zlabels', None)
+        self.zlims = kwargs.pop('zlims', (None, None))
+        self.zticks = kwargs.pop('zticks', None)
+        self.legend = kwargs.pop('legend', None)
+        self.legend_loc = kwargs.pop('legend_loc', 0)
+        self.legend_ncol = kwargs.pop('legend_ncol', 1)
+        self.legend_bbox = kwargs.pop('legend_bbox', None)
+        self.legend_marker_scale = kwargs.pop('legend_marker_scale', None)
+        self.legend_label_spacing = kwargs.pop('legend_label_spacing', None)
+        self.legend_column_spacing = kwargs.pop('legend_column_spacing', 1)
+        self.legend_frame = kwargs.pop('legend_frame', False)
+        self.legend_handlelength = kwargs.pop('legend_handlelength', None)
+        # x-axis options
+        self.xtitle = kwargs.pop('xtitle', None)
+        self.xtitle_pad = kwargs.pop('xtitle_pad', 5)
+        self.xlims = kwargs.pop('xlims', None)
+        self.xticks = kwargs.pop('xticks', None)
+        self.xticklabels_hide = kwargs.pop('xticklabels_hide', False)
+        self.xlog = kwargs.pop('xlog', False)
+        # y-axis options
+        self.ytitle = kwargs.pop('ytitle', None)
+        self.ytitle_pad = kwargs.pop('ytitle_pad', 5)
+        self.ytitle_right = kwargs.pop('ytitle_right', False)
+        self.ylims = kwargs.pop('ylims', None)
+        self.yticks = kwargs.pop('yticks', None)
+        self.yticklabels_hide = kwargs.pop('yticklabels_hide', False)
+        self.ylog = kwargs.pop('ylog', False)
+        # Titles and text
+        self.title = kwargs.pop('title', None)
+        self.panel_label = kwargs.pop('panel_label', None)
+        self.panel_label_loc = kwargs.pop('panel_label_loc', (0.05, 0.85))
+        # Styling options
+        self.markers = kwargs.pop('markers', None)
+        self.markersize = kwargs.pop('markersize', None)
+        self.lines = kwargs.pop('lines', True)
+        self.line_styles = kwargs.pop('line_styles', None)
+        self.line_widths = kwargs.pop('line_widths', None)
+        self.zorders = kwargs.pop('zorders', None)
+        self.padding = kwargs.pop('padding', None)
+        self.vlines = kwargs.pop('vlines', None)
+        self.hlines = kwargs.pop('hlines', None)
+        self.span_style = kwargs.pop('span_style', '--')
+        self.span_width = kwargs.pop('span_width', 1)
+        self.gridlines = kwargs.pop('gridlines', True)
+        self.gridline_style = kwargs.pop('gridline_style', (1, 2))
+        self.ticks_where = kwargs.pop('ticks_where', ('bottom', 'left',
+                                                      'top', 'right'))
+        # Font options
+        self.font = kwargs.pop('font', ('Source Sans Pro', 'PT Sans',
+                                        'Liberation Sans', 'Arial'))
+        self.fontsize_title = kwargs.pop('fontsize_title', 18)
+        self.fontsize_ticks = kwargs.pop('fontsize_ticks', 14)
+        self.fontsize_xtitle = kwargs.pop('fontsize_xtitle', 18)
+        self.fontsize_ytitle = kwargs.pop('fontsize_ytitle', 18)
+        self.fontsize_ztitle = kwargs.pop('fontsize_ztitle', 18)
+        self.fontsize_zlabels = kwargs.pop('fontsize_zlabels', 16)
+        self.fontize_panel_label = kwargs.pop('fontsize_panel_label', 18)
+        self.math_serif = kwargs.pop('math_serif', False)
+
+        if len(kwargs) > 0:
+            raise ValueError("Option(s) {} not valid"
+                             .format(list(kwargs.keys())))
 
         # Internal
         self._data_range_calculated = False
-
-        # Prepare
-        self.prepare_z_vals()
-        self.prepare_axes_labels()
-        self.prepare_z_labels()
-        self.calc_use_legend()
-        self.prepare_xy_vals()
-        self.prepare_colors(engine)
-        self.prepare_markers(engine)
-        self.prepare_line_styles(engine)
-        self.prepare_zorders()
-        self.calc_plot_range()
 
     # ----------------------------- properties ------------------------------ #
 
@@ -211,6 +156,16 @@ class LinePlotter:
         else:
             self._ytitle = self.ytitle
 
+    def prepare_z_labels(self):
+        """Work out what the labels for the z-coordinate should be.
+        """
+        if self.zlabels is not None:
+            self._zlbls = iter(self.zlabels)
+        elif self.z_coo is not None or self._multi_var:
+            self._zlbls = iter(str(z) for z in self._z_vals)
+        else:
+            self._zlbls = itertools.repeat(None)
+
     def prepare_xy_vals(self):
         """Select and flatten the data appropriately to iterate over.
         """
@@ -253,15 +208,18 @@ class LinePlotter:
 
         self._gen_xy = gen_xy
 
-    def prepare_z_labels(self):
-        """Work out what the labels for the z-coordinate should be.
+    def prepare_heatmap_data(self):
+        """Prepare the data to go into a heatmap.
         """
-        if self.zlabels is not None:
-            self._zlbls = iter(self.zlabels)
-        elif self.z_coo is not None or self._multi_var:
-            self._zlbls = iter(str(z) for z in self._z_vals)
-        else:
-            self._zlbls = itertools.repeat(None)
+        self._heatmap_x = self._ds[self.x_coo].values.flatten()
+        self._heatmap_y = self._ds[self.y_coo].values.flatten()
+        self._heatmap_var = ma.masked_invalid(
+            self._ds[self.z_coo]
+                .squeeze()
+                .transpose(self.y_coo, self.x_coo)
+                .values)
+        self._zmin = self._heatmap_var.min()
+        self._zmax = self._heatmap_var.max()
 
     def calc_use_legend(self):
         """Work out whether to use a legend.
@@ -271,38 +229,39 @@ class LinePlotter:
         else:
             self._lgnd = self.legend
 
-    def prepare_colors(self, engine):
+    def prepare_colors(self):
         """Prepare the colors for the lines, based on the z-coordinate.
         """
         if self.colors is True:
-            self.calc_colors(engine=engine)
+            self.calc_colors()
         elif self.colors:
-            self._cols = itertools.cycle(convert_colors(self.colors,
-                                                        outformat=engine))
+            self._cols = itertools.cycle(
+                convert_colors(self.colors, outformat=self.backend))
         else:
-            if engine == 'BOKEH':
+            if self.backend == 'BOKEH':
                 from bokeh.palettes import Category10_9
                 self._cols = itertools.cycle(Category10_9)
             else:
                 self._cols = itertools.repeat(None)
 
-    def calc_colors(self, engine):
+    def calc_colors(self):
         """Helper function for calculating what each color should be.
         """
-        cmap = _xyz_colormaps(self.colormap)
+        cmap = xyz_colormaps(self.colormap)
 
         try:
-            zmin = self.zlims[0]
-            if zmin is None:
-                zmin = self._ds[self.z_coo].values.min()
-            zmax = self.zlims[1]
-            if zmax is None:
-                zmax = self._ds[self.z_coo].values.max()
+            self._zmin = self.zlims[0]
+            if self._zmin is None:
+                self._zmin = self._ds[self.z_coo].values.min()
+            self._zmax = self.zlims[1]
+            if self._zmax is None:
+                self._zmax = self._ds[self.z_coo].values.max()
 
             # Relative function
             f = math.log if self.colormap_log else lambda a: a
             # Relative place in range according to function
-            rvals = [1 - (f(z) - f(zmin)) / (f(zmax) - f(zmin))
+            rvals = [1 - (f(z) - f(self._zmin)) /
+                         (f(self._zmax) - f(self._zmin))
                      for z in self._ds[self.z_coo].values]
         except TypeError:  # no relative coloring possible e.g. for strings
             rvals = np.linspace(0, 1.0, self._ds[self.z_coo].size)
@@ -310,9 +269,9 @@ class LinePlotter:
         # Map to mpl colormap, reversing if required
         self._cols = [cmap(1 - rval if self.colormap_reverse else rval)
                       for rval in rvals]
-        self._cols = iter(convert_colors(self._cols, outformat=engine))
+        self._cols = iter(convert_colors(self._cols, outformat=self.backend))
 
-    def prepare_markers(self, engine):
+    def prepare_markers(self):
         """Prepare the markers to be used for each line.
         """
         if self.markers is None:
@@ -323,15 +282,21 @@ class LinePlotter:
             else:
                 self.markers = len(self._ds[self.x_coo]) <= 51
 
+        # Could add more logic based on number of xpoints?
+        if self.markersize is None:
+            self._markersize = 5
+        else:
+            self._markersize = self.markersize
+
         if self.markers:
             if len(self._z_vals) > 1:
-                self._mrkrs = itertools.cycle(_MARKERS[engine])
+                self._mrkrs = itertools.cycle(_MARKERS[self.backend])
             else:
-                self._mrkrs = iter(_SINGLE_LINE_MARKER[engine])
+                self._mrkrs = iter(_SINGLE_LINE_MARKER[self.backend])
         else:
             self._mrkrs = itertools.repeat(None)
 
-    def prepare_line_styles(self, engine):
+    def prepare_line_styles(self):
         """Line widths and styles.
         """
         self._lines = (
