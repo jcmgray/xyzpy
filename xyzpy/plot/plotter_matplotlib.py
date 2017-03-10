@@ -170,12 +170,14 @@ class PlotterMatplotlib(LinePlotter):
                          'linestyle': next(self._lines)}
 
             if len(data) > 2:
-                self._axes.errorbar(data[0], data[1],
-                                    yerr=data[2], ecolor=col, capthick=0,
-                                    elinewidth=0.5, **line_opts)
+                eb = self._axes.errorbar(data[0], data[1],
+                                         yerr=data[2], ecolor=col, capthick=0,
+                                         elinewidth=0.5, **line_opts)
+                eb.lines[0].set_markerfacecolor(col[0:3] + (col[3] / 2,))
             else:
                 # add line to axes, with options cycled through
-                self._axes.plot(data[0], data[1], **line_opts)
+                ln = self._axes.plot(data[0], data[1], **line_opts)
+                ln[0].set_markerfacecolor(col[0:3] + (col[3] / 2,))
 
     def plot_legend(self):
         """Add a legend
@@ -211,7 +213,8 @@ class PlotterMatplotlib(LinePlotter):
             self._heatmap_y,
             self._heatmap_var,
             norm=self._heatmap_norm,
-            cmap=xyz_colormaps(self.colormap))
+            cmap=xyz_colormaps(self.colormap),
+            rasterized=True)
 
     def add_colorbar(self):
         """Add a colorbar to the data.
