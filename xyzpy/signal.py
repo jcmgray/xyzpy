@@ -505,9 +505,11 @@ xr.DataArray.pchip = xr_pchip
 #                           scipy signal filtering                            #
 # --------------------------------------------------------------------------- #
 
-def xr_filter_wiener(xobj, dim, *args, **kwargs):
-    func = functools.partial(signal.wiener, *args, **kwargs)
-    return xr_1d_apply(func, xobj, dim, new_dim=False)
+def xr_filter_wiener(xobj, dim, mysize=None, noise=None):
+    func = functools.partial(signal.wiener, mysize=mysize, noise=noise)
+    # First linearly interpolate to make sure evenly spaced
+    xobj_even = xr_interp1d(xobj, dim, ix=xobj[dim].size, kind='linear')
+    return xr_1d_apply(func, xobj_even, dim, new_dim=False)
 
 
 xr.DataArray.wiener = xr_filter_wiener
@@ -521,7 +523,9 @@ def xr_filtfilt(xobj, dim, filt='butter', *args, **kwargs):
     def func(x):
         return signal.filtfilt(b, a, x, method='gust')
 
-    return xr_1d_apply(func, xobj, dim, new_dim=False, leave_nan=False)
+    # First linearly interpolate to make sure evenly spaced
+    xobj_even = xr_interp1d(xobj, dim, ix=xobj[dim].size, kind='linear')
+    return xr_1d_apply(func, xobj_even, dim, new_dim=False, leave_nan=False)
 
 
 xr.DataArray.filtfilt = xr_filtfilt
@@ -666,12 +670,13 @@ def xr_unispline(obj, dim, err=None, num_knots=11, ix=None):
         obj : Dataset or DataArray
             Object to fit spline to.
         dim : str
-            Dimension to fit spline along
-        err : Dataset, DataArray or str (optional)
+            Dimension to fit spline along.
+        err : DataArray or str (optional)
             Error in variables, with with to weight spline fitting. If `err`
             is a string, use the corresponding variable found within `obj`.
-        num_knots : int
-            Number of linearly spaced interior knots to form spline with.
+        num_knots : int (optional)
+            Number of linearly spaced interior knots to form spline with,
+            defaults to 11.
         ix : array-like or int (optional)
             Which points to evaluate the newly fitted spline. If int, `ix` many
             points will be chosen linearly spaced across the datas range. If
