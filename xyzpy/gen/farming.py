@@ -1,14 +1,11 @@
 """
 """
-# TODO: tests
-# TODO: harvest_cases
 # TODO: logging
 # TODO: file lock
-# TODO: harvester getter last_ds from runner
 # TODO: save_on=() : save every iteration of this parameter
-# TODO: split_on=() : split save files upon each iteration of this param
+# TODO: split_on=() : split save files upon each iteration of these params
 # TODO: keep last n datasets
-# TODO: try auto_combine before merge
+# TODO: try auto_combine before merge?
 
 import os
 import shutil

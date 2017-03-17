@@ -1,8 +1,6 @@
 """
 Helper functions for preparing data to be plotted.
 """
-# TODO: Error bars ********************************************************** #
-# TODO: allow dataArray ***************************************************** #
 # TODO: x-err, upper and lower errors *************************************** #
 
 import math
@@ -73,6 +71,7 @@ _PLOTTER_DEFAULTS = {
     # Styling options
     'markers': None,
     'markersize': None,
+    'marker_alpha': 1.0,
     'lines': True,
     'line_styles': None,
     'line_widths': None,

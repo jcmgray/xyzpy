@@ -175,11 +175,15 @@ class PlotterMatplotlib(LinePlotter):
                                          capsize=self.errorbar_capsize,
                                          capthick=self.errorbar_capthick,
                                          elinewidth=0.5, **line_opts)
-                eb.lines[0].set_markerfacecolor(col[0:3] + (col[3] / 2,))
+                ln = eb.lines
             else:
                 # add line to axes, with options cycled through
                 ln = self._axes.plot(data[0], data[1], **line_opts)
-                ln[0].set_markerfacecolor(col[0:3] + (col[3] / 2,))
+
+            ln[0].set_markeredgecolor(
+                col[:3] + (self.marker_alpha * col[3],))
+            ln[0].set_markerfacecolor(
+                col[:3] + (self.marker_alpha * col[3] / 2,))
 
     def plot_legend(self):
         """Add a legend
