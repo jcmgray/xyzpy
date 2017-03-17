@@ -75,6 +75,8 @@ _PLOTTER_DEFAULTS = {
     'lines': True,
     'line_styles': None,
     'line_widths': None,
+    'errorbar_capthick': 1,
+    'errorbar_capsize': 0,
     'zorders': None,
     'padding': None,
     'vlines': None,

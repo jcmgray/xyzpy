@@ -171,7 +171,9 @@ class PlotterMatplotlib(LinePlotter):
 
             if len(data) > 2:
                 eb = self._axes.errorbar(data[0], data[1],
-                                         yerr=data[2], ecolor=col, capthick=0,
+                                         yerr=data[2], ecolor=col,
+                                         capsize=self.errorbar_capsize,
+                                         capthick=self.errorbar_capthick,
                                          elinewidth=0.5, **line_opts)
                 eb.lines[0].set_markerfacecolor(col[0:3] + (col[3] / 2,))
             else:
