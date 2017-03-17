@@ -88,15 +88,15 @@ _PLOTTER_DEFAULTS = {
     'gridline_style': (1, 2),
     'ticks_where': ('bottom', 'left', 'top', 'right'),
     # Font options
-    'font': ('Source Sans Pro', 'PT Sans', 'Liberation Sans', 'Arial'),
+    'font': ('CMU Serif', 'PT Serif', 'Liberation Serif', 'DejaVu Serif'),
     'fontsize_title': 18,
-    'fontsize_ticks': 14,
+    'fontsize_ticks': 13,
     'fontsize_xtitle': 18,
     'fontsize_ytitle': 18,
     'fontsize_ztitle': 18,
-    'fontsize_zlabels': 16,
-    'fontsize_panel_label': 18,
-    'math_serif': False,
+    'fontsize_zlabels': 13,
+    'fontsize_panel_label': 15,
+    'math_serif': True,
 }
 
 _PLOTTER_OPTS = list(_PLOTTER_DEFAULTS.keys())
