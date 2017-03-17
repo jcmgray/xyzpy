@@ -69,6 +69,7 @@ _PLOTTER_DEFAULTS = {
     'title': None,
     'panel_label': None,
     'panel_label_loc': (0.05, 0.85),
+    'panel_label_color': 'black',
     # Styling options
     'markers': None,
     'markersize': None,

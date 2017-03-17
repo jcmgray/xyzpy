@@ -250,7 +250,8 @@ class PlotterMatplotlib(LinePlotter):
         if self.panel_label is not None:
             self._axes.text(*self.panel_label_loc, self.panel_label,
                             transform=self._axes.transAxes,
-                            fontsize=self.fontsize_panel_label)
+                            fontsize=self.fontsize_panel_label,
+                            color=self.panel_label_color)
 
     def show(self):
         import matplotlib.pyplot as plt
