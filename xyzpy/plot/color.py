@@ -1,6 +1,8 @@
 """
 Helper functions for generating color spectrums.
 """
+import itertools
+import matplotlib.cm as cm
 
 
 def _COLORS_MATPLOTLIB_TO_BOKEH(cols):
@@ -24,7 +26,6 @@ def convert_colors(cols, outformat, informat='MATPLOTLIB'):
 def xyz_colormaps(name):
     """Custom-defined colormaps
     """
-    import matplotlib.cm as cm
     from matplotlib.colors import LinearSegmentedColormap
 
     cmaps = {
@@ -93,9 +94,22 @@ def xyz_colormaps(name):
     if name in cmaps:
         return LinearSegmentedColormap(name, cmaps[name])
     # colorcet colormaps
+
+    # special cases with name conflicts
+    if name in {'inferno', 'coolwarm', 'blues'}:
+        return getattr(cm, name)
+
     try:
         import colorcet
         return colorcet.cm[name]
     # matplotlib colormaps
     except (ImportError, KeyError):
         return getattr(cm, name)
+
+
+def get_default_sequential_cm(engine='MATPLOTLIB'):
+    if engine == 'BOKEH':
+        from bokeh.palettes import Category10_9
+        return itertools.cycle(Category10_9)
+    else:
+        return itertools.cycle(rgb + (1.,) for rgb in cm.Vega10.colors)

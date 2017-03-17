@@ -10,7 +10,7 @@ import itertools
 import numpy as np
 import numpy.ma as ma
 import xarray as xr
-from .color import convert_colors, xyz_colormaps
+from .color import convert_colors, xyz_colormaps, get_default_sequential_cm
 from .marker import _MARKERS, _SINGLE_LINE_MARKER
 
 _PLOTTER_DEFAULTS = {
@@ -260,11 +260,7 @@ class LinePlotter:
             self._cols = itertools.cycle(
                 convert_colors(self.colors, outformat=self.backend))
         else:
-            if self.backend == 'BOKEH':
-                from bokeh.palettes import Category10_9
-                self._cols = itertools.cycle(Category10_9)
-            else:
-                self._cols = itertools.repeat(None)
+            self._cols = get_default_sequential_cm(self.backend)
 
     def calc_colors(self):
         """Helper function for calculating what each color should be.
