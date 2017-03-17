@@ -102,9 +102,17 @@ def xyz_colormaps(name):
     try:
         import colorcet
         return colorcet.cm[name]
-    # matplotlib colormaps
     except (ImportError, KeyError):
-        return getattr(cm, name)
+        pass
+
+    try:
+        import cmocean
+        return getattr(cmocean.cm, name)
+    except (ImportError, AttributeError):
+        pass
+
+    # matplotlib colormaps
+    return getattr(cm, name)
 
 
 def get_default_sequential_cm(engine='MATPLOTLIB'):
