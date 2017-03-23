@@ -48,6 +48,7 @@ _PLOTTER_DEFAULTS = {
     'legend_column_spacing': 1,
     'legend_frame': False,
     'legend_handlelength': None,
+    'legend_reverse': False,
     # x-axis options
     'xtitle': None,
     'xtitle_pad': 5,

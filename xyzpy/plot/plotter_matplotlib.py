@@ -189,7 +189,13 @@ class PlotterMatplotlib(LinePlotter):
         """Add a legend
         """
         if self._lgnd:
+
+            handles, labels = self._axes.get_legend_handles_labels()
+            if self.legend_reverse:
+                handles, labels = handles[::-1], labels[::-1]
+
             lgnd = self._axes.legend(
+                handles, labels,
                 title=(self.z_coo if self.ztitle is None else self.ztitle),
                 loc=self.legend_loc,
                 fontsize=self.fontsize_zlabels,
