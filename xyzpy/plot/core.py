@@ -3,7 +3,6 @@ Helper functions for preparing data to be plotted.
 """
 # TODO: x-err, upper and lower errors *************************************** #
 
-import math
 import itertools
 import numpy as np
 import numpy.ma as ma
@@ -27,7 +26,7 @@ _PLOTTER_DEFAULTS = {
     'colormap_log': False,
     'colormap_reverse': False,
     # Colorbar options
-    'colorbar': False,
+    'colorbar': None,
     'vmin': None,
     'vmax': None,
     'colorbar_relative_position': None,
@@ -67,7 +66,7 @@ _PLOTTER_DEFAULTS = {
     # Titles and text
     'title': None,
     'panel_label': None,
-    'panel_label_loc': (0.05, 0.85),
+    'panel_label_loc': (0.05, 0.93),
     'panel_label_color': 'black',
     # Styling options
     'markers': None,
@@ -244,29 +243,25 @@ class LinePlotter:
         self._zmin = self._heatmap_var.min()
         self._zmax = self._heatmap_var.max()
 
-    def calc_use_legend(self):
+    def calc_use_legend_or_colorbar(self):
         """Work out whether to use a legend.
         """
-        if self.legend is None:
-            self._lgnd = (1 < len(self._z_vals) <= 10)
-        else:
-            self._lgnd = self.legend
+        if self.colorbar and self.legend is None:
+            self.legend = False
+        if self.legend and self.colorbar is None:
+            self.colorbar = False
 
-    def prepare_colors(self):
-        """Prepare the colors for the lines, based on the z-coordinate.
-        """
-        if self.colors is True:
-            self.calc_colors()
-        elif self.colors:
-            self._cols = itertools.cycle(
-                convert_colors(self.colors, outformat=self.backend))
+        if self.legend is None and self.colorbar is None:
+            self._use_legend = (1 < len(self._z_vals) <= 10)
+            self._use_colorbar = (not self._use_legend) and self.colors
         else:
-            self._cols = get_default_sequential_cm(self.backend)
+            self._use_legend = self.legend
+            self._use_colorbar = self.colorbar
 
-    def calc_colors(self):
-        """Helper function for calculating what each color should be.
-        """
-        cmap = xyz_colormaps(self.colormap)
+    def calc_color_norm(self):
+        import matplotlib as mpl
+
+        self.cmap = xyz_colormaps(self.colormap)
 
         try:
             self._zmin = self.zlims[0]
@@ -276,19 +271,49 @@ class LinePlotter:
             if self._zmax is None:
                 self._zmax = self._ds[self.z_coo].values.max()
 
-            # Relative function
-            f = math.log if self.colormap_log else lambda a: a
-            # Relative place in range according to function
-            rvals = [1 - (f(z) - f(self._zmin)) /
-                         (f(self._zmax) - f(self._zmin))
-                     for z in self._ds[self.z_coo].values]
-        except TypeError:  # no relative coloring possible e.g. for strings
-            rvals = np.linspace(0, 1.0, self._ds[self.z_coo].size)
+        except (TypeError, NotImplementedError, AttributeError):
+            # no relative coloring possible e.g. for strings
+            self._zmin, self._zmax = 0.0, 1.0
 
-        # Map to mpl colormap, reversing if required
-        self._cols = [cmap(1 - rval if self.colormap_reverse else rval)
+        if self.vmin is None:
+            self.vmin = self._zmin
+        if self.vmax is None:
+            self.vmax = self._zmax
+
+        self._color_norm = getattr(
+            mpl.colors, "LogNorm" if self.colormap_log else "Normalize")(
+                vmin=self.vmin, vmax=self.vmax)
+
+    def calc_line_colors(self):
+        """Helper function for calculating what the colormapped color of each
+        line should be.
+        """
+        self.calc_color_norm()
+        try:
+            rvals = [self._color_norm(z) for z in self._ds[self.z_coo].values]
+        except (TypeError, NotImplementedError, AttributeError):
+            # no relative coloring possible e.g. for strings
+            rvals = np.linspace(0, 1, self._ds[self.z_coo].size)
+
+        # Map relative value to mpl color, reversing if required
+        self._cols = [self.cmap(1 - rval if self.colormap_reverse else rval)
                       for rval in rvals]
+        # Convert colors to correct format
         self._cols = iter(convert_colors(self._cols, outformat=self.backend))
+
+    def prepare_line_colors(self):
+        """Prepare the colors for the lines, based on the z-coordinate.
+        """
+        # Automatic colors
+        if self.colors is True:
+            self.calc_line_colors()
+        # Manually specified colors
+        elif self.colors:
+            self._cols = itertools.cycle(
+                convert_colors(self.colors, outformat=self.backend))
+        # Use sequential
+        else:
+            self._cols = get_default_sequential_cm(self.backend)
 
     def prepare_markers(self):
         """Prepare the markers to be used for each line.

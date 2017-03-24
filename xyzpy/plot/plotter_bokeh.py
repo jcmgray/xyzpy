@@ -150,7 +150,7 @@ class PlotterBokeh(LinePlotter):
     def plot_lines(self):
         """Plot the data and a corresponding legend.
         """
-        if self._lgnd:
+        if self._use_legend:
             self._lgnd_items = []
 
         for src in self._sources:
@@ -181,18 +181,18 @@ class PlotterBokeh(LinePlotter):
                     xs='y_err_xs', ys='y_err_ys', source=src, color=col)
                 legend_pics.append(err)
 
-            if self._lgnd:
+            if self._use_legend:
                 self._lgnd_items.append((zlabel, legend_pics))
 
     def plot_legend(self):
         """Add a legend to the plot.
         """
-        if self._lgnd:
+        if self._use_legend:
             from bokeh.models import Legend
             self._plot.add_layout(
                 Legend(items=self._lgnd_items, location=(0, 0)), 'right')
             # Don't repeatedly redraw legend
-            self._lgnd = False
+            self._use_legend = False
 
     def set_tools(self):
         """Set which tools appear for the plot.
@@ -228,9 +228,9 @@ def ilineplot(ds, y_coo, x_coo, z_coo=None, return_fig=False,
     p.prepare_z_vals()
     p.prepare_axes_labels()
     p.prepare_z_labels()
-    p.calc_use_legend()
+    p.calc_use_legend_or_colorbar()
     p.prepare_xy_vals()
-    p.prepare_colors()
+    p.prepare_line_colors()
     p.prepare_markers()
     p.prepare_line_styles()
     p.prepare_zorders()

@@ -160,14 +160,15 @@ class PlotterMatplotlib(LinePlotter):
         for data in self._gen_xy():
             col = next(self._cols)
 
-            line_opts = {'c': col,
-                         'lw': next(self._lws),
-                         'marker': next(self._mrkrs),
-                         'markeredgecolor': col,
-                         'markersize': self._markersize,
-                         'label': next(self._zlbls) if self._lgnd else None,
-                         'zorder': next(self._zordrs),
-                         'linestyle': next(self._lines)}
+            line_opts = {
+                'c': col,
+                'lw': next(self._lws),
+                'marker': next(self._mrkrs),
+                'markeredgecolor': col,
+                'markersize': self._markersize,
+                'label': next(self._zlbls) if self._use_legend else None,
+                'zorder': next(self._zordrs),
+                'linestyle': next(self._lines)}
 
             if len(data) > 2:
                 eb = self._axes.errorbar(data[0], data[1],
@@ -188,7 +189,7 @@ class PlotterMatplotlib(LinePlotter):
     def plot_legend(self):
         """Add a legend
         """
-        if self._lgnd:
+        if self._use_legend:
 
             handles, labels = self._axes.get_legend_handles_labels()
             if self.legend_reverse:
@@ -213,55 +214,64 @@ class PlotterMatplotlib(LinePlotter):
     def plot_heatmap(self):
         """Plot the data as a heatmap.
         """
-        import matplotlib as mpl
-        if self.colormap_log:
-            self._heatmap_norm = mpl.colors.LogNorm(vmin=self.vmin,
-                                                    vmax=self.vmax)
-        else:
-            self._heatmap_norm = mpl.colors.Normalize(vmin=self.vmin,
-                                                      vmax=self.vmax)
-        self._heatmap_ax = getattr(self._axes, self.method)(
+        self.calc_color_norm()
+        self._heatmap = getattr(self._axes, self.method)(
             self._heatmap_x,
             self._heatmap_y,
             self._heatmap_var,
-            norm=self._heatmap_norm,
+            norm=self._color_norm,
             cmap=xyz_colormaps(self.colormap),
             rasterized=True)
 
-    def add_colorbar(self):
+    def set_mappable(self):
+        """Mappale object for colorbars.
+        """
+        from matplotlib.cm import ScalarMappable
+        self.mappable = ScalarMappable(cmap=self.cmap, norm=self._color_norm)
+        self.mappable.set_array([])
+
+    def plot_colorbar(self):
         """Add a colorbar to the data.
         """
-        extendmin = (self.vmin is not None) and (self.vmin > self._zmin)
-        extendmax = (self.vmax is not None) and (self.vmax < self._zmax)
-        extend = ('both' if extendmin and extendmax else
-                  'min' if extendmin else
-                  'max' if extendmax else
-                  'neither')
-        opts = {'extend': extend,
-                'ticks': self.zticks,
-                'norm': self._heatmap_norm}
-        if self.colorbar_relative_position:
-            opts['cax'] = self._fig.add_axes(
-                self._cax_rel2abs_rect(self.colorbar_relative_position))
-        self._cbar = self._fig.colorbar(self._heatmap_ax,
-                                        **opts, **self.colorbar_opts)
-        self._cbar.ax.tick_params(labelsize=self.fontsize_zlabels)
-        self._cbar.ax.set_title(
-            self.z_coo if self.ztitle is None else self.ztitle,
-            color=self.colorbar_color if self.colorbar_color else None,
-        ).set_fontsize(self.fontsize_ztitle)
+        if self._use_colorbar:
+            self.set_mappable()
+            # Whether the colorbar should clip at either end
+            extendmin = (self.vmin is not None) and (self.vmin > self._zmin)
+            extendmax = (self.vmax is not None) and (self.vmax < self._zmax)
+            extend = ('both' if extendmin and extendmax else
+                      'min' if extendmin else
+                      'max' if extendmax else
+                      'neither')
 
-        if self.colorbar_color:
-            self._cbar.ax.yaxis.set_tick_params(color=self.colorbar_color,
-                                                labelcolor=self.colorbar_color)
-            self._cbar.outline.set_edgecolor(self.colorbar_color)
+            opts = {'extend': extend,
+                    'ticks': self.zticks}
+
+            if self.colorbar_relative_position:
+                opts['cax'] = self._fig.add_axes(
+                    self._cax_rel2abs_rect(self.colorbar_relative_position))
+
+            self._cbar = self._fig.colorbar(
+                self.mappable, **opts, **self.colorbar_opts)
+
+            self._cbar.ax.tick_params(labelsize=self.fontsize_zlabels)
+
+            self._cbar.ax.set_title(
+                self.z_coo if self.ztitle is None else self.ztitle,
+                color=self.colorbar_color if self.colorbar_color else None,
+                fontsize=self.fontsize_ztitle)
+
+            if self.colorbar_color:
+                self._cbar.ax.yaxis.set_tick_params(
+                    color=self.colorbar_color, labelcolor=self.colorbar_color)
+                self._cbar.outline.set_edgecolor(self.colorbar_color)
 
     def set_panel_label(self):
         if self.panel_label is not None:
             self._axes.text(*self.panel_label_loc, self.panel_label,
                             transform=self._axes.transAxes,
                             fontsize=self.fontsize_panel_label,
-                            color=self.panel_label_color)
+                            color=self.panel_label_color,
+                            ha='left', va='top')
 
     def show(self):
         import matplotlib.pyplot as plt
@@ -282,9 +292,9 @@ class LinePlot(PlotterMatplotlib):
         self.prepare_z_vals()
         self.prepare_axes_labels()
         self.prepare_z_labels()
-        self.calc_use_legend()
+        self.calc_use_legend_or_colorbar()
         self.prepare_xy_vals()
-        self.prepare_colors()
+        self.prepare_line_colors()
         self.prepare_markers()
         self.prepare_line_styles()
         self.prepare_zorders()
@@ -299,6 +309,7 @@ class LinePlot(PlotterMatplotlib):
         self.set_tick_marks()
         self.plot_lines()
         self.plot_legend()
+        self.plot_colorbar()
         self.set_panel_label()
         return self.show()
 
@@ -310,6 +321,7 @@ def lineplot(ds, y_coo, x_coo, z_coo=None, return_fig=True, **kwargs):
 
 
 _HEATMAP_ALT_DEFAULTS = (
+    ('legend', False),
     ('colorbar', True),
     ('colormap', 'inferno'),
     ('method', 'pcolormesh'),
@@ -321,12 +333,12 @@ class HeatMap(PlotterMatplotlib):
     """
     """
 
-    def __init__(self, ds, x_coo, y_coo, var, **kwargs):
+    def __init__(self, ds, x, y, z, **kwargs):
         # set some heatmap specific options
         for k, default in _HEATMAP_ALT_DEFAULTS:
             if k not in kwargs:
                 kwargs[k] = default
-        super().__init__(ds, y_coo, x_coo, var, **kwargs)
+        super().__init__(ds, y, x, z, **kwargs)
 
     def __call__(self):
 
@@ -334,6 +346,7 @@ class HeatMap(PlotterMatplotlib):
         self.prepare_axes_labels()
         self.prepare_heatmap_data()
         self.calc_plot_range()
+        self.calc_use_legend_or_colorbar()
         # matplotlib preparation
         self.prepare_plot()
         self.set_axes_labels()
@@ -343,16 +356,15 @@ class HeatMap(PlotterMatplotlib):
         self.set_gridlines()
         self.set_tick_marks()
         self.plot_heatmap()
-        if self.colorbar:
-            self.add_colorbar()
+        self.plot_colorbar()
         self.set_panel_label()
         return self.show()
 
 
-def heatmap(ds, x_coo, y_coo, var, **kwargs):
+def heatmap(ds, x, y, z, **kwargs):
     """
     """
-    return HeatMap(ds, x_coo, y_coo, var, **kwargs)()
+    return HeatMap(ds, x, y, z, **kwargs)()
 
 
 def xyz_lineplot(x, y_z, **lineplot_opts):

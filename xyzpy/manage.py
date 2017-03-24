@@ -137,6 +137,7 @@ def auto_xyz_ds(x, y_z):
     """
     # Infer dimensions to coords mapping
     y_z = np.array(np.squeeze(y_z), ndmin=2)
+    x = np.asarray(x)
     if np.size(x) == y_z.shape[0]:
         y_z = np.transpose(y_z)
     n_y = y_z.shape[0]
