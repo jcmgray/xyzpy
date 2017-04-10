@@ -25,7 +25,7 @@ def _auto_add_extension(file_name, engine):
     """Make sure a file name has an extension that reflects its
     file type.
     """
-    if "." not in file_name:
+    if (".h5" not in file_name) and (".nc" not in file_name):
         extension = ".h5" if engine == "h5netcdf" else ".nc"
         file_name += extension
     return file_name
@@ -119,7 +119,7 @@ def check_runs(obj, dim='run', var=None, sel=()):
     obj = obj.dropna(dim, how='all')
     obj = obj[dim].values
 
-    if obj.dtype != int:
+    if 'int' not in str(obj.dtype):
         raise TypeError("check_runs can only check integer dimesions.")
 
     xmin, xmax = obj.min(), obj.max() + 1
