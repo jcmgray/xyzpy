@@ -2,6 +2,7 @@
 Helper functions for preparing data to be plotted.
 """
 # TODO: x-err, upper and lower errors *************************************** #
+# TODO: check shape and hint at which dimensions need to be reduced ********* #
 
 import itertools
 import numpy as np
@@ -12,6 +13,7 @@ from .marker import _MARKERS, _SINGLE_LINE_MARKER
 
 _PLOTTER_DEFAULTS = {
     # Figure options
+    'type': 'LINEPLOT',
     'backend': 'MATPLOTLIB',
     'figsize': (7, 6),
     'axes_loc': None,
@@ -22,7 +24,7 @@ _PLOTTER_DEFAULTS = {
     'return_fig': True,
     # Coloring options
     'colors': None,
-    'colormap': "xyz",
+    'colormap': None,
     'colormap_log': False,
     'colormap_reverse': False,
     # Colorbar options
@@ -55,6 +57,7 @@ _PLOTTER_DEFAULTS = {
     'xticks': None,
     'xticklabels_hide': False,
     'xlog': False,
+    'bins': 30,
     # y-axis options
     'ytitle': None,
     'ytitle_pad': 5,
@@ -102,17 +105,17 @@ _PLOTTER_DEFAULTS = {
 _PLOTTER_OPTS = list(_PLOTTER_DEFAULTS.keys())
 
 
-class LinePlotter:
-    def __init__(self, ds, y_coo, x_coo, z_coo=None, y_err=None, **kwargs):
+class Plotter:
+    def __init__(self, ds, x, y, z=None, y_err=None, **kwargs):
         """
         """
         if isinstance(ds, xr.DataArray):
             self._ds = ds.to_dataset()
         else:
             self._ds = ds
-        self.y_coo = y_coo
-        self.x_coo = x_coo
-        self.z_coo = z_coo
+        self.x_coo = x
+        self.y_coo = y
+        self.z_coo = z
         self.y_err = y_err
         # Figure options
         settings = {**_PLOTTER_DEFAULTS, **kwargs}
@@ -140,7 +143,7 @@ class LinePlotter:
         self._ds = ds
         self.prepare_z_vals()
         self.prepare_z_labels()
-        self.prepare_xy_vals()
+        self.prepare_xy_vals_lineplot()
         self.calc_plot_range()
         self.update()
 
@@ -151,20 +154,6 @@ class LinePlotter:
                   "The dataset used to plot graph.")
 
     # ------------------------------- methods ------------------------------- #
-
-    def prepare_z_vals(self):
-        """Work out what the 'z-coordinate', if any, should be.
-        """
-        # TODO: process multi-var errors at same time
-        self._multi_var = False
-
-        if self.z_coo is not None:
-            self._z_vals = self._ds[self.z_coo].values
-        elif not isinstance(self.y_coo, str):
-            self._multi_var = True
-            self._z_vals = self.y_coo
-        else:
-            self._z_vals = (None,)
 
     def prepare_axes_labels(self):
         """Work out what the axes titles should be.
@@ -178,17 +167,62 @@ class LinePlotter:
         else:
             self._ytitle = self.ytitle
 
+    def prepare_z_vals(self):
+        """Work out what the 'z-coordinate', if any, should be.
+        """
+        # TODO: process multi-var errors at same time
+        self._multi_var = False
+
+        # Multiple sets of data parametized by z_coo
+        if self.z_coo is not None:
+            self._z_vals = self._ds[self.z_coo].values
+
+        # Multiple data variables to plot -- just named in list
+        elif isinstance(self.y_coo, (tuple, list)):
+            self._multi_var = True
+            self._z_vals = self.y_coo
+
+        # Multiple data variables to plot -- but for histogram
+        elif isinstance(self.x_coo, (tuple, list)):
+            self._multi_var = True
+            self._z_vals = self.x_coo
+
+        # Single data variable to plot
+        else:
+            self._z_vals = (None,)
+
     def prepare_z_labels(self):
         """Work out what the labels for the z-coordinate should be.
         """
+        # Manually specified z-labels
         if self.zlabels is not None:
             self._zlbls = iter(self.zlabels)
-        elif self.z_coo is not None or self._multi_var:
+
+        # Use z-data (for lineplot only) or multiple y names
+        elif ((self.z_coo is not None and self.type == 'LINEPLOT') or
+              self._multi_var):
             self._zlbls = iter(str(z) for z in self._z_vals)
+
+        # No z-labels
         else:
             self._zlbls = itertools.repeat(None)
 
-    def prepare_xy_vals(self):
+    def calc_use_legend_or_colorbar(self):
+        """Work out whether to use a legend.
+        """
+        if self.colorbar and self.legend is None:
+            self.legend = False
+        if self.legend and self.colorbar is None:
+            self.colorbar = False
+
+        if self.legend is None and self.colorbar is None:
+            self._use_legend = (1 < len(self._z_vals) <= 10)
+            self._use_colorbar = (not self._use_legend) and self.colors is True
+        else:
+            self._use_legend = self.legend
+            self._use_colorbar = self.colorbar
+
+    def prepare_xy_vals_lineplot(self):
         """Select and flatten the data appropriately to iterate over.
         """
 
@@ -223,12 +257,36 @@ class LinePlotter:
                 not_null = np.isfinite(x)
                 not_null &= np.isfinite(y)
 
+                data = {'x': x[not_null], 'y': y[not_null]}
                 if self.y_err is not None:
-                    yield x[not_null], y[not_null], ye[not_null]
-                else:
-                    yield x[not_null], y[not_null]
+                    data['ye'] = ye[not_null]
+
+                yield data
 
         self._gen_xy = gen_xy
+
+    def prepare_x_vals_histogram(self):
+        """
+        """
+
+        def gen_x():
+            for z in self._z_vals:
+                # multiple data variables rather than z coordinate
+                if self._multi_var:
+                    x = self._ds[z].values.flatten()
+
+                # z-coordinate to iterate over
+                elif z is not None:
+                    sub_ds = self._ds.loc[{self.z_coo: z}]
+                    x = sub_ds[self.x_coo].values.flatten()
+
+                # nothing to iterate over
+                else:
+                    x = self._ds[self.x_coo].values.flatten()
+
+                yield {'x': x[np.isfinite(x)]}
+
+        self._gen_xy = gen_x
 
     def prepare_heatmap_data(self):
         """Prepare the data to go into a heatmap.
@@ -243,21 +301,6 @@ class LinePlotter:
         self._zmin = self._heatmap_var.min()
         self._zmax = self._heatmap_var.max()
 
-    def calc_use_legend_or_colorbar(self):
-        """Work out whether to use a legend.
-        """
-        if self.colorbar and self.legend is None:
-            self.legend = False
-        if self.legend and self.colorbar is None:
-            self.colorbar = False
-
-        if self.legend is None and self.colorbar is None:
-            self._use_legend = (1 < len(self._z_vals) <= 10)
-            self._use_colorbar = (not self._use_legend) and self.colors
-        else:
-            self._use_legend = self.legend
-            self._use_colorbar = self.colorbar
-
     def calc_color_norm(self):
         import matplotlib as mpl
 
@@ -271,7 +314,7 @@ class LinePlotter:
             if self._zmax is None:
                 self._zmax = self._ds[self.z_coo].values.max()
 
-        except (TypeError, NotImplementedError, AttributeError):
+        except (TypeError, NotImplementedError, AttributeError, KeyError):
             # no relative coloring possible e.g. for strings
             self._zmin, self._zmax = 0.0, 1.0
 
@@ -291,12 +334,12 @@ class LinePlotter:
         self.calc_color_norm()
         try:
             rvals = [self._color_norm(z) for z in self._ds[self.z_coo].values]
-        except (TypeError, NotImplementedError, AttributeError):
+        except (TypeError, NotImplementedError, AttributeError, KeyError):
             # no relative coloring possible e.g. for strings
             rvals = np.linspace(0, 1, self._ds[self.z_coo].size)
 
         # Map relative value to mpl color, reversing if required
-        self._cols = [self.cmap(1 - rval if self.colormap_reverse else rval)
+        self._cols = [self.cmap(rval if self.colormap_reverse else 1 - rval)
                       for rval in rvals]
         # Convert colors to correct format
         self._cols = iter(convert_colors(self._cols, outformat=self.backend))

@@ -52,6 +52,10 @@ from .plot.color import (
 from .plot.plotter_matplotlib import (
     LinePlot,
     lineplot,
+    Scatter,
+    scatter,
+    Histogram,
+    histogram,
     HeatMap,
     heatmap,
     xyz_lineplot,
@@ -82,6 +86,10 @@ __all__ = ["Runner",
            "convert_colors",
            "LinePlot",
            "lineplot",
+           "Scatter",
+           "scatter",
+           "Histogram",
+           "histogram",
            "HeatMap",
            "heatmap",
            "ilineplot",
@@ -109,11 +117,23 @@ class XYZPY(object):
     def lineplot(self, *args, **kwargs):
         return lineplot(self._obj, *args, **kwargs)
 
-    def ilineplot(self, *args, **kwargs):
-        return ilineplot(self._obj, *args, **kwargs)
+    def Scatter(self, *args, **kwargs):
+        return Scatter(self._obj, *args, **kwargs)
+
+    def scatter(self, *args, **kwargs):
+        return scatter(self._obj, *args, **kwargs)
+
+    def Histogram(self, *args, **kwargs):
+        return Histogram(self._obj, *args, **kwargs)
+
+    def histogram(self, *args, **kwargs):
+        return histogram(self._obj, *args, **kwargs)
+
+    def HeatMap(self, *args, **kwargs):
+        return HeatMap(self._obj, *args, **kwargs)
 
     def heatmap(self, *args, **kwargs):
         return heatmap(self._obj, *args, **kwargs)
 
-    def HeatMap(self, *args, **kwargs):
-        return HeatMap(self._obj, *args, **kwargs)
+    def ilineplot(self, *args, **kwargs):
+        return ilineplot(self._obj, *args, **kwargs)

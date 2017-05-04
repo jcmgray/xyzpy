@@ -8,18 +8,19 @@ Functions for plotting datasets nicely.
 
 import numpy as np
 from ..manage import auto_xyz_ds
-from .core import LinePlotter
+from .core import Plotter
 from .color import xyz_colormaps
 
 
 # ----------------- Main lineplot interface for matplotlib ------------------ #
 
-class PlotterMatplotlib(LinePlotter):
+class PlotterMatplotlib(Plotter):
     """
     """
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs, backend='MATPLOTLIB')
+    def __init__(self, ds, x, y, z=None, y_err=None, **kwargs):
+        super().__init__(ds, x, y, z=z, y_err=y_err,
+                         **kwargs, backend='MATPLOTLIB')
 
     def prepare_plot(self):
         """
@@ -164,33 +165,62 @@ class PlotterMatplotlib(LinePlotter):
                 'c': col,
                 'lw': next(self._lws),
                 'marker': next(self._mrkrs),
-                'markeredgecolor': col,
                 'markersize': self._markersize,
+                'markeredgecolor': col[:3] + (self.marker_alpha * col[3],),
+                'markerfacecolor': col[:3] + (self.marker_alpha * col[3] / 2,),
                 'label': next(self._zlbls) if self._use_legend else None,
                 'zorder': next(self._zordrs),
                 'linestyle': next(self._lines)}
 
-            if len(data) > 2:
-                eb = self._axes.errorbar(data[0], data[1],
-                                         yerr=data[2], ecolor=col,
-                                         capsize=self.errorbar_capsize,
-                                         capthick=self.errorbar_capthick,
-                                         elinewidth=0.5, **line_opts)
-                ln = eb.lines
+            if 'ye' in data:
+                self._axes.errorbar(data['x'], data['y'], yerr=data['ye'],
+                                    ecolor=col,
+                                    capsize=self.errorbar_capsize,
+                                    capthick=self.errorbar_capthick,
+                                    elinewidth=0.5, **line_opts)
             else:
                 # add line to axes, with options cycled through
-                ln = self._axes.plot(data[0], data[1], **line_opts)
+                self._axes.plot(data['x'], data['y'], **line_opts)
 
-            ln[0].set_markeredgecolor(
-                col[:3] + (self.marker_alpha * col[3],))
-            ln[0].set_markerfacecolor(
-                col[:3] + (self.marker_alpha * col[3] / 2,))
+    def plot_scatter(self):
+        """
+        """
+        for data in self._gen_xy():
+            col = next(self._cols)
+
+            scatter_opts = {
+                'c': col,
+                'marker': next(self._mrkrs),
+                's': self._markersize,
+                'alpha': self.marker_alpha,
+                'label': next(self._zlbls) if self._use_legend else None,
+                'zorder': next(self._zordrs),
+            }
+
+            self._axes.scatter(data['x'], data['y'], **scatter_opts)
+
+    def plot_histogram(self):
+        for data in self._gen_xy():
+            col = next(self._cols)
+
+            histogram_opts = {
+                'bins': self.bins,
+                'edgecolor': col[:3] + (self.marker_alpha * col[3],),
+                'facecolor': col[:3] + (self.marker_alpha * col[3] / 4,),
+                'normed': True,
+                'histtype': 'step',
+                'fill': True,
+                'linewidth': next(self._lws),
+                'zorder': next(self._zordrs),
+                'label': next(self._zlbls) if self._use_legend else None,
+            }
+
+            self._axes.hist(data['x'], **histogram_opts)
 
     def plot_legend(self):
         """Add a legend
         """
         if self._use_legend:
-
             handles, labels = self._axes.get_legend_handles_labels()
             if self.legend_reverse:
                 handles, labels = handles[::-1], labels[::-1]
@@ -210,18 +240,6 @@ class PlotterMatplotlib(LinePlotter):
                 bbox_to_anchor=self.legend_bbox,
                 ncol=self.legend_ncol)
             lgnd.get_title().set_fontsize(self.fontsize_ztitle)
-
-    def plot_heatmap(self):
-        """Plot the data as a heatmap.
-        """
-        self.calc_color_norm()
-        self._heatmap = getattr(self._axes, self.method)(
-            self._heatmap_x,
-            self._heatmap_y,
-            self._heatmap_var,
-            norm=self._color_norm,
-            cmap=xyz_colormaps(self.colormap),
-            rasterized=True)
 
     def set_mappable(self):
         """Mappale object for colorbars.
@@ -280,20 +298,22 @@ class PlotterMatplotlib(LinePlotter):
             return self._fig
 
 
+# --------------------------------------------------------------------------- #
+
 class LinePlot(PlotterMatplotlib):
     """
     """
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, ds, x, y, z=None, y_err=None, **kwargs):
+        super().__init__(ds, x, y, z=z, y_err=y_err, **kwargs)
 
     def __call__(self):
         # Core preparation
-        self.prepare_z_vals()
         self.prepare_axes_labels()
+        self.prepare_z_vals()
         self.prepare_z_labels()
         self.calc_use_legend_or_colorbar()
-        self.prepare_xy_vals()
+        self.prepare_xy_vals_lineplot()
         self.prepare_line_colors()
         self.prepare_markers()
         self.prepare_line_styles()
@@ -314,13 +334,119 @@ class LinePlot(PlotterMatplotlib):
         return self.show()
 
 
-def lineplot(ds, y_coo, x_coo, z_coo=None, return_fig=True, **kwargs):
+def lineplot(ds, x, y, z=None, y_err=None, **kwargs):
     """
     """
-    return LinePlot(ds, y_coo, x_coo, z_coo, return_fig=return_fig, **kwargs)()
+    return LinePlot(ds, x, y, z, **kwargs)()
 
+
+# --------------------------------------------------------------------------- #
+
+_SCATTER_ALT_DEFAULTS = (
+    ('type', 'SCATTER'),
+)
+
+
+class Scatter(PlotterMatplotlib):
+    """
+    """
+
+    def __init__(self, ds, x, y, z=None, **kwargs):
+        # set some heatmap specific options
+        for k, default in _SCATTER_ALT_DEFAULTS:
+            if k not in kwargs:
+                kwargs[k] = default
+        super().__init__(ds, x, y, z, **kwargs)
+
+    # def calc_use_legend_or_colorbar(self):  # overloaded
+    #     # single data set - colormap on z values
+    #     if self.z_coo is not None and self.colorbar:
+    #         self._use_colorbar = True
+    #         self._use_legend = False
+    #     # multiple data sets - colormap on which set
+    #     elif self._multi_var and self.colorbar:
+    #         self._use_colorbar = True
+    #         self._use_legend = True
+
+    def __call__(self):
+        # Core preparation
+        self.prepare_axes_labels()
+        self.prepare_z_vals()
+        self.prepare_z_labels()
+        self.calc_use_legend_or_colorbar()
+        self.prepare_xy_vals_lineplot()
+        self.prepare_line_colors()
+        self.prepare_markers()
+        self.prepare_line_styles()
+        self.prepare_zorders()
+        self.calc_plot_range()
+        # matplotlib preparation
+        self.prepare_plot()
+        self.set_axes_labels()
+        self.set_axes_scale()
+        self.set_axes_range()
+        self.set_spans()
+        self.set_gridlines()
+        self.set_tick_marks()
+        self.plot_scatter()
+        self.plot_legend()
+        self.plot_colorbar()
+        self.set_panel_label()
+        return self.show()
+
+
+def scatter(ds, x, y, z=None, y_err=None, **kwargs):
+    """
+    """
+    return Scatter(ds, x, y, z, **kwargs)()
+
+
+# --------------------------------------------------------------------------- #
+
+class Histogram(PlotterMatplotlib):
+    """
+    """
+
+    def __init__(self, ds, x, z=None, **kwargs):
+        ytitle = kwargs.pop('ytitle', 'p({})'.format(x))
+        super().__init__(ds, x, None, z=z, ytitle=ytitle, **kwargs)
+
+    def __call__(self):
+        # Core preparation
+        self.prepare_axes_labels()
+        self.prepare_z_vals()
+        self.prepare_z_labels()
+        self.calc_use_legend_or_colorbar()
+        self.prepare_x_vals_histogram()
+        self.prepare_line_colors()
+        self.prepare_line_styles()
+        self.prepare_zorders()
+        self.calc_plot_range()
+        # matplotlib preparation
+        self.prepare_plot()
+        self.set_axes_labels()
+        self.set_axes_scale()
+        self.set_axes_range()
+        self.set_spans()
+        self.set_gridlines()
+        self.set_tick_marks()
+        self.plot_histogram()
+        self.plot_legend()
+        self.plot_colorbar()
+        self.set_panel_label()
+        return self.show()
+
+
+def histogram(ds, x, z=None, **kwargs):
+    """
+    """
+    return Histogram(ds, x, z=z, **kwargs)()
+
+
+# --------------------------------------------------------------------------- #
 
 _HEATMAP_ALT_DEFAULTS = (
+    ('type', 'HEATMAP'),
     ('legend', False),
     ('colorbar', True),
     ('colormap', 'inferno'),
@@ -339,6 +465,18 @@ class HeatMap(PlotterMatplotlib):
             if k not in kwargs:
                 kwargs[k] = default
         super().__init__(ds, y, x, z, **kwargs)
+
+    def plot_heatmap(self):
+        """Plot the data as a heatmap.
+        """
+        self.calc_color_norm()
+        self._heatmap = getattr(self._axes, self.method)(
+            self._heatmap_x,
+            self._heatmap_y,
+            self._heatmap_var,
+            norm=self._color_norm,
+            cmap=xyz_colormaps(self.colormap),
+            rasterized=True)
 
     def __call__(self):
 

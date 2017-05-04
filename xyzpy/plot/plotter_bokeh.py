@@ -1,7 +1,7 @@
 import functools
 import itertools
 from ..manage import auto_xyz_ds
-from .core import LinePlotter
+from .core import Plotter
 
 
 @functools.lru_cache(1)
@@ -26,11 +26,11 @@ def bshow(figs, nb=True, interactive=False, **kwargs):
 #                     Main lineplot interface for bokeh                       #
 # --------------------------------------------------------------------------- #
 
-class PlotterBokeh(LinePlotter):
-    def __init__(self, *args, **kwargs):
+class PlotterBokeh(Plotter):
+    def __init__(self, ds, x, y, z=None, **kwargs):
         """
         """
-        super().__init__(*args, **kwargs, backend='BOKEH')
+        super().__init__(ds, x, y, z, **kwargs, backend='BOKEH')
         self._interactive = kwargs.pop('interactive', False)
 
     def prepare_plot_and_set_axes_scale(self):
@@ -138,13 +138,14 @@ class PlotterBokeh(LinePlotter):
                              for _ in range(len(self._z_vals))]
 
         for i, (zlabel, data) in enumerate(zip(szlbs, self._gen_xy())):
-            self._sources[i].data['x'] = data[0]
-            self._sources[i].data['y'] = data[1]
-            self._sources[i].data['z_coo'] = [zlabel] * len(data[0])
+            self._sources[i].data['x'] = data['x']
+            self._sources[i].data['y'] = data['y']
+            self._sources[i].data['z_coo'] = [zlabel] * len(data['x'])
             if self.y_err:
-                y_err_p = data[1] + data[2]
-                y_err_m = data[1] - data[2]
-                self._sources[i].data['y_err_xs'] = list(zip(data[0], data[0]))
+                y_err_p = data['y'] + data['ye']
+                y_err_m = data['y'] - data['ye']
+                self._sources[i].data['y_err_xs'] = list(zip(data['x'],
+                                                             data['x']))
                 self._sources[i].data['y_err_ys'] = list(zip(y_err_p, y_err_m))
 
     def plot_lines(self):
@@ -189,8 +190,11 @@ class PlotterBokeh(LinePlotter):
         """
         if self._use_legend:
             from bokeh.models import Legend
-            self._plot.add_layout(
-                Legend(items=self._lgnd_items, location=(0, 0)), 'right')
+            lg = Legend(items=self._lgnd_items)
+            lg.location = 'top_right'
+            lg.click_policy = 'hide'
+            self._plot.add_layout(lg, 'right')
+
             # Don't repeatedly redraw legend
             self._use_legend = False
 
@@ -218,18 +222,17 @@ class PlotterBokeh(LinePlotter):
         return self
 
 
-def ilineplot(ds, y_coo, x_coo, z_coo=None, return_fig=False,
+def ilineplot(ds, x, y, z=None, return_fig=False,
               interactive=False, **kwargs):
     """
     """
-    p = PlotterBokeh(ds, y_coo, x_coo, z_coo,
-                     return_fig=return_fig, **kwargs)
+    p = PlotterBokeh(ds, x, y, z, return_fig=return_fig, **kwargs)
     # Core preparation
     p.prepare_z_vals()
     p.prepare_axes_labels()
     p.prepare_z_labels()
     p.calc_use_legend_or_colorbar()
-    p.prepare_xy_vals()
+    p.prepare_xy_vals_lineplot()
     p.prepare_line_colors()
     p.prepare_markers()
     p.prepare_line_styles()
@@ -257,4 +260,4 @@ def xyz_ilineplot(x, y_z, **ilineplot_opts):
     """ Take some x-coordinates and an array, convert them to a Dataset
     treating as multiple lines, then send to ilineplot. """
     ds = auto_xyz_ds(x, y_z)
-    return ilineplot(ds, 'y', 'x', 'z', **ilineplot_opts)
+    return ilineplot(ds, 'x', 'y', 'z', **ilineplot_opts)
