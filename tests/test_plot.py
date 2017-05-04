@@ -67,7 +67,7 @@ class TestCommonInterface:
                       dataset_3d,
                       colors,
                       markers):
-        plot_fn(dataset_3d, "y", "x", "z", return_fig=True,
+        plot_fn(dataset_3d, "x", "y", "z", return_fig=True,
                 colors=colors,
                 markers=markers)
 
@@ -85,7 +85,7 @@ class TestCommonInterface:
         if string_z_coo:
             dataset_3d = dataset_3d.copy(deep=True)
             dataset_3d['z'] = ['a', 'b', 'c', 'd']
-        plot_fn(dataset_3d, "y", "x", "z", return_fig=True,
+        plot_fn(dataset_3d, "x", "y", "z", return_fig=True,
                 colors=True,
                 colormap=colormap,
                 colormap_log=colormap_log,
@@ -96,7 +96,7 @@ class TestCommonInterface:
                       plot_fn,
                       dataset_3d,
                       markers):
-        plot_fn(dataset_3d.loc[{"z": 40}], "y", "x", return_fig=True,
+        plot_fn(dataset_3d.loc[{"z": 40}], "x", "y", return_fig=True,
                 markers=markers)
 
     @mark.parametrize("padding", [None, 0.1])
@@ -108,7 +108,7 @@ class TestCommonInterface:
                         padding,
                         xlims,
                         ylims):
-        plot_fn(dataset_3d, "y", "x", "z", return_fig=True,
+        plot_fn(dataset_3d, "x", "y", "z", return_fig=True,
                 padding=padding,
                 xlims=xlims,
                 ylims=ylims)
@@ -128,7 +128,7 @@ class TestCommonInterface:
                              yticks,
                              vlines,
                              hlines):
-        plot_fn(dataset_3d, "y", "x", "z", return_fig=True,
+        plot_fn(dataset_3d, "x", "y", "z", return_fig=True,
                 xticks=xticks,
                 yticks=yticks,
                 vlines=vlines,

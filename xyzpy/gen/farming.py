@@ -221,7 +221,8 @@ class Harvester(object):
     """Container class for collecting and aggregating data to disk.
     """
 
-    def __init__(self, runner, data_name, engine='h5netcdf', full_ds=None):
+    def __init__(self, runner, data_name=None,
+                 engine='h5netcdf', full_ds=None):
         """
         Parameters
         ----------
@@ -242,7 +243,7 @@ class Harvester(object):
         """Get the dataset containing all saved runs.
         """
         if self._full_ds is None:
-            self.load_from_disk()
+            self.try_to_load_from_disk()
         return self._full_ds
 
     @property
@@ -256,7 +257,7 @@ class Harvester(object):
         """
         save_ds(self._full_ds, self.data_name, engine=self.engine)
 
-    def load_from_disk(self):
+    def try_to_load_from_disk(self):
         """Load the disk dataset into `full_ds`.
         """
         # Check file exists and can be written to
@@ -294,7 +295,7 @@ class Harvester(object):
     def merge_into_disk_ds(self, new_ds, overwrite=False):
         """Merge a new dataset into the full, on-disk dataset.
         """
-        self.load_from_disk()
+        self.try_to_load_from_disk()
         self.merge_into_full_ds(new_ds, overwrite=overwrite)
         self.save_to_disk()
 
@@ -303,7 +304,7 @@ class Harvester(object):
         """Run combos, automatically merging into an on-disk dataset.
         """
         self.runner.run_combos(combos, **runner_settings)
-        if save:
+        if save and self.data_name is not None:
             self.merge_into_disk_ds(self.last_ds, overwrite=overwrite)
         else:
             self.merge_into_full_ds(self.last_ds, overwrite=overwrite)
@@ -313,7 +314,7 @@ class Harvester(object):
         """Run cases, automatically merging into an on-disk dataset.
         """
         self.runner.run_cases(cases, **runner_settings)
-        if save:
+        if save and self.data_name is not None:
             self.merge_into_disk_ds(self.last_ds, overwrite=overwrite)
         else:
             self.merge_into_full_ds(self.last_ds, overwrite=overwrite)

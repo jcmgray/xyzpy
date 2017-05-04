@@ -63,8 +63,8 @@ class TestCaseRunner:
                  (2, 20, 200),
                  (3, 30, 300))
         a, b = case_runner(foo3_float_bool, ('a', 'b', 'c'), cases, split=True)
-        assert a == [111, 222, 333]
-        assert b == [False, True, False]
+        assert a == (111, 222, 333)
+        assert b == (False, True, False)
 
     def test_single_args(self):
         cases = (1, 2, 3)

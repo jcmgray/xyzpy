@@ -123,7 +123,7 @@ class TestHarvester:
             fl_pth = os.path.join(tmpdir, 'test.h5')
             h = Harvester(fn3_fba_runner, fl_pth, full_ds=fn3_fba_ds)
             h.save_to_disk()
-            h.load_from_disk()
+            h.try_to_load_from_disk()
             assert h.full_ds.equals(fn3_fba_ds)
 
     def test_harvest_combos_new(self, fn3_fba_runner, fn3_fba_ds):

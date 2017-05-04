@@ -9,7 +9,7 @@ import xarray as xr
 from dask.delayed import delayed, compute
 
 from .dask_stuff import DaskTqdmProgbar, dask_scheduler_get
-from ..utils import _get_fn_name, progbar
+from ..utils import _get_fn_name, progbar, unzip
 from .prepare import (
     _parse_fn_args,
     _parse_cases,
@@ -48,9 +48,8 @@ def _case_runner(fn, fn_args, cases, constants,
                    for case in progbar(cases, total=len(cases),
                                        disable=hide_progbar)]
 
-    if split:
-        return tuple(list(rs) for rs in zip(*results))
-    return results
+    ndim = 1
+    return list(unzip(results, ndim)) if split else results
 
 
 def case_runner(fn, fn_args, cases,
