@@ -19,6 +19,7 @@ dependencies:
   - pytest-cov
   - tqdm
   - matplotlib
+  - bokeh
   - cytoolz
   - coverage
   - pip:
