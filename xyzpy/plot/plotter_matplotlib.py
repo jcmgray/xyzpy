@@ -510,7 +510,7 @@ def xyz_lineplot(x, y_z, **lineplot_opts):
     treating as multiple lines, then send to lineplot. """
     ds = auto_xyz_ds(x, y_z)
     # Plot dataset
-    return lineplot(ds, 'y', 'x', 'z', **lineplot_opts)
+    return lineplot(ds, 'x', 'y', 'z', **lineplot_opts)
 
 
 # --------------- Miscellenous matplotlib plotting functions ---------------- #

@@ -120,3 +120,98 @@ class TestFornberg:
     def test_nan(self, nan_ds):
         nan_ds.fdiff('a')
         nan_ds.fdiff('b')
+
+
+@pytest.fixture
+def ds_idx():
+    x0 = np.array([-2, -1, 0, 1, 2])
+    y0 = np.array([1, -2, 3])
+    xs = np.linspace(-3, 3, 61)
+
+    x0b = x0.reshape(-1, 1, 1)
+    y0b = y0.reshape(1, -1, 1)
+    xsb = xs.reshape(1, 1, -1)
+
+    z = y0b - (xsb - x0b)**2
+
+    return xr.Dataset(
+        coords={
+            'x0': x0,
+            'y0': y0,
+            'x': xs,
+        },
+        data_vars={
+            'z': (['x0', 'y0', 'x'], z)
+        }
+    )
+
+
+@pytest.fixture
+def eds_idx():
+    x0 = np.array([-2, -1, 0, 1, 2])
+    y0 = np.array([1, -2, 3])
+
+    x0v, _ = np.meshgrid(x0, y0)
+    x0v = x0v.astype(float)
+    return xr.Dataset(
+        coords={
+            'x0': x0,
+            'y0': y0,
+        },
+        data_vars={
+            'z': (['x0', 'y0'], x0v.T)
+        }
+    )
+
+
+class TestIdxMinMax:
+    @pytest.mark.parametrize('type_coord', [
+        (int, [1, 2, 3]),
+        (float, [1., 2., 3.]),
+        (complex, [1j, 2j, 3j]),
+        (np.datetime64, [np.datetime64('1991-04-11'),
+                         np.datetime64('1991-04-12'),
+                         np.datetime64('1991-04-13')]),
+        (np.timedelta64, [np.timedelta64(24, 'M'),
+                          np.timedelta64(25, 'M'),
+                          np.timedelta64(26, 'M')]),
+        (object, ['foo', 'bar', 'baz']),
+    ])
+    @pytest.mark.parametrize('somena', [False, True])
+    @pytest.mark.parametrize('allna', [False, True])
+    @pytest.mark.parametrize('dask', [False, True])
+    def test_all(self, dask, allna, somena, type_coord):
+        # Make data, with max at c0, +ve. and -ve.
+        c0 = np.array([-1, 0, 1])
+        ymax = np.array([-2, 2])
+        xs = np.array([-1, 0.5, 0, 1])
+        c0v, ymaxv, xsv = np.meshgrid(c0, ymax, xs, indexing='ij')
+        z = ymaxv - (xsv - c0v)**2
+
+        ds = xr.Dataset(coords={'c0': c0, 'ymax': ymax, 'x': xs},
+                        data_vars={'z': (['c0', 'ymax', 'x'], z)})
+
+        # expected max/min locations
+        ix, _ = np.meshgrid(c0, ymax, indexing='ij')
+        ieds = xr.Dataset(coords={'c0': c0, 'ymax': ymax},
+                          data_vars={'z': (['c0', 'ymax'],
+                                           ix.astype(float))})
+
+        # type, coord = type_coord
+
+        if somena:
+            ds['z'].loc[{'x': 0.5}] = np.nan
+            assert ds.isnull().any()
+
+        if allna:
+            ds['z'].loc[{'ymax': -2}] = np.nan
+            ieds['z'].loc[{'ymax': -2}] = np.nan
+
+        if dask:
+            ds = ds.chunk({'x': 2})
+
+        ids = ds.idxmax(dim='x')
+        assert ids.equals(ieds)
+
+        ids = (-ds).idxmin(dim='x')
+        assert ids.equals(ieds)

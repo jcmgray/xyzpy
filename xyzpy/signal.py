@@ -552,11 +552,11 @@ def gufunc_idxmax(x, y, axis=None):
 
 
 def xr_idxmax(obj, dim):
-    sig = ([(dim,), (dim,)], [()])
+    input_core_dims = [(dim,), (dim,)]
     kwargs = {'axis': -1}
     allna = obj.isnull().all(dim)
     return apply_ufunc(gufunc_idxmax, obj.fillna(-np.inf), obj[dim],
-                       signature=sig, kwargs=kwargs,
+                       input_core_dims=input_core_dims, kwargs=kwargs,
                        dask_array='allowed').where(~allna)
 
 
@@ -576,11 +576,11 @@ def gufunc_idxmin(x, y, axis=None):
 
 
 def xr_idxmin(obj, dim):
-    sig = ([(dim,), (dim,)], [()])
+    input_core_dims = [(dim,), (dim,)]
     kwargs = {'axis': -1}
     allna = obj.isnull().all(dim)
     return apply_ufunc(gufunc_idxmin, obj.fillna(np.inf), obj[dim],
-                       signature=sig, kwargs=kwargs,
+                       input_core_dims=input_core_dims, kwargs=kwargs,
                        dask_array='allowed').where(~allna)
 
 
@@ -663,7 +663,7 @@ def gufunc_unispline(x, y, err=None, num_knots=11, ix=None, axis=-1):
 
 
 def xr_unispline(obj, dim, err=None, num_knots=11, ix=None):
-    """Fit a univariate spline along a dimension.
+    """Fit a univariate spline along a dimension using linearly spaced knots.
 
     Parameters
     ----------
@@ -688,26 +688,34 @@ def xr_unispline(obj, dim, err=None, num_knots=11, ix=None):
     if ix is None:
         kwargs = {'num_knots': num_knots, 'axis': -1}
         if err is None:
-            sig = ([(dim,), (dim,)], [(dim,)])
+            input_core_dims = [(dim,), (dim,)]
+            output_core_dims = [(dim,)]
             args = (obj[dim], obj)
         else:
-            sig = ([(dim,), (dim,), (dim,)], [(dim,)])
+            input_core_dims = [(dim,), (dim,), (dim,)]
+            output_core_dims = [(dim,)]
             args = (obj[dim], obj, err)
         return apply_ufunc(gufunc_unispline, *args,
-                           signature=sig, kwargs=kwargs)
+                           input_core_dims=input_core_dims,
+                           output_core_dims=output_core_dims,
+                           kwargs=kwargs)
     else:
         if isinstance(ix, int):
             ix = np.linspace(float(obj[dim].min()), float(obj[dim].max()), ix)
         kwargs = {'num_knots': num_knots, 'axis': -1, 'ix': ix}
 
         if err is None:
-            sig = ([(dim,), (dim,)], [('__temp_dim__',)])
+            input_core_dims = [(dim,), (dim,)]
+            output_core_dims = [('__temp_dim__',)]
             args = (obj[dim], obj)
         else:
-            sig = ([(dim,), (dim,), (dim,)], [('__temp_dim__',)])
+            input_core_dims = [(dim,), (dim,), (dim,)]
+            output_core_dims = [('__temp_dim__',)]
             args = (obj[dim], obj, err)
         result = apply_ufunc(gufunc_unispline, *args,
-                             signature=sig, kwargs=kwargs)
+                             input_core_dims=input_core_dims,
+                             output_core_dims=output_core_dims,
+                             kwargs=kwargs)
         result['__temp_dim__'] = ix
         return result.rename({'__temp_dim__': dim})
 
