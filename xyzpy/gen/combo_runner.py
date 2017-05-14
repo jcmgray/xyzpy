@@ -78,8 +78,10 @@ def nested_submit(fn, combos, kwds,
         else:
             return [fn(**kwds, **{arg: x}) for x in inputs]
     else:
-        return [nested_submit(fn, combos[1:], {**kwds, arg: x}, delay=delay,
-                              pool=pool) for x in inputs]
+        return [nested_submit(fn, combos[1:], {**kwds, arg: x},
+                              delay=delay,
+                              pool=pool,
+                              submitter=submitter) for x in inputs]
 
 
 def default_getter(pbar=None):
@@ -235,6 +237,23 @@ def combo_runner(fn, combos,
                          hide_progbar=hide_progbar)
 
 
+def multi_concat(results, dims):
+    """Concatenate a nested list of xarray objects along several dimensions.
+    """
+    if len(dims) == 1:
+        return xr.concat(results, dim=dims[0])
+    else:
+        return xr.concat([multi_concat(sub_results, dims[1:])
+                          for sub_results in results], dim=dims[0])
+
+
+def get_ndim_first(x, ndim):
+    """Return the first element from the ndim-nested list x.
+    """
+    return (x if ndim == 0 else
+            get_ndim_first(x[0], ndim - 1))
+
+
 def _combos_to_ds(results, combos, var_names, var_dims, var_coords,
                   constants=None, attrs=None):
     """Convert the output of combo_runner into a `xarray.Dataset`
@@ -262,12 +281,30 @@ def _combos_to_ds(results, combos, var_names, var_dims, var_coords,
     fn_args = tuple(x for x, _ in combos)
     results = _parse_combo_results(results, var_names)
 
-    # Set dataset coordinates
-    ds = xr.Dataset(
-        coords={**dict(combos), **dict(var_coords)},
-        data_vars={name: (fn_args + var_dims[name], np.asarray(data))
-                   for data, name in zip(results, var_names)},
-        attrs=attrs)
+    # Check if the results are an array of xarray objects
+    xobj_results = isinstance(get_ndim_first(results, len(fn_args) + 1),
+                              (xr.Dataset, xr.DataArray))
+
+    if xobj_results:
+        # concat them all together, no var_names needed
+        ds = multi_concat(results[0], fn_args)
+        # Set dataset coordinates
+        for fn_arg, vals in combos:
+            ds[fn_arg] = vals
+    else:
+        # create a new dataset using the given arrays and var_names
+        ds = xr.Dataset(
+            coords={
+                **dict(combos),
+                **dict(var_coords)
+            },
+            data_vars={
+                name: (fn_args + var_dims[name], np.asarray(data))
+                for data, name in zip(results, var_names)
+            })
+
+    if attrs:
+        ds.attrs = attrs
 
     # Add constants to attrs, but filter out those which should be coords
     if constants:
@@ -279,7 +316,8 @@ def _combos_to_ds(results, combos, var_names, var_dims, var_coords,
     return ds
 
 
-def combo_runner_to_ds(fn, combos, var_names,
+def combo_runner_to_ds(fn, combos,
+                       var_names=None,
                        var_dims=None,
                        var_coords=None,
                        constants=None,
@@ -291,24 +329,25 @@ def combo_runner_to_ds(fn, combos, var_names,
 
     Parameters
     ----------
-        fn: callable
+        fn : callable
             Function to evaluate.
-        combos: mapping
+        combos : mapping
             Mapping of each individual function argument to iterable of values.
-        var_names: str or iterable of strings
-            Variable name(s) of the output(s) of `fn`.
-        var_dims: iterable of strings or iterable of iterable of strings
+        var_names : str, iterable of strings or None
+            Variable name(s) of the output(s) of `fn`, set to None if
+            fn outputs data already labelled in a Dataset or DataArray.
+        var_dims : iterable of strings or iterable of iterable of strings
             'Internal' names of dimensions for each variable, the values for
             each dimension should be contiained as a mapping in either
             `var_coords` (not needed by `fn`) or `constants` (needed by `fn`).
-        var_coords: mapping
+        var_coords : mapping
             Mapping of extra coords the output variables may depend on.
-        constants: mapping
+        constants : mapping
             Arguments to `fn` which are not iterated over, these will be
             recorded either as attributes or coordinates if they are used.
-        resources: mapping
+        resources : mapping
             Like `constants` but they will not be recorded.
-        attrs: mapping
+        attrs : mapping
             Any extra attributes to store.
         **combo_runner_settings: dict-like
             Arguments supplied to `combo_runner`.

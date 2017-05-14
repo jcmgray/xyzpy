@@ -302,6 +302,7 @@ class Plotter:
         self._zmax = self._heatmap_var.max()
 
     def calc_color_norm(self):
+        # XXX: fix non-reversed colorbar
         import matplotlib as mpl
 
         self.cmap = xyz_colormaps(self.colormap)

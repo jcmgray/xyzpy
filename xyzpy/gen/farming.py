@@ -10,6 +10,8 @@
 import os
 import shutil
 
+import xarray as xr
+
 from .prepare import (
     _parse_fn_args,
     _parse_var_names,
@@ -47,8 +49,10 @@ class Runner(object):
         ----------
             fn : callable
                 Function to run.
-            var_names : str, or sequence of str
-                The ordered name(s) of the ouput variable(s) of `fn`.
+            var_names : str, sequence of str, or None
+                The ordered name(s) of the ouput variable(s) of `fn`. Set this
+                explicitly to None if `fn` outputs already labelled data as a
+                Dataset or DataArray.
             fn_args : str, or sequence of str (optional)
                 The ordered name(s) of the input arguments(s) of `fn`. This is
                 only needed if the cases or combos supplied are not dict-like.
@@ -280,26 +284,34 @@ class Harvester(object):
             shutil.copy(self.data_name, self.data_name + '.BAK-{}'.format(ts))
         os.remove(self.data_name)
 
-    def merge_into_full_ds(self, new_ds, overwrite=False):
+    def merge_into_full_ds(self, new_ds, overwrite=None):
         """Merge a new dataset into the in-memory full dataset.
         """
+        if isinstance(new_ds, xr.DataArray):
+            new_ds = new_ds.to_dataset()
+
         if self._full_ds is None:
             self._full_ds = new_ds.copy(deep=True)
         else:
-            if overwrite:
+            # Overwrite with new data
+            if overwrite is True:
                 self._full_ds = new_ds.combine_first(self._full_ds)
+            # Overwrite nothing
+            elif overwrite is False:
+                self._full_ds = self._full_ds.combine_first(new_ds)
+            # Merge, raising error if the two datasets conflict
             else:
-                self._full_ds.merge(new_ds, compat='no_conflicts',
-                                    inplace=True)
+                self._full_ds.merge(
+                    new_ds, compat='no_conflicts', inplace=True)
 
-    def merge_into_disk_ds(self, new_ds, overwrite=False):
+    def merge_into_disk_ds(self, new_ds, overwrite=None):
         """Merge a new dataset into the full, on-disk dataset.
         """
         self.try_to_load_from_disk()
         self.merge_into_full_ds(new_ds, overwrite=overwrite)
         self.save_to_disk()
 
-    def harvest_combos(self, combos, save=True, overwrite=False,
+    def harvest_combos(self, combos, save=True, overwrite=None,
                        **runner_settings):
         """Run combos, automatically merging into an on-disk dataset.
         """
@@ -309,7 +321,7 @@ class Harvester(object):
         else:
             self.merge_into_full_ds(self.last_ds, overwrite=overwrite)
 
-    def harvest_cases(self, cases, save=True, overwrite=False,
+    def harvest_cases(self, cases, save=True, overwrite=None,
                       **runner_settings):
         """Run cases, automatically merging into an on-disk dataset.
         """

@@ -5,6 +5,8 @@ from cytoolz import isiterable
 
 
 def _str_2_tuple(x):
+    """Ensure `x` is at least a 1-tuple of str.
+    """
     return (x,) if isinstance(x, str) else tuple(x)
 
 
@@ -37,7 +39,8 @@ def _parse_combos(combos):
 def _parse_combo_results(results, var_names):
     """
     """
-    if isinstance(var_names, str) or len(var_names) == 1:
+    if var_names is not None and (isinstance(var_names, str) or
+                                  len(var_names) == 1):
         results = (results,)
     return results
 
@@ -63,7 +66,12 @@ def _parse_case_results(results, var_names):
 
 # common variable description ----------------------------------------------- #
 
-_parse_var_names = _str_2_tuple
+def _parse_var_names(var_names):
+    """
+    """
+    return ((None,) if var_names is None else
+            (var_names,) if isinstance(var_names, str) else
+            tuple(var_names))
 
 
 def _parse_var_dims(var_dims, var_names):
@@ -71,11 +79,6 @@ def _parse_var_dims(var_dims, var_names):
 
     Parameters
     ----------
-        var_names : tuple of str, or str
-            * tuple of str
-                List of names of var_names.
-            * str
-                Single named output.
         var_dims : dict, tuple, or str
             * dict
                 Mapping of each output to its dimensions, each either str
@@ -86,7 +89,21 @@ def _parse_var_dims(var_dims, var_names):
                 var_names. Must be same length as `var_names`
             * str
                 Only allowed for single output with single dimension.
+        var_names : tuple of str, str, or None
+            * tuple of str
+                List of names of var_names.
+            * str
+                Single named output.
+            * None
+                Automatic result output using Dataset/DataArray, in this case
+                check that var_dims is None as well.
     """
+    if var_names is None:
+        if var_dims is not None:
+            raise ValueError("Cannot specify variable dimensions if using"
+                             "automatic dataset output (var_names=None).")
+        return dict()
+
     new_var_dims = {k: () for k in var_names}  # default to empty tuple
 
     if not var_dims:

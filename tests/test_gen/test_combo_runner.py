@@ -3,6 +3,7 @@ from functools import partial
 import pytest
 import numpy as np
 from numpy.testing import assert_allclose
+import xarray as xr
 
 from xyzpy.gen.combo_runner import (
     combo_runner,
@@ -247,3 +248,29 @@ class TestComboRunnerToDS:
                                 var_dims=[['t']])
         assert 't' in ds.dims
         assert 't' not in ds.attrs
+
+    def test_when_results_are_xobjs(self):
+
+        def fn_ds(a, b):
+            ds = xr.Dataset(
+                coords={
+                    'x': [1, 2],
+                    'y': ['foo', 'bar', 'baz'],
+                },
+                data_vars={
+                    'apples': (['x', 'y'], np.tile(10 * a + b, (2, 3))),
+                    'lemons': ('y', np.tile(10 * a + b, (3,))),
+                }
+            )
+            return ds
+
+        fds = combo_runner_to_ds(
+            fn_ds,
+            combos={
+                'a': [2, 3, 4, 5],
+                'b': [6, 7, 8, 9, 10],
+            })
+
+        assert fds.sel(a=4, b=9, x=2, y='bar')['apples'].values == 49
+        assert fds.sel(a=5, b=7, y='bar')['lemons'].values == 57
+        assert 'output' not in fds
