@@ -55,12 +55,14 @@ def nested_submit(fn, combos, kwds,
     ----------
         fn : callable
             Function to submit jobs to.
-        combos : tuple mapping individual fn arguments to iterable of values
+        combos : tuple mapping individual fn arguments to sequence of values
             Mapping of each argument and all its possible values.
         kwds : dict
             Constant keyword arguments not to iterate over.
         delay : bool
-            Whether to wrap the function as `delayed` (for parallel eval).
+            Whether to wrap the function as a dask `delayed` function, and
+            therefore evaluate the whole computation at once, with possible
+            inter-dependencies.
         pool : Executor pool
             Pool-executor-like class implementing a submit method.
 
@@ -79,13 +81,13 @@ def nested_submit(fn, combos, kwds,
             return [fn(**kwds, **{arg: x}) for x in inputs]
     else:
         return [nested_submit(fn, combos[1:], {**kwds, arg: x},
-                              delay=delay,
-                              pool=pool,
+                              delay=delay, pool=pool,
                               submitter=submitter) for x in inputs]
 
 
 def default_getter(pbar=None):
-    """
+    """Generate the default function to get a result from a future, updating
+    the progress bar `pbar` in the process.
     """
     if pbar:
         def getter(future):
@@ -110,17 +112,6 @@ def nested_get(futures, ndim, getter):
     """
     return ([getter(fut) for fut in futures] if ndim == 1 else
             [nested_get(fut, ndim - 1, getter) for fut in futures])
-
-
-def mpi_combo_runner_pool(fn, combos, constants, hide_progbar, n,
-                          num_workers=None):
-    from mpi4py.futures import MPIPoolExecutor
-    with progbar(total=n, disable=hide_progbar) as pbar:
-        getter = default_getter(pbar)
-        with MPIPoolExecutor(num_workers) as pool:
-            futures = nested_submit(fn, combos, constants, pool=pool)
-            results = nested_get(futures, len(combos), getter)
-    return results
 
 
 def _combo_runner(fn, combos, constants,
@@ -151,19 +142,14 @@ def _combo_runner(fn, combos, constants,
                 getter = default_getter(pbar)
                 results = nested_get(futures, ndim, getter)
 
-    # Spawn an mpi pool to run combos
-    elif parallel == 'mpi':
-        results = mpi_combo_runner_pool(
-            fn, combos, constants, hide_progbar, n=n, num_workers=num_workers)
-
     # Evaluate combos using dask
     elif parallel == 'dask' or scheduler:
         fn_name = _get_fn_name(fn)
         with DaskTqdmProgbar(fn_name, disable=hide_progbar):
             jobs = nested_submit(fn, combos, constants, delay=True)
             if scheduler and isinstance(scheduler, str):
-                scheduler = dask_scheduler_get(scheduler,
-                                               num_workers=num_workers)
+                scheduler = dask_scheduler_get(
+                    scheduler, num_workers=num_workers)
             results = compute(*jobs, get=scheduler, num_workers=num_workers)
 
     # By default use a process pool exceutor
@@ -200,7 +186,7 @@ def combo_runner(fn, combos,
     ----------
         fn : callable
             Function to analyse.
-        combos : mapping of individual fn arguments to iterable of values
+        combos : mapping of individual fn arguments to sequence of values
             All combinations of each argument will be calculated. Each
             argument range thus gets a dimension in the output array(s).
         constants : dict
@@ -316,8 +302,7 @@ def _combos_to_ds(results, combos, var_names, var_dims, var_coords,
     return ds
 
 
-def combo_runner_to_ds(fn, combos,
-                       var_names=None,
+def combo_runner_to_ds(fn, combos, var_names,
                        var_dims=None,
                        var_coords=None,
                        constants=None,
@@ -332,24 +317,25 @@ def combo_runner_to_ds(fn, combos,
         fn : callable
             Function to evaluate.
         combos : mapping
-            Mapping of each individual function argument to iterable of values.
-        var_names : str, iterable of strings or None
+            Mapping of each individual function argument to sequence of values.
+        var_names : str, sequence of strings, or None
             Variable name(s) of the output(s) of `fn`, set to None if
             fn outputs data already labelled in a Dataset or DataArray.
-        var_dims : iterable of strings or iterable of iterable of strings
+        var_dims : sequence of either strings or string sequences (optional)
             'Internal' names of dimensions for each variable, the values for
-            each dimension should be contiained as a mapping in either
+            each dimension should be contained as a mapping in either
             `var_coords` (not needed by `fn`) or `constants` (needed by `fn`).
-        var_coords : mapping
+        var_coords : mapping (optional)
             Mapping of extra coords the output variables may depend on.
-        constants : mapping
+        constants : mapping (optional)
             Arguments to `fn` which are not iterated over, these will be
-            recorded either as attributes or coordinates if they are used.
-        resources : mapping
+            recorded either as attributes or coordinates if they are named
+            in `var_dims`.
+        resources : mapping (optional)
             Like `constants` but they will not be recorded.
-        attrs : mapping
+        attrs : mapping (optional)
             Any extra attributes to store.
-        **combo_runner_settings: dict-like
+        **combo_runner_settings: dict-like (optional)
             Arguments supplied to `combo_runner`.
 
     Returns

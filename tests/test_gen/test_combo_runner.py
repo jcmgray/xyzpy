@@ -269,7 +269,7 @@ class TestComboRunnerToDS:
             combos={
                 'a': [2, 3, 4, 5],
                 'b': [6, 7, 8, 9, 10],
-            })
+            }, var_names=None)
 
         assert fds.sel(a=4, b=9, x=2, y='bar')['apples'].values == 49
         assert fds.sel(a=5, b=7, y='bar')['lemons'].values == 57
