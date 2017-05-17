@@ -42,7 +42,7 @@ def convert_colors(cols, outformat, informat='MATPLOTLIB'):
     return _COLOR_CONVERT_METHODS[(informat, outformat)](cols)
 
 
-def xyz_colormaps(name=None):
+def xyz_colormaps(name=None, reverse=False):
     """Custom-defined colormaps
     """
     try:
@@ -61,6 +61,14 @@ def xyz_colormaps(name=None):
             name = 'rainbow'
         else:
             name = 'xyz'
+
+    # TODO: make this more general - not reliant on '_r' versions of cmaps
+    if reverse:
+        if name[-2:] != '_r':
+            name = name + '_r'
+        # 'un'-reverse
+        else:
+            name = name[:-2]
 
     # Custom xyzpy colormaps
     if name in _XYZ_CMAPS:

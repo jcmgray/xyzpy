@@ -302,10 +302,9 @@ class Plotter:
         self._zmax = self._heatmap_var.max()
 
     def calc_color_norm(self):
-        # XXX: fix non-reversed colorbar
         import matplotlib as mpl
 
-        self.cmap = xyz_colormaps(self.colormap)
+        self.cmap = xyz_colormaps(self.colormap, reverse=self.colormap_reverse)
 
         try:
             self._zmin = self.zlims[0]
@@ -340,8 +339,7 @@ class Plotter:
             rvals = np.linspace(0, 1, self._ds[self.z_coo].size)
 
         # Map relative value to mpl color, reversing if required
-        self._cols = [self.cmap(rval if self.colormap_reverse else 1 - rval)
-                      for rval in rvals]
+        self._cols = [self.cmap(rval) for rval in rvals]
         # Convert colors to correct format
         self._cols = iter(convert_colors(self._cols, outformat=self.backend))
 
