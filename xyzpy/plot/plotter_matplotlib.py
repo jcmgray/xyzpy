@@ -408,8 +408,10 @@ class Histogram(PlotterMatplotlib):
     """
 
     def __init__(self, ds, x, z=None, **kwargs):
-        ytitle = kwargs.pop('ytitle', 'p({})'.format(x))
-        super().__init__(ds, x, None, z=z, ytitle=ytitle, **kwargs)
+        xtitle = kwargs.pop('xtitle', 'x')
+        ytitle = kwargs.pop('ytitle', 'f(x)')
+        super().__init__(ds, x, None, z=z, xtitle=xtitle, ytitle=ytitle,
+                         **kwargs)
 
     def __call__(self):
         # Core preparation
