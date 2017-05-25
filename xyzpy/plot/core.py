@@ -13,7 +13,6 @@ from .marker import _MARKERS, _SINGLE_LINE_MARKER
 
 _PLOTTER_DEFAULTS = {
     # Figure options
-    'type': 'LINEPLOT',
     'backend': 'MATPLOTLIB',
     'figsize': (7, 6),
     'axes_loc': None,
@@ -199,8 +198,7 @@ class Plotter:
             self._zlbls = iter(self.zlabels)
 
         # Use z-data (for lineplot only) or multiple y names
-        elif ((self.z_coo is not None and self.type == 'LINEPLOT') or
-              self._multi_var):
+        elif (self.z_coo is not None) or self._multi_var:
             self._zlbls = iter(str(z) for z in self._z_vals)
 
         # No z-labels

@@ -185,6 +185,10 @@ class PlotterMatplotlib(Plotter):
     def plot_scatter(self):
         """
         """
+
+        self.scatter_handles = []
+        self.scatter_labels = []
+
         for data in self._gen_xy():
             col = next(self._cols)
 
@@ -197,7 +201,10 @@ class PlotterMatplotlib(Plotter):
                 'zorder': next(self._zordrs),
             }
 
-            self._axes.scatter(data['x'], data['y'], **scatter_opts)
+            self.scatter_handles.append(
+                self._axes.scatter(data['x'], data['y'], **scatter_opts))
+            self.scatter_labels.append(
+                scatter_opts['label'])
 
     def plot_histogram(self):
         for data in self._gen_xy():
@@ -221,9 +228,17 @@ class PlotterMatplotlib(Plotter):
         """Add a legend
         """
         if self._use_legend:
-            handles, labels = self._axes.get_legend_handles_labels()
+
+            if hasattr(self, 'scatter_handles'):
+                handles, labels = self.scatter_handles, self.scatter_labels
+            else:
+                handles, labels = self._axes.get_legend_handles_labels()
+
             if self.legend_reverse:
                 handles, labels = handles[::-1], labels[::-1]
+
+            if (self.legend_marker_scale is None) and self._markersize < 3:
+                self.legend_marker_scale = 3 / self._markersize
 
             lgnd = self._axes.legend(
                 handles, labels,
@@ -240,6 +255,9 @@ class PlotterMatplotlib(Plotter):
                 bbox_to_anchor=self.legend_bbox,
                 ncol=self.legend_ncol)
             lgnd.get_title().set_fontsize(self.fontsize_ztitle)
+
+            for l in lgnd.legendHandles:
+                l.set_alpha(1.0)
 
     def set_mappable(self):
         """Mappale object for colorbars.
@@ -343,7 +361,6 @@ def lineplot(ds, x, y, z=None, y_err=None, **kwargs):
 # --------------------------------------------------------------------------- #
 
 _SCATTER_ALT_DEFAULTS = (
-    ('type', 'SCATTER'),
 )
 
 
@@ -448,7 +465,6 @@ def histogram(ds, x, z=None, **kwargs):
 # --------------------------------------------------------------------------- #
 
 _HEATMAP_ALT_DEFAULTS = (
-    ('type', 'HEATMAP'),
     ('legend', False),
     ('colorbar', True),
     ('colormap', 'inferno'),
