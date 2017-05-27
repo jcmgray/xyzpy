@@ -74,15 +74,17 @@ def nested_submit(fn, combos, kwds,
     arg, inputs = combos[0]
     if len(combos) == 1:
         if pool:
-            return [submitter(pool, fn, **kwds, **{arg: x}) for x in inputs]
+            return tuple(submitter(pool, fn, **kwds, **{arg: x})
+                         for x in inputs)
         elif delay:
-            return [delayed(fn, pure=True)(**kwds, **{arg: x}) for x in inputs]
+            return tuple(delayed(fn, pure=True)(**kwds, **{arg: x})
+                         for x in inputs)
         else:
-            return [fn(**kwds, **{arg: x}) for x in inputs]
+            return tuple(fn(**kwds, **{arg: x}) for x in inputs)
     else:
-        return [nested_submit(fn, combos[1:], {**kwds, arg: x},
-                              delay=delay, pool=pool,
-                              submitter=submitter) for x in inputs]
+        return tuple(nested_submit(fn, combos[1:], {**kwds, arg: x},
+                                   delay=delay, pool=pool,
+                                   submitter=submitter) for x in inputs)
 
 
 def default_getter(pbar=None):
@@ -168,7 +170,7 @@ def _combo_runner(fn, combos, constants,
             fn = update_upon_eval(fn, p)
             results = nested_submit(fn, combos, constants)
 
-    return list(unzip(results, ndim)) if split else results
+    return tuple(unzip(results, ndim)) if split else results
 
 
 def combo_runner(fn, combos,
@@ -189,18 +191,20 @@ def combo_runner(fn, combos,
         combos : mapping of individual fn arguments to sequence of values
             All combinations of each argument will be calculated. Each
             argument range thus gets a dimension in the output array(s).
-        constants : dict
+        constants : dict (optional)
             List of tuples/dict of *constant* fn argument mappings.
-        split : bool
+        split : bool (optional)
             Whether to split into multiple output arrays or not.
-        hide_progbar : bool
-            Whether to disable the progress bar.
-        parallel : bool
+        parallel : bool (optional)
             Process combos in parallel, default number of workers picked.
-        num_workers : int
-            Explicitly choose how many workers to use, None for automatic.
-        scheduler : str or dask.get instance
+        scheduler : str or dask.get instance (optional)
             Specify scheduler to use for the parallel work.
+        pool : executor-like pool (optional)
+            Submit all combos to this pool.
+        num_workers : int (optional)
+            Explicitly choose how many workers to use, None for automatic.
+        hide_progbar : bool (optional)
+            Whether to disable the progress bar.
 
     Returns
     -------

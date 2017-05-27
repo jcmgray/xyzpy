@@ -31,7 +31,7 @@ class TestCaseRunner:
                  (2, 20, 200),
                  (3, 30, 300))
         xs = case_runner(foo3_scalar, ('a', 'b', 'c'), cases)
-        assert xs == [111, 222, 333]
+        assert xs == (111, 222, 333)
 
     def test_progbar(self):
         cases = ((1, 10, 100),
@@ -39,7 +39,7 @@ class TestCaseRunner:
                  (3, 30, 300))
         xs = case_runner(foo3_scalar, ('a', 'b', 'c'), cases,
                          hide_progbar=False)
-        assert xs == [111, 222, 333]
+        assert xs == (111, 222, 333)
 
     def test_constants(self):
         cases = ((1,),
@@ -47,7 +47,7 @@ class TestCaseRunner:
                  (3,))
         xs = case_runner(foo3_scalar, ('a', 'b', 'c'), cases,
                          constants={'b': 10, 'c': 100})
-        assert xs == [111, 112, 113]
+        assert xs == (111, 112, 113)
 
     @pytest.mark.parametrize("scheduler", _GET_MODES)
     def test_parallel(self, scheduler):
@@ -70,7 +70,7 @@ class TestCaseRunner:
         cases = (1, 2, 3)
         xs = case_runner(foo3_scalar, 'a', cases,
                          constants={'b': 10, 'c': 100})
-        assert xs == [111, 112, 113]
+        assert xs == (111, 112, 113)
 
 
 class TestCasesToDS:
@@ -327,9 +327,9 @@ class TestFindMissingCases:
         ds['x'] = (('a', 'b'), np.array([[0.1, np.nan],
                                          [np.nan, 0.2],
                                          [np.nan, np.nan]]))
-        ds['y'] = (('a', 'b', 't'), np.array([[[0.2]*3, [np.nan]*3],
-                                              [[np.nan]*3, [0.4]*3],
-                                              [[np.nan]*3, [np.nan]*3]]))
+        ds['y'] = (('a', 'b', 't'), np.array([[[0.2] * 3, [np.nan] * 3],
+                                              [[np.nan] * 3, [0.4] * 3],
+                                              [[np.nan] * 3, [np.nan] * 3]]))
         # Target cases and settings
         t_cases = ((1, 50), (2, 40), (3, 40), (3, 50))
         t_configs = tuple(dict(zip(['a', 'b'], t_case)) for t_case in t_cases)
@@ -373,13 +373,13 @@ class TestFillMissingCases:
         ds = xr.Dataset(coords={'a': [1, 2, 3], 'b': [40, 50],
                                 't': [0.0, 0.1, 0.2, 0.3, 0.4]})
         ds['z1'] = (('a', 'b', 't'),
-                    np.array([[41 + 0.1j*np.arange(5), [np.nan]*5],
-                              [[np.nan]*5, 52 + 0.1j*np.arange(5)],
-                              [[np.nan]*5, [np.nan]*5]]))
+                    np.array([[41 + 0.1j * np.arange(5), [np.nan] * 5],
+                              [[np.nan] * 5, 52 + 0.1j * np.arange(5)],
+                              [[np.nan] * 5, [np.nan] * 5]]))
         ds['z2'] = (('a', 'b', 't'),
-                    np.array([[41 - 0.1j*np.arange(5), [np.nan]*5],
-                              [[np.nan]*5, 52 - 0.1j*np.arange(5)],
-                              [[np.nan]*5, [np.nan]*5]]))
+                    np.array([[41 - 0.1j * np.arange(5), [np.nan] * 5],
+                              [[np.nan] * 5, 52 - 0.1j * np.arange(5)],
+                              [[np.nan] * 5, [np.nan] * 5]]))
         settings = {'var_names': ['z1', 'z2'],
                     'var_dims': {('z1', 'z2'): 't'},
                     'var_coords': {'t': [0.0, 0.1, 0.2, 0.3, 0.4]}}

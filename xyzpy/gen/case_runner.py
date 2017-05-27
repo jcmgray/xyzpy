@@ -6,10 +6,10 @@ import itertools
 from cytoolz import concat
 import numpy as np
 import xarray as xr
-from dask.delayed import delayed, compute
+# from dask.delayed import delayed, compute
 
-from .dask_stuff import DaskTqdmProgbar, dask_scheduler_get
-from ..utils import _get_fn_name, progbar, unzip
+# from .dask_stuff import DaskTqdmProgbar, dask_scheduler_get
+from ..utils import _get_fn_name, progbar  # unzip
 from .prepare import (
     _parse_fn_args,
     _parse_cases,
@@ -22,68 +22,73 @@ from .prepare import (
 )
 
 
+from .combo_runner import _combo_runner
+
+
 def _case_runner(fn, fn_args, cases, constants,
                  split=False,
                  parallel=False,
-                 scheduler='m',
                  num_workers=None,
+                 scheduler=None,
+                 pool=None,
                  hide_progbar=False):
     """Core case runner, i.e. without parsing of arguments.
     """
+    # Turn the function into a single arg function to send to combo_runner
+    def single_dict_arg_fn(kws, **kwargs):
+        return fn(**kws, **kwargs)
+
     fn_name = _get_fn_name(fn)
+    single_dict_arg_fn.__name__ = fn_name
+    combos = (('kws', [dict(zip(fn_args, case)) for case in cases]),)
 
-    # Evaluate configurations in parallel
-    if parallel or num_workers:
-        with DaskTqdmProgbar(fn_name, disable=hide_progbar):
-            jobs = [delayed(fn)(**constants, **dict(zip(fn_args, case)))
-                    for case in cases]
-            if scheduler and isinstance(scheduler, str):
-                scheduler = dask_scheduler_get(scheduler,
-                                               num_workers=num_workers)
-            results = compute(*jobs, get=scheduler, num_workers=num_workers)
-
-    # Evaluate configurations sequentially
-    else:
-        results = [fn(**constants, **dict(zip(fn_args, case)))
-                   for case in progbar(cases, total=len(cases),
-                                       disable=hide_progbar)]
-
-    ndim = 1
-    return list(unzip(results, ndim)) if split else results
+    return _combo_runner(single_dict_arg_fn, combos,
+                         constants=constants,
+                         split=split,
+                         parallel=parallel,
+                         num_workers=num_workers,
+                         scheduler=scheduler,
+                         pool=pool,
+                         hide_progbar=hide_progbar)
 
 
 def case_runner(fn, fn_args, cases,
                 constants=None,
                 split=False,
                 parallel=False,
+                scheduler=None,
+                pool=None,
                 num_workers=None,
-                scheduler='t',
                 hide_progbar=False):
     """ Evaluate a function in many different configurations, optionally in
     parallel and or with live progress.
 
     Parameters
     ----------
-        fn:
-            function with which to evalute cases with
-        fn_args:
-            names of case arguments that fn takes
-        cases:
-            list settings that fn_args take
-        constants:
-            constant fn args that won't be iterated over
-        split:
-            whether to split fn's output into multiple lists
-        progbars:
-            whether to show (in this case only 1) progbar
-        parallel:
-            whether to evaluate cases in parallel
-        processes:
-            how any processes to use for parallel processing
+        fn : callable
+            Function with which to evalute cases with
+        fn_args : tuple
+            Names of case arguments that fn takes
+        cases : tuple of tuple
+            List settings that fn_args take
+        constants : dict (optional)
+            List of tuples/dict of *constant* fn argument mappings.
+        split : bool (optional)
+            Whether to split into multiple output arrays or not.
+        parallel : bool (optional)
+            Process combos in parallel, default number of workers picked.
+        scheduler : str or dask.get instance (optional)
+            Specify scheduler to use for the parallel work.
+        pool : executor-like pool (optional)
+            Submit all combos to this pool.
+        num_workers : int (optional)
+            Explicitly choose how many workers to use, None for automatic.
+        hide_progbar : bool (optional)
+            Whether to disable the progress bar.
 
     Returns
     -------
-        results: list of fn output for each case
+        results : list of fn output for each case
     """
     # Prepare fn_args and values
     fn_args = _parse_fn_args(fn_args)
@@ -94,8 +99,9 @@ def case_runner(fn, fn_args, cases,
                         constants=constants,
                         split=split,
                         parallel=parallel,
-                        num_workers=num_workers,
                         scheduler=scheduler,
+                        num_workers=num_workers,
+                        pool=pool,
                         hide_progbar=hide_progbar)
 
 
