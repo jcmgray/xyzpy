@@ -73,13 +73,16 @@ def _get_fn_name(fn):
     """Try to inspect a function's name, taking into account several common
     non-standard types of function: dask, functools.partial ...
     """
-    try:
+    if hasattr(fn, "__name__"):
         return fn.__name__
-    except AttributeError:
-        try:  # try dask delayed function with key
-            return fn.key.partition('-')[0]
-        except AttributeError:  # try functools.partial function syntax
-            return fn.func.__name__
+    # try dask delayed function with key
+    elif hasattr(fn, "key"):
+        return fn.key.partition('-')[0]
+    # try functools.partial function syntax
+    elif hasattr(fn, "func"):
+        return fn.func.__name__
+    else:
+        raise ValueError("Could not extract function name from {}".format(fn))
 
 
 def progbar(it=None, nb=False, **kwargs):

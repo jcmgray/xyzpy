@@ -60,7 +60,7 @@ def case_runner(fn, fn_args, cases,
                 pool=None,
                 num_workers=None,
                 hide_progbar=False):
-    """ Evaluate a function in many different configurations, optionally in
+    """Evaluate a function in many different configurations, optionally in
     parallel and or with live progress.
 
     Parameters
