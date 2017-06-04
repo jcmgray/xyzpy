@@ -1,4 +1,4 @@
-from dask.delayed import delayed
+from dask import delayed
 
 _GET_MODES = ['THREADED', 'MULTIPROCESS', 'DISTRIBUTED']
 

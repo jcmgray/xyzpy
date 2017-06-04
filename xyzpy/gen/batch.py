@@ -300,9 +300,11 @@ def reap_combos(fn=None, field_name=None, field_dir=None):
     """
     """
     field_folder = parse_field_details(fn, field_name, field_dir)
+
+    # Load same combinations as cases saved with
     combos = joblib.load(os.path.join(field_folder, CMBS_NM))
 
     with Reaper(fn, field_name, field_dir) as r:
-        results = _combo_runner(r, combos, constants={})
+        results = _combo_runner(fn=r, combos=combos, constants={})
 
     return results

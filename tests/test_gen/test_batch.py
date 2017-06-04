@@ -13,10 +13,10 @@ class TestSower:
 
     def test_batch(self):
 
-        combos = {
-            'a': [10, 20, 30],
-            'b': [4, 5, 6, 7],
-        }
+        combos = [
+            ('a', [10, 20, 30]),
+            ('b', [4, 5, 6, 7]),
+        ]
 
         expected = combo_runner(foo_add, combos, constants={'c': True})
 

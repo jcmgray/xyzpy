@@ -10,7 +10,8 @@
 from concurrent import futures as cf
 import xarray as xr
 import numpy as np
-from dask.delayed import delayed, compute
+from dask import compute, delayed
+# from dask.delayed import delayed
 from ..utils import (
     unzip,
     flatten,
