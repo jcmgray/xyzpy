@@ -5,12 +5,12 @@ from itertools import chain
 
 try:
     import joblib
-except ImportError:
+except ImportError:  # pragma: no cover
     pass
 
 try:
     import cloudpickle
-except ImportError:
+except ImportError:  # pragma: no cover
     pass
 
 from ..utils import _get_fn_name
@@ -183,6 +183,25 @@ def grow(batch_number, fn=None, field_name=None, field_dir=None,
          check_mpi=True):
     """Automatically process a batch of cases into results. Should be run in an
     ".xyz-{fn_name}" folder.
+
+    Parameters
+    ----------
+        batch_number : int
+            Which batch to 'grow' into a set of results.
+        fn : callable, optional
+            If specified, the function used to generate the results, otherwise
+            the function will be loaded from disk.
+        field_name : str, optional
+            Name of the set of results, will be taken as the name of ``fn``
+            if not given.
+        field_dir : str, optional
+            Directory within which the 'field' is, taken as current working
+            directory if not given.
+        check_mpi : bool, optional
+            Whether to check if the process is rank 0 and only save results if
+            so - allows mpi functions to be simply used. Defaults to true,
+            this should only be turned off if e.g. a pool of workers is being
+            used to run different ``grow`` instances.
     """
     # TODO: warn if batch can't be found
 
@@ -208,10 +227,11 @@ def grow(batch_number, fn=None, field_name=None, field_dir=None,
     # process each case
     results = tuple(fn(**kws) for kws in cases)
 
-    # maybe want to run grow as mpiexec, but only save and delete once...
-    if check_mpi:
-        from mpi4py import MPI
-        rank = MPI.COMM_WORLD.Get_rank()
+    # maybe want to run grow as mpiexec, so only save and delete on rank 0
+    if check_mpi and 'OMPI_COMM_WORLD_RANK' in os.environ:
+        rank = int(os.environ['OMPI_COMM_WORLD_RANK'])
+    elif check_mpi and 'PMI_RANK' in os.environ:
+        rank = int(os.environ['PMI_RANK'])
     else:
         rank = 0
 
