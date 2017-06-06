@@ -30,5 +30,6 @@ else
   # keep xarray up-to-date
   pip install git+git://github.com/pydata/xarray.git -U --no-deps
 
-  pip install -U coveralls codeclimate-test-reporter
+  # continous integration, coverage etc.
+  pip install -U coveralls codeclimate-test-reporter codecov
 fi
