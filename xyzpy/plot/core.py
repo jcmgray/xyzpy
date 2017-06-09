@@ -49,6 +49,7 @@ _PLOTTER_DEFAULTS = {
     'legend_frame': False,
     'legend_handlelength': None,
     'legend_reverse': False,
+    'legend_marker_alpha': None,
     # x-axis options
     'xtitle': None,
     'xtitle_pad': 5,
@@ -112,15 +113,18 @@ class Plotter:
             self._ds = ds.to_dataset()
         else:
             self._ds = ds
+
         self.x_coo = x
         self.y_coo = y
         self.z_coo = z
         self.y_err = y_err
+
         # Figure options
         settings = {**_PLOTTER_DEFAULTS, **kwargs}
         for opt in _PLOTTER_OPTS:
             setattr(self, opt, settings.pop(opt))
 
+        # Parse unmatched keywords and error but suggest correct versions
         if len(settings) > 0:
             import difflib
             wrong_opts = list(settings.keys())

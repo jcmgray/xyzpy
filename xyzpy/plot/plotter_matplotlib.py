@@ -186,8 +186,8 @@ class PlotterMatplotlib(Plotter):
         """
         """
 
-        self.scatter_handles = []
-        self.scatter_labels = []
+        self._legend_handles = []
+        self._legend_labels = []
 
         for data in self._gen_xy():
             col = next(self._cols)
@@ -201,12 +201,17 @@ class PlotterMatplotlib(Plotter):
                 'zorder': next(self._zordrs),
             }
 
-            self.scatter_handles.append(
+            self._legend_handles.append(
                 self._axes.scatter(data['x'], data['y'], **scatter_opts))
-            self.scatter_labels.append(
+            self._legend_labels.append(
                 scatter_opts['label'])
 
     def plot_histogram(self):
+        from matplotlib.patches import Rectangle
+
+        self._legend_handles = []
+        self._legend_labels = []
+
         for data in self._gen_xy():
             col = next(self._cols)
 
@@ -220,24 +225,36 @@ class PlotterMatplotlib(Plotter):
                 'linewidth': next(self._lws),
                 'zorder': next(self._zordrs),
                 'label': next(self._zlbls) if self._use_legend else None,
+                'stacked': self.stacked,
             }
-
             self._axes.hist(data['x'], **histogram_opts)
+            self._legend_handles.append(
+                Rectangle((0, 0), 1, 1,
+                          color=histogram_opts['facecolor'],
+                          ec=histogram_opts['edgecolor']))
+            self._legend_labels.append(
+                histogram_opts['label'])
 
     def plot_legend(self):
         """Add a legend
         """
         if self._use_legend:
 
-            if hasattr(self, 'scatter_handles'):
-                handles, labels = self.scatter_handles, self.scatter_labels
+            if hasattr(self, '_legend_handles'):
+                handles, labels = self._legend_handles, self._legend_labels
             else:
                 handles, labels = self._axes.get_legend_handles_labels()
 
             if self.legend_reverse:
                 handles, labels = handles[::-1], labels[::-1]
 
-            if (self.legend_marker_scale is None) and self._markersize < 3:
+            # Limit minimum size of markers that appear in legend
+            should_auto_scale_legend_markers = (
+                (self.legend_marker_scale is None) and  # not already set
+                hasattr(self, '_markersize') and  # is a valid parameter
+                self._markersize < 3  # and is small
+            )
+            if should_auto_scale_legend_markers:
                 self.legend_marker_scale = 3 / self._markersize
 
             lgnd = self._axes.legend(
@@ -256,8 +273,9 @@ class PlotterMatplotlib(Plotter):
                 ncol=self.legend_ncol)
             lgnd.get_title().set_fontsize(self.fontsize_ztitle)
 
-            for l in lgnd.legendHandles:
-                l.set_alpha(1.0)
+            if self.legend_marker_alpha is not None:
+                for l in lgnd.legendHandles:
+                    l.set_alpha(1.0)
 
     def set_mappable(self):
         """Mappale object for colorbars.
@@ -369,7 +387,7 @@ class Scatter(PlotterMatplotlib):
     """
 
     def __init__(self, ds, x, y, z=None, **kwargs):
-        # set some heatmap specific options
+        # set some scatter specific options
         for k, default in _SCATTER_ALT_DEFAULTS:
             if k not in kwargs:
                 kwargs[k] = default
@@ -420,15 +438,33 @@ def scatter(ds, x, y, z=None, y_err=None, **kwargs):
 
 # --------------------------------------------------------------------------- #
 
+_HISTOGRAM_SPECIFIC_OPTIONS = {
+    'stacked': False,
+}
+
+_HISTOGRAM_ALT_DEFAULTS = {
+    'xtitle': 'x',
+    'ytitle': 'f(x)',
+}
+
+
 class Histogram(PlotterMatplotlib):
     """
     """
 
     def __init__(self, ds, x, z=None, **kwargs):
-        xtitle = kwargs.pop('xtitle', 'x')
-        ytitle = kwargs.pop('ytitle', 'f(x)')
-        super().__init__(ds, x, None, z=z, xtitle=xtitle, ytitle=ytitle,
-                         **kwargs)
+
+        # Set the alternative defaults
+        for opt, default in _HISTOGRAM_ALT_DEFAULTS.items():
+            if opt not in kwargs:
+                kwargs[opt] = default
+
+        # Set histogram specfic options
+        for opt, default in _HISTOGRAM_SPECIFIC_OPTIONS.items():
+            setattr(self, opt, kwargs.pop(opt, default))
+            print(getattr(self, opt))
+
+        super().__init__(ds, x, None, z=z, **kwargs)
 
     def __call__(self):
         # Core preparation
@@ -549,6 +585,7 @@ def visualize_matrix(x, figsize=(4, 4),
                      touching=False,
                      zlims=(None, None),
                      gridsize=None,
+                     tri=None,
                      return_fig=True):
     """Plot the elements of one or more matrices.
 
@@ -582,6 +619,11 @@ def visualize_matrix(x, figsize=(4, 4),
     subplots = tuple((m, n, i) for i in range(1, nx + 1))
 
     for img, subplot in zip(x, subplots):
+
+        if tri is not None:
+            assert tri in {'upper', 'lower'}
+            ma_fn = np.tril if tri == 'upper' else np.triu
+            img = np.ma.array(img, mask=ma_fn(np.ones_like(img), k=-1))
 
         ax = fig.add_subplot(*subplot)
         ax.imshow(img, cmap=xyz_colormaps(colormap), interpolation='nearest',
