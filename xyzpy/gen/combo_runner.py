@@ -129,7 +129,7 @@ def _combo_runner(fn, combos, constants,
     n = prod(len(x) for _, x in combos)
     ndim = len(combos)
 
-    # TODO: tests
+    # TODO: distributed tests
     if pool is not None:
         if hasattr(pool, 'scheduler'):  # assume dask.distributed pool
             import distributed

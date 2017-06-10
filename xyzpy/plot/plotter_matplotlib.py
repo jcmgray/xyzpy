@@ -207,33 +207,51 @@ class PlotterMatplotlib(Plotter):
                 scatter_opts['label'])
 
     def plot_histogram(self):
-        from matplotlib.patches import Rectangle
+        from matplotlib.patches import Rectangle, Polygon
 
-        self._legend_handles = []
-        self._legend_labels = []
+        def gen_ind_plots():
+            for data in self._gen_xy():
+                col = next(self._cols)
 
-        for data in self._gen_xy():
-            col = next(self._cols)
+                edgecolor = col[:3] + (self.marker_alpha * col[3],)
+                facecolor = col[:3] + (self.marker_alpha * col[3] / 4,)
+                linewidth = next(self._lws)
+                zorder = next(self._zordrs)
+                label = next(self._zlbls) if self._use_legend else None
 
-            histogram_opts = {
-                'bins': self.bins,
-                'edgecolor': col[:3] + (self.marker_alpha * col[3],),
-                'facecolor': col[:3] + (self.marker_alpha * col[3] / 4,),
-                'normed': True,
-                'histtype': 'step',
-                'fill': True,
-                'linewidth': next(self._lws),
-                'zorder': next(self._zordrs),
-                'label': next(self._zlbls) if self._use_legend else None,
-                'stacked': self.stacked,
-            }
-            self._axes.hist(data['x'], **histogram_opts)
-            self._legend_handles.append(
-                Rectangle((0, 0), 1, 1,
-                          color=histogram_opts['facecolor'],
-                          ec=histogram_opts['edgecolor']))
-            self._legend_labels.append(
-                histogram_opts['label'])
+                handle = Rectangle((0, 0), 1, 1, color=facecolor, ec=edgecolor)
+
+                yield (data['x'], edgecolor, facecolor, linewidth, zorder,
+                       label, handle)
+
+        xs, ecs, fcs, lws, zds, lbs, hnds = zip(*gen_ind_plots())
+
+        histogram_opts = {
+            'label': lbs if self._use_legend else None,
+            'bins': self.bins,
+            'normed': True,
+            'histtype': 'stepfilled',
+            'fill': True,
+            'stacked': self.stacked
+        }
+
+        _, _, patches = self._axes.hist(xs, **histogram_opts)
+
+        # Need to set varying colors, linewidths etc seperately
+        for patch, ec, fc, lw, zd in zip(patches, ecs, fcs, lws, zds):
+
+            # patch is not iterable if only one set of data created
+            if isinstance(patch, Polygon):
+                patch = (patch,)
+
+            for sub_patch in patch:
+                sub_patch.set_edgecolor(ec)
+                sub_patch.set_facecolor(fc)
+                sub_patch.set_linewidth(lw)
+                sub_patch.set_zorder(zd)
+
+        # store handles for legend
+        self._legend_handles, self._legend_labels = hnds, lbs
 
     def plot_legend(self):
         """Add a legend
