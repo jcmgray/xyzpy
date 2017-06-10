@@ -2,7 +2,7 @@ from tempfile import TemporaryDirectory
 # import pytest
 
 from xyzpy import combo_runner
-from xyzpy.gen.batch import sow_combos, grow, reap_combos
+from xyzpy.gen.batch import combo_sower, grow, combo_reaper
 
 
 def foo_add(a, b, c):
@@ -22,12 +22,12 @@ class TestSower:
 
         with TemporaryDirectory() as tdir:
 
-            sow_combos(combos, constants={'c': True},
-                       fn=foo_add, field_dir=tdir, batchsize=5)
+            combo_sower(combos, constants={'c': True},
+                        fn=foo_add, field_dir=tdir, batchsize=5)
 
             for i in range(1, 4):
                 grow(i, field_dir=tdir, field_name='foo_add')
 
-            results = reap_combos(field_dir=tdir, field_name='foo_add')
+            results = combo_reaper(field_dir=tdir, field_name='foo_add')
 
         assert results == expected

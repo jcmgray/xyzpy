@@ -149,12 +149,12 @@ class Sower(object):
             self.save_batch_cases()
 
 
-def sow_combos(combos, *, constants=None,
-               fn=None,
-               field_name=None,
-               field_dir=None,
-               save_fn=None,
-               batchsize=None):
+def combo_sower(combos, *, constants=None,
+                fn=None,
+                field_name=None,
+                field_dir=None,
+                save_fn=None,
+                batchsize=None):
 
     combos = _parse_combos(combos)
     constants = _parse_constants(constants)
@@ -296,7 +296,7 @@ class Reaper(object):
             shutil.rmtree(self.field_folder)
 
 
-def reap_combos(fn=None, field_name=None, field_dir=None):
+def combo_reaper(fn=None, field_name=None, field_dir=None):
     """
     """
     field_folder = parse_field_details(fn, field_name, field_dir)

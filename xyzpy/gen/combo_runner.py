@@ -117,6 +117,52 @@ def nested_get(futures, ndim, getter):
             [nested_get(fut, ndim - 1, getter) for fut in futures])
 
 
+def _combo_runner_dask_distributed(fn, combos, constants, n, ndim,
+                                   hide_progbar, client):
+    import distributed
+    with progbar(total=n, disable=hide_progbar) as pbar:
+        futures = nested_submit(fn, combos, constants, pool=client)
+        for f in distributed.as_completed(flatten(futures, ndim)):
+            f._stored_result = f.result()
+            pbar.update()
+        return nested_get(futures, ndim, try_stored_then_result)
+
+
+def _combo_runner_pool(fn, combos, constants, n, ndim, hide_progbar, pool):
+    with progbar(total=n, disable=hide_progbar) as pbar:
+        futures = nested_submit(fn, combos, constants, pool=pool)
+        getter = default_getter(pbar)
+        return nested_get(futures, ndim, getter)
+
+
+def _combo_runner_dask(fn, combos, constants, hide_progbar,
+                       scheduler, num_workers):
+    fn_name = _get_fn_name(fn)
+    with DaskTqdmProgbar(fn_name, disable=hide_progbar):
+        jobs = nested_submit(fn, combos, constants, delay=True)
+        if scheduler and isinstance(scheduler, str):
+            scheduler = dask_scheduler_get(
+                scheduler, num_workers=num_workers)
+        return compute(*jobs, get=scheduler, num_workers=num_workers)
+
+
+def _combo_runner_parallel(fn, combos, constants, n, ndim, hide_progbar,
+                           num_workers):
+    with cf.ProcessPoolExecutor(max_workers=num_workers) as pool:
+        with progbar(total=n, disable=hide_progbar) as pbar:
+            futures = nested_submit(fn, combos, constants, pool=pool)
+            for f in cf.as_completed(flatten(futures, ndim)):
+                pbar.update()
+            return nested_get(futures, ndim, default_getter())
+
+
+def _combo_runner_sequential(fn, combos, constants, n, hide_progbar):
+    with progbar(total=n, disable=hide_progbar) as p:
+        # Wrap the function such that the progbar is updated upon each call
+        fn = update_upon_eval(fn, p)
+        return nested_submit(fn, combos, constants)
+
+
 def _combo_runner(fn, combos, constants,
                   split=False,
                   parallel=False,
@@ -132,49 +178,31 @@ def _combo_runner(fn, combos, constants,
     # TODO: distributed tests
     if pool is not None:
         if hasattr(pool, 'scheduler'):  # assume dask.distributed pool
-            import distributed
-            with progbar(total=n, disable=hide_progbar) as pbar:
-                futures = nested_submit(fn, combos, constants, pool=pool)
-                for f in distributed.as_completed(flatten(futures, ndim)):
-                    f._stored_result = f.result()
-                    pbar.update()
-                results = nested_get(futures, ndim, try_stored_then_result)
+            results = _combo_runner_dask_distributed(
+                fn, combos, constants, n, ndim, hide_progbar, pool)
         else:
-            with progbar(total=n, disable=hide_progbar) as pbar:
-                futures = nested_submit(fn, combos, constants, pool=pool)
-                getter = default_getter(pbar)
-                results = nested_get(futures, ndim, getter)
+            results = _combo_runner_pool(
+                fn, combos, constants, n, ndim, hide_progbar, pool)
 
     # Evaluate combos using dask
     elif parallel == 'dask' or scheduler:
-        fn_name = _get_fn_name(fn)
-        with DaskTqdmProgbar(fn_name, disable=hide_progbar):
-            jobs = nested_submit(fn, combos, constants, delay=True)
-            if scheduler and isinstance(scheduler, str):
-                scheduler = dask_scheduler_get(
-                    scheduler, num_workers=num_workers)
-            results = compute(*jobs, get=scheduler, num_workers=num_workers)
+        results = _combo_runner_dask(
+            fn, combos, constants, hide_progbar, scheduler, num_workers)
 
-    # By default use a process pool exceutor
+    # Else for parallel, by default use a process pool exceutor
     elif parallel or num_workers:
-        with cf.ProcessPoolExecutor(max_workers=num_workers) as pool:
-            with progbar(total=n, disable=hide_progbar) as pbar:
-                futures = nested_submit(fn, combos, constants, pool=pool)
-                for f in cf.as_completed(flatten(futures, ndim)):
-                    pbar.update()
-                results = nested_get(futures, ndim, default_getter())
+        results = _combo_runner_parallel(
+            fn, combos, constants, n, ndim, hide_progbar, num_workers)
 
     # Evaluate combos sequentially
     else:
-        with progbar(total=n, disable=hide_progbar) as p:
-            # Wrap the function such that the progbar is updated upon each call
-            fn = update_upon_eval(fn, p)
-            results = nested_submit(fn, combos, constants)
+        results = _combo_runner_sequential(
+            fn, combos, constants, n, hide_progbar)
 
     return tuple(unzip(results, ndim)) if split else results
 
 
-def combo_runner(fn, combos,
+def combo_runner(fn, combos, *,
                  constants=None,
                  split=False,
                  parallel=False,
@@ -307,7 +335,7 @@ def _combos_to_ds(results, combos, var_names, var_dims, var_coords,
     return ds
 
 
-def combo_runner_to_ds(fn, combos, var_names,
+def combo_runner_to_ds(fn, combos, var_names, *,
                        var_dims=None,
                        var_coords=None,
                        constants=None,
