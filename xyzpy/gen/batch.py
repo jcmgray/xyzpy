@@ -28,7 +28,7 @@ class XYZError(Exception):
     pass
 
 
-def parse_field_details(fn, crop_name, crop_dir):
+def parse_crop_details(fn, crop_name, crop_dir):
     """Work out how to structure the sowed data.
 
     Parameters
@@ -78,6 +78,8 @@ class Crop(object):
         self.batchsize = batchsize
         self.num_batches = num_batches
 
+        self.field_folder = parse_crop_details(fn, crop_name, crop_dir)
+
 
 class Sower(object):
     """Class for sowing a 'field' of batched combos to then 'grow' (on any
@@ -117,7 +119,7 @@ class Sower(object):
                 `batchsize` is.
         """
         self.fn = fn
-        self.field_folder = parse_field_details(fn, crop_name, crop_dir)
+        self.field_folder = parse_crop_details(fn, crop_name, crop_dir)
         self.combos = combos
         self.choose_batch_settings(batchsize, num_batches)
 
@@ -281,7 +283,7 @@ def grow(batch_number, fn=None, crop_name=None, crop_dir=None,
                            "`crop_dir` and `crop_name` (or `fn`) should be "
                            "specified.")
     else:
-        field_folder = parse_field_details(fn, crop_name, crop_dir)
+        field_folder = parse_crop_details(fn, crop_name, crop_dir)
 
     # load function
     if fn is None:
@@ -338,7 +340,7 @@ class Reaper(object):
                 If given, alternative to current working directory for results
                 to be reaped from.
         """
-        self.field_folder = parse_field_details(fn, crop_name, crop_dir)
+        self.field_folder = parse_crop_details(fn, crop_name, crop_dir)
 
         files = (os.path.join(self.field_folder,
                               "results",
@@ -372,7 +374,7 @@ class Reaper(object):
 def combos_reap(fn=None, crop_name=None, crop_dir=None):
     """
     """
-    field_folder = parse_field_details(fn, crop_name, crop_dir)
+    field_folder = parse_crop_details(fn, crop_name, crop_dir)
     # Load same combinations as cases saved with
     settings = joblib.load(os.path.join(field_folder, INFO_NM))
 
@@ -428,7 +430,7 @@ def combos_reap_to_ds(fn=None, crop_name=None, crop_dir=None, *,
         xarray.Dataset
             Multidimensional labelled dataset contatining all the results.
     """
-    field_folder = parse_field_details(fn, crop_name, crop_dir)
+    field_folder = parse_crop_details(fn, crop_name, crop_dir)
     # Load same combinations as cases saved with
     settings = joblib.load(os.path.join(field_folder, INFO_NM))
 

@@ -5,7 +5,7 @@ import pytest
 from xyzpy import combo_runner
 from xyzpy.gen.batch import (
     XYZError,
-    parse_field_details,
+    parse_crop_details,
     combos_sow,
     grow,
     combos_reap,
@@ -37,9 +37,9 @@ class TestSowerReaper:
 
         if expected == 'raises':
             with pytest.raises(ValueError):
-                parse_field_details(fn, crop_name, crop_dir)
+                parse_crop_details(fn, crop_name, crop_dir)
         else:
-            crop_dir = parse_field_details(fn, crop_name, crop_dir)
+            crop_dir = parse_crop_details(fn, crop_name, crop_dir)
             assert crop_dir[-len(expected):] == expected
 
     def test_checks(self):

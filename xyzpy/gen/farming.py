@@ -414,33 +414,65 @@ class Harvester(object):
         self.merge_into_full_ds(self.last_ds, overwrite=overwrite,
                                 sync_with_disk=sync_with_disk)
 
-    def sow_combos(self, *args, **kwargs):
+    def sow_combos(self, combos, *, constants=(),
+                   crop_name=None,
+                   crop_dir=None,
+                   save_fn=None,
+                   batchsize=None,
+                   num_batches=None,
+                   hide_progbar=False):
+        """
+        """
+        return self.runner.sow_combos(combos,
+                                      constants=constants,
+                                      crop_name=crop_name,
+                                      crop_dir=crop_dir,
+                                      save_fn=save_fn,
+                                      batchsize=batchsize,
+                                      num_batches=num_batches,
+                                      hide_progbar=hide_progbar,)
+
+    def harvest_combos_reap(self,
+                            crop_name=None,
+                            crop_dir=None,
+                            save=True,
+                            overwrite=None):
         """
         """
 
-        return self.runner.sow_combos(*args, **kwargs)
+        self.runner.reap_combos(crop_name=crop_name, crop_dir=crop_dir)
 
-    def harvest_combos_reap(self, *args, save=True, overwrite=None,
-                            **kwargs):
-        """
-        """
-
-        self.runner.reap_combos(*args, **kwargs)
         sync_with_disk = save and self.data_name is not None
         self.merge_into_full_ds(self.last_ds, overwrite=overwrite,
                                 sync_with_disk=sync_with_disk)
 
-    def harvest_combos_sow_and_reap(self, *args, save=True, overwrite=None,
-                                    **kwargs):
+    def harvest_combos_sow_and_reap(self, combos, *, constants=(),
+                                    crop_name=None,
+                                    crop_dir=None,
+                                    save_fn=None,
+                                    batchsize=None,
+                                    num_batches=None,
+                                    save=True,
+                                    overwrite=None):
         """
         """
 
-        self.runner.sow_and_reap_combos(*args, **kwargs)
+        self.runner.sow_and_reap_combos(
+            combos,
+            constants=constants,
+            crop_name=crop_name,
+            crop_dir=crop_dir,
+            save_fn=save_fn,
+            batchsize=batchsize,
+            num_batches=num_batches,
+        )
         sync_with_disk = save and self.data_name is not None
         self.merge_into_full_ds(self.last_ds, overwrite=overwrite,
                                 sync_with_disk=sync_with_disk)
 
-    def harvest_cases(self, cases, *, save=True, overwrite=None,
+    def harvest_cases(self, cases, *,
+                      save=True,
+                      overwrite=None,
                       **runner_settings):
         """Run cases, automatically merging into an on-disk dataset.
         """
