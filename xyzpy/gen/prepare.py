@@ -150,3 +150,4 @@ def _parse_var_dims(var_dims, var_names):
 _parse_var_coords = dictify
 _parse_constants = dictify
 _parse_resources = dictify
+_parse_attrs = dictify

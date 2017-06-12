@@ -21,9 +21,15 @@ from .prepare import (
     _parse_resources,
     _parse_combos,
     _parse_cases,
+    _parse_attrs,
 )
 from .combo_runner import combo_runner_to_ds
 from .case_runner import case_runner_to_ds
+from .batch import (
+    combos_sow,
+    combos_reap_to_ds,
+    combos_sow_and_reap_to_ds,
+)
 from ..manage import load_ds, save_ds
 
 
@@ -48,30 +54,30 @@ class Runner(object):
         Parameters
         ----------
             fn : callable
-                Function to run.
+                Function that produces a single instance of a result.
             var_names : str, sequence of str, or None
                 The ordered name(s) of the ouput variable(s) of `fn`. Set this
                 explicitly to None if `fn` outputs already labelled data as a
                 Dataset or DataArray.
-            fn_args : str, or sequence of str (optional)
+            fn_args : str, or sequence of str, optional
                 The ordered name(s) of the input arguments(s) of `fn`. This is
                 only needed if the cases or combos supplied are not dict-like.
-            var_dims : dict-like
+            var_dims : dict-like, optional
                 Mapping of output variables to their named internal dimensions.
-            var_coords : dict-like
+            var_coords : dict-like, optional
                 Mapping of output variables named internal dimensions to the
                 actual values they take.
-            constants : dict-like
+            constants : dict-like, optional
                 Constants arguments to be supplied to `fn`. These can be used
                 as 'var_dims', and will be saved as coords if so, otherwise
                 as attributes.
-            resources : dict-like
+            resources : dict-like, optional
                 Like `constants` but not saved to the the dataset, e.g. if
                 very big.
-            attrs : dict-like
+            attrs : dict-like, optional
                 Any other miscelleous information to be saved with the
                 dataset.
-            **default_runner_settings :
+            **default_runner_settings
                 These keyword arguments will be supplied as defaults to any
                 runner.
         """
@@ -83,7 +89,7 @@ class Runner(object):
         self._var_coords = _parse_var_coords(var_coords)
         self._constants = _parse_constants(constants)
         self._resources = _parse_resources(resources)
-        self.attrs = attrs
+        self._attrs = _parse_attrs(attrs)
         self.default_runner_settings = default_runner_settings
 
     # Attributes which should be parsed ------------------------------------- #
@@ -186,13 +192,72 @@ class Runner(object):
             var_coords=self._var_coords,
             constants={**self._constants, **dict(constants)},
             resources=self._resources,
-            attrs=self.attrs,
+            attrs=self._attrs,
             parse=False,
             **{**self.default_runner_settings, **runner_settings})
         return self.last_ds
 
+    def sow_combos(self, combos, *, constants=(),
+                   crop_name=None,
+                   crop_dir=None,
+                   save_fn=None,
+                   batchsize=None,
+                   num_batches=None,
+                   hide_progbar=False):
+        """
+        """
+        combos_sow(combos,
+                   constants={**self._constants, **dict(constants)},
+                   fn=self.fn,
+                   crop_dir=crop_dir,
+                   crop_name=crop_name,
+                   save_fn=save_fn,
+                   batchsize=batchsize,
+                   num_batches=num_batches,
+                   hide_progbar=hide_progbar)
+
+    def reap_combos(self, crop_name=None, crop_dir=None):
+        """
+        """
+        self.last_ds = combos_reap_to_ds(
+            fn=self.fn,
+            crop_name=crop_name,
+            crop_dir=crop_dir,
+            var_names=self._var_names,
+            var_dims=self._var_dims,
+            var_coords=self._var_coords,
+            attrs={**self._attrs, **self._constants},
+            parse=False,
+        )
+        return self.last_ds
+
+    def sow_and_reap_combos(self, combos, *, constants=(),
+                            crop_name=None, crop_dir=None,
+                            save_fn=None,
+                            batchsize=None,
+                            num_batches=None):
+        """
+        """
+
+        self.last_ds = combos_sow_and_reap_to_ds(
+            combos=combos,
+            constants={**self._constants, **dict(constants)},
+            fn=self.fn,
+            crop_name=crop_name,
+            crop_dir=crop_dir,
+            save_fn=save_fn,
+            batchsize=batchsize,
+            num_batches=num_batches,
+            var_names=self._var_names,
+            var_dims=self._var_dims,
+            var_coords=self._var_coords,
+            attrs=self._attrs,
+            parse=False,
+        )
+        return self.last_ds
+
     def run_cases(self, cases, **runner_settings):
-        """Run cases using the function map and save to dataset.
+        """Run cases using the function and save to dataset.
 
         Parameters
         ----------
@@ -211,7 +276,7 @@ class Runner(object):
             var_coords=self._var_coords,
             constants=self._constants,
             resources=self._resources,
-            attrs=self.attrs,
+            attrs=self._attrs,
             parse=False,
             **{**self.default_runner_settings, **runner_settings})
         return self.last_ds
@@ -264,6 +329,7 @@ class Harvester(object):
     def try_to_load_from_disk(self):
         """Load the disk dataset into `full_ds`.
         """
+
         # Check file exists and can be written to
         if os.access(self.data_name, os.W_OK):
             self._full_ds = load_ds(self.data_name, engine=self.engine)
@@ -278,15 +344,34 @@ class Harvester(object):
     def delete_ds(self, backup=True):
         """Delete the on-disk dataset.
         """
+
         if backup:
             import datetime
             ts = '{:%Y%m%d-%H%M%S}'.format(datetime.datetime.now())
             shutil.copy(self.data_name, self.data_name + '.BAK-{}'.format(ts))
         os.remove(self.data_name)
 
-    def merge_into_full_ds(self, new_ds, overwrite=None):
+    def merge_into_full_ds(self, new_ds, overwrite=None, sync_with_disk=True):
         """Merge a new dataset into the in-memory full dataset.
+
+        Parameters
+        ----------
+            new_ds : xr.Dataset or xr.DataArray
+                Data to be merged into the full dataset.
+            overwrite : {None, False, True}, optional
+                    * ``None`` (default): attempt the merge and only raise if
+                    data conflicts.
+                    * ``True``: overwrite conflicting current data with
+                    that from ``new_ds``.
+                    *``False``: drop any conflicting data from ``new_ds``.
+            sync_with_disk : bool, optional
+                If True (default), load and save the disk dataset before
+                and after merging in the new data.
         """
+
+        if sync_with_disk:
+            self.try_to_load_from_disk()
+
         if isinstance(new_ds, xr.DataArray):
             new_ds = new_ds.to_dataset()
 
@@ -304,29 +389,64 @@ class Harvester(object):
                 self._full_ds.merge(
                     new_ds, compat='no_conflicts', inplace=True)
 
-    def merge_into_disk_ds(self, new_ds, overwrite=None):
-        """Merge a new dataset into the full, on-disk dataset.
-        """
-        self.try_to_load_from_disk()
-        self.merge_into_full_ds(new_ds, overwrite=overwrite)
-        self.save_to_disk()
+        if sync_with_disk:
+            self.save_to_disk()
 
-    def harvest_combos(self, combos, save=True, overwrite=None,
+    def harvest_combos(self, combos, *, save=True, overwrite=None,
                        **runner_settings):
         """Run combos, automatically merging into an on-disk dataset.
-        """
-        self.runner.run_combos(combos, **runner_settings)
-        if save and self.data_name is not None:
-            self.merge_into_disk_ds(self.last_ds, overwrite=overwrite)
-        else:
-            self.merge_into_full_ds(self.last_ds, overwrite=overwrite)
 
-    def harvest_cases(self, cases, save=True, overwrite=None,
+        Parameters
+        ---------
+            combos : mapping_like
+
+            save : bool, optional
+
+            overwrite : bool, optional
+
+            **runner_settings
+
+        """
+
+        self.runner.run_combos(combos, **runner_settings)
+
+        sync_with_disk = save and self.data_name is not None
+        self.merge_into_full_ds(self.last_ds, overwrite=overwrite,
+                                sync_with_disk=sync_with_disk)
+
+    def sow_combos(self, *args, **kwargs):
+        """
+        """
+
+        return self.runner.sow_combos(*args, **kwargs)
+
+    def harvest_combos_reap(self, *args, save=True, overwrite=None,
+                            **kwargs):
+        """
+        """
+
+        self.runner.reap_combos(*args, **kwargs)
+        sync_with_disk = save and self.data_name is not None
+        self.merge_into_full_ds(self.last_ds, overwrite=overwrite,
+                                sync_with_disk=sync_with_disk)
+
+    def harvest_combos_sow_and_reap(self, *args, save=True, overwrite=None,
+                                    **kwargs):
+        """
+        """
+
+        self.runner.sow_and_reap_combos(*args, **kwargs)
+        sync_with_disk = save and self.data_name is not None
+        self.merge_into_full_ds(self.last_ds, overwrite=overwrite,
+                                sync_with_disk=sync_with_disk)
+
+    def harvest_cases(self, cases, *, save=True, overwrite=None,
                       **runner_settings):
         """Run cases, automatically merging into an on-disk dataset.
         """
+
         self.runner.run_cases(cases, **runner_settings)
-        if save and self.data_name is not None:
-            self.merge_into_disk_ds(self.last_ds, overwrite=overwrite)
-        else:
-            self.merge_into_full_ds(self.last_ds, overwrite=overwrite)
+
+        sync_with_disk = save and self.data_name is not None
+        self.merge_into_full_ds(self.last_ds, overwrite=overwrite,
+                                sync_with_disk=sync_with_disk)

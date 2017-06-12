@@ -1,5 +1,7 @@
 import os
 import tempfile
+import time
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 import numpy as np
@@ -7,6 +9,7 @@ import xarray as xr
 
 from xyzpy.manage import load_ds
 from xyzpy.gen.farming import Runner, Harvester
+from xyzpy.gen.batch import grow
 
 
 # -------------------------------- Fixtures --------------------------------- #
@@ -88,6 +91,38 @@ class TestRunner:
         r.run_combos((('a', (1, 2)), ('b', (3, 4))))
         assert r.last_ds.identical(fn3_fba_ds)
 
+    def test_sow_reap_seperate(self, fn3_fba_runner, fn3_fba_ds):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            r = fn3_fba_runner
+            r.sow_combos((('a', (1, 2)),
+                          ('b', (3, 4))),
+                         num_batches=2,
+                         crop_dir=tmpdir)
+            for i in [1, 2]:
+                grow(i, fn=r.fn, crop_dir=tmpdir)
+            r.reap_combos(crop_dir=tmpdir)
+            assert r.last_ds.identical(fn3_fba_ds)
+
+    def test_sow_and_reap(self, fn3_fba_runner, fn3_fba_ds):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            r = fn3_fba_runner
+
+            def concurrent_grow():
+                # wait for cases to be sown
+                time.sleep(0.2)
+                for i in [1, 2]:
+                    grow(i, fn=r.fn, crop_dir=tmpdir)
+
+            with ThreadPoolExecutor(1) as pool:
+                pool.submit(concurrent_grow)
+
+                r.sow_and_reap_combos((('a', (1, 2)),
+                                       ('b', (3, 4))),
+                                      num_batches=2,
+                                      crop_dir=tmpdir)
+
+            assert r.last_ds.identical(fn3_fba_ds)
+
     @pytest.mark.parametrize("cases", [(1, 2, 3),
                                        ([1], [2], [3])])
     def test_runner_cases_parse(self, cases):
@@ -132,6 +167,49 @@ class TestHarvester:
             h = Harvester(fn3_fba_runner, fl_pth)
             h.harvest_combos((('a', (1, 2)), ('b', (3, 4))))
             hds = load_ds(fl_pth)
+        assert h.last_ds.identical(fn3_fba_ds)
+        assert h.full_ds.identical(fn3_fba_ds)
+        assert hds.identical(fn3_fba_ds)
+
+    def test_harvest_combos_new_sow_reap_separate(self, fn3_fba_runner,
+                                                  fn3_fba_ds):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fl_pth = os.path.join(tmpdir, 'test.h5')
+            h = Harvester(fn3_fba_runner, fl_pth)
+
+            h.sow_combos((('a', (1, 2)), ('b', (3, 4))),
+                         num_batches=2,
+                         crop_dir=tmpdir)
+            for i in [1, 2]:
+                grow(i, fn=h.runner.fn, crop_dir=tmpdir)
+            h.harvest_combos_reap(crop_dir=tmpdir)
+
+            hds = load_ds(fl_pth)
+
+        assert h.last_ds.identical(fn3_fba_ds)
+        assert h.full_ds.identical(fn3_fba_ds)
+        assert hds.identical(fn3_fba_ds)
+
+    def test_harvest_combos_new_sow_and_reap(self, fn3_fba_runner, fn3_fba_ds):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fl_pth = os.path.join(tmpdir, 'test.h5')
+            h = Harvester(fn3_fba_runner, fl_pth)
+
+            def concurrent_grow():
+                # wait for cases to be sown
+                time.sleep(0.2)
+                for i in [1, 2]:
+                    grow(i, fn=h.runner.fn, crop_dir=tmpdir)
+
+            with ThreadPoolExecutor(1) as pool:
+                pool.submit(concurrent_grow)
+                h.harvest_combos_sow_and_reap(
+                    (('a', (1, 2)), ('b', (3, 4))),
+                    num_batches=2,
+                    crop_dir=tmpdir)
+
+            hds = load_ds(fl_pth)
+
         assert h.last_ds.identical(fn3_fba_ds)
         assert h.full_ds.identical(fn3_fba_ds)
         assert hds.identical(fn3_fba_ds)

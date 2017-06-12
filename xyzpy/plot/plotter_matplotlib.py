@@ -480,7 +480,6 @@ class Histogram(PlotterMatplotlib):
         # Set histogram specfic options
         for opt, default in _HISTOGRAM_SPECIFIC_OPTIONS.items():
             setattr(self, opt, kwargs.pop(opt, default))
-            print(getattr(self, opt))
 
         super().__init__(ds, x, None, z=z, **kwargs)
 

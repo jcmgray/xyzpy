@@ -354,26 +354,27 @@ def combo_runner_to_ds(fn, combos, var_names, *,
         var_names : str, sequence of strings, or None
             Variable name(s) of the output(s) of `fn`, set to None if
             fn outputs data already labelled in a Dataset or DataArray.
-        var_dims : sequence of either strings or string sequences (optional)
+        var_dims : sequence of either strings or string sequences, optional
             'Internal' names of dimensions for each variable, the values for
             each dimension should be contained as a mapping in either
             `var_coords` (not needed by `fn`) or `constants` (needed by `fn`).
-        var_coords : mapping (optional)
+        var_coords : mapping, optional
             Mapping of extra coords the output variables may depend on.
-        constants : mapping (optional)
+        constants : mapping, optional
             Arguments to `fn` which are not iterated over, these will be
             recorded either as attributes or coordinates if they are named
             in `var_dims`.
-        resources : mapping (optional)
+        resources : mapping, optional
             Like `constants` but they will not be recorded.
-        attrs : mapping (optional)
+        attrs : mapping, optional
             Any extra attributes to store.
-        **combo_runner_settings: dict-like (optional)
+        **combo_runner_settings: dict-like, optional
             Arguments supplied to `combo_runner`.
 
     Returns
     -------
         xarray.Dataset
+            Multidimensional labelled dataset contatining all the results.
     """
     if parse:
         combos = _parse_combos(combos)
