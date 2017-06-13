@@ -2,6 +2,7 @@ import os
 import shutil
 from itertools import chain
 from time import sleep
+from glob import glob
 
 try:
     import joblib
@@ -13,7 +14,7 @@ try:
 except ImportError:  # pragma: no cover
     pass
 
-from ..utils import _get_fn_name, prod
+from ..utils import _get_fn_name, prod, progbar
 from .prepare import _parse_combos, _parse_constants, _parse_attrs
 from .combo_runner import _combo_runner, combo_runner_to_ds
 
@@ -192,6 +193,41 @@ class Crop(object):
             self.save_function_to_disk()
         self.save_info(combos)
 
+    def __repr__(self):
+        # Location and name, underlined
+        if not os.path.exists(self.location):
+            return self.location + "\nNot yet sown or already reaped."
+
+        loc_len = len(self.location)
+        name_len = len(self.name)
+
+        # Progress
+        num_cases = len(glob(
+            os.path.join(self.location, "cases", BTCH_NM.format("*"))))
+        num_results = len(glob(
+            os.path.join(self.location, "results", RSLT_NM.format("*"))))
+        total = num_cases + num_results
+        percentage = 100 * num_results / total
+
+        # Progress bar
+        total_bars = 20
+        bars = int(percentage * total_bars / 100)
+
+        return ("{location}\n"
+                "{under_crop_dir}{under_crop_name}\n"
+                "{num_results} / {total} batches of size {bsz} completed\n"
+                "[{done_bars}{not_done_spaces}] : {percentage:.1f}%").format(
+            location=self.location,
+            under_crop_dir="-" * (loc_len - name_len),
+            under_crop_name="=" * name_len,
+            num_results=num_results,
+            total=total,
+            bsz=self.batchsize,
+            done_bars="#" * bars,
+            not_done_spaces=" " * (total_bars - bars),
+            percentage=percentage,
+        )
+
 
 class Sower(object):
     """Class for sowing a 'crop' of batched combos to then 'grow' (on any
@@ -261,7 +297,7 @@ def combos_sow(crop, combos, constants=None, hide_progbar=False):
                       hide_progbar=hide_progbar)
 
 
-def grow(batch_number, crop=None, fn=None, check_mpi=True):
+def grow(batch_number, crop=None, fn=None, check_mpi=True, hide_progbar=False):
     """Automatically process a batch of cases into results. Should be run in an
     ".xyz-{fn_name}" folder.
 
@@ -300,7 +336,9 @@ def grow(batch_number, crop=None, fn=None, check_mpi=True):
         os.path.join(crop_location, "cases", BTCH_NM.format(batch_number)))
 
     # process each case
-    results = tuple(fn(**kws) for kws in cases)
+    results = tuple(
+        progbar((fn(**kws) for kws in cases), disable=hide_progbar)
+    )
 
     # maybe want to run grow as mpiexec (i.e. `fn` itself in parallel),
     # so only save and delete on rank 0
