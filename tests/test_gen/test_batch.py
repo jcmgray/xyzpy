@@ -5,6 +5,7 @@ import pytest
 from xyzpy import combo_runner
 from xyzpy.gen.batch import (
     XYZError,
+    Crop,
     parse_crop_details,
     combos_sow,
     grow,
@@ -21,7 +22,7 @@ def foo_add(a, b, c):
 
 class TestSowerReaper:
     @pytest.mark.parametrize(
-        "fn, crop_name, crop_dir, expected",
+        "fn, crop_name, crop_loc, expected",
         [
             (foo_add, None, None, '.xyz-foo_add'),
             (None, 'custom', None, '.xyz-custom'),
@@ -33,26 +34,27 @@ class TestSowerReaper:
             (None, None, 'custom_dir', 'raises'),
 
         ])
-    def test_parse_field_details(self, fn, crop_name, crop_dir, expected):
+    def test_parse_field_details(self, fn, crop_name, crop_loc, expected):
 
         if expected == 'raises':
             with pytest.raises(ValueError):
-                parse_crop_details(fn, crop_name, crop_dir)
+                parse_crop_details(fn, crop_name, crop_loc)
         else:
-            crop_dir = parse_crop_details(fn, crop_name, crop_dir)
-            assert crop_dir[-len(expected):] == expected
+            crop_loc = parse_crop_details(fn, crop_name, crop_loc)
+            assert crop_loc[-len(expected):] == expected
 
     def test_checks(self):
-        combos = {'a': [1]}
 
         with pytest.raises(ValueError):
-            combos_sow(combos, crop_name='custom', save_fn=True)
+            Crop(name='custom', save_fn=True)
 
         with pytest.raises(TypeError):
-            combos_sow(combos, fn=foo_add, save_fn=False, batchsize=0.5)
+            c = Crop(fn=foo_add, save_fn=False, batchsize=0.5)
+            c.choose_batch_settings([('a', [1, 2])])
 
         with pytest.raises(ValueError):
-            combos_sow(combos, fn=foo_add, save_fn=False, batchsize=-1)
+            c = Crop(fn=foo_add, save_fn=False, batchsize=-1)
+            c.choose_batch_settings([('a', [1, 2])])
 
         with pytest.raises(XYZError):
             grow(1)
@@ -68,15 +70,15 @@ class TestSowerReaper:
         with TemporaryDirectory() as tdir:
 
             # sow seeds
-            combos_sow(combos, constants={'c': True},
-                       fn=foo_add, crop_dir=tdir, batchsize=5)
+            crop = Crop(fn=foo_add, folder=tdir, batchsize=5)
+            combos_sow(crop, combos, constants={'c': True})
 
             # grow seeds
             for i in range(1, 4):
-                grow(i, crop_dir=tdir, crop_name='foo_add')
+                grow(i, Crop(folder=tdir, name='foo_add'))
 
             # reap results
-            results = combos_reap(crop_dir=tdir, crop_name='foo_add')
+            results = combos_reap(crop)
 
         assert results == expected
 
@@ -95,19 +97,19 @@ class TestSowerReaper:
 
         with TemporaryDirectory() as tdir:
             # sow seeds
-            combos_sow(combos1, constants={'c': True}, crop_name='run1',
-                       fn=foo_add, crop_dir=tdir, batchsize=5)
-            combos_sow(combos2, constants={'c': True}, crop_name='run2',
-                       fn=foo_add, crop_dir=tdir, batchsize=5)
+            c1 = Crop(name='run1', fn=foo_add, folder=tdir, batchsize=5)
+            combos_sow(c1, combos1, constants={'c': True})
+            c2 = Crop(name='run2', fn=foo_add, folder=tdir, batchsize=5)
+            combos_sow(c2, combos2, constants={'c': True})
 
             # grow seeds
             for i in range(1, 4):
-                grow(i, crop_dir=tdir, crop_name='run1')
-                grow(i, crop_dir=tdir, crop_name='run2')
+                grow(i, Crop(folder=tdir, name='run1'))
+                grow(i, Crop(folder=tdir, name='run2'))
 
             # reap results
-            results1 = combos_reap(crop_dir=tdir, crop_name='run1')
-            results2 = combos_reap(crop_dir=tdir, crop_name='run2')
+            results1 = combos_reap(c1)
+            results2 = combos_reap(c2)
 
         assert results1 == expected1
         assert results2 == expected2
@@ -120,12 +122,13 @@ class TestSowerReaper:
         with TemporaryDirectory() as tdir:
 
             # sow seeds
-            combos_sow(combos, fn=foo3_scalar, crop_dir=tdir, batchsize=5)
+            crop = Crop(fn=foo3_scalar, folder=tdir, batchsize=5)
+            combos_sow(crop, combos)
 
             # grow seeds
             for i in range(1, 6):
-                grow(i, crop_dir=tdir, crop_name='foo3_scalar')
+                grow(i, Crop(folder=tdir, name='foo3_scalar'))
 
-            ds = combos_reap_to_ds(crop_dir=tdir, crop_name='foo3_scalar',
-                                   var_names=['bananas'])
+            ds = combos_reap_to_ds(crop, var_names=['bananas'])
+
         assert ds.sel(a=2, b=30, c=400)['bananas'].data == 432

@@ -197,32 +197,18 @@ class Runner(object):
             **{**self.default_runner_settings, **runner_settings})
         return self.last_ds
 
-    def sow_combos(self, combos, *, constants=(),
-                   crop_name=None,
-                   crop_dir=None,
-                   save_fn=None,
-                   batchsize=None,
-                   num_batches=None,
-                   hide_progbar=False):
+    def sow_combos(self, crop, combos, constants=(), hide_progbar=False):
         """
         """
-        combos_sow(combos,
+        combos_sow(crop, combos,
                    constants={**self._constants, **dict(constants)},
-                   fn=self.fn,
-                   crop_dir=crop_dir,
-                   crop_name=crop_name,
-                   save_fn=save_fn,
-                   batchsize=batchsize,
-                   num_batches=num_batches,
                    hide_progbar=hide_progbar)
 
-    def reap_combos(self, crop_name=None, crop_dir=None):
+    def reap_combos(self, crop):
         """
         """
         self.last_ds = combos_reap_to_ds(
-            fn=self.fn,
-            crop_name=crop_name,
-            crop_dir=crop_dir,
+            crop,
             var_names=self._var_names,
             var_dims=self._var_dims,
             var_coords=self._var_coords,
@@ -231,23 +217,13 @@ class Runner(object):
         )
         return self.last_ds
 
-    def sow_and_reap_combos(self, combos, *, constants=(),
-                            crop_name=None, crop_dir=None,
-                            save_fn=None,
-                            batchsize=None,
-                            num_batches=None):
+    def sow_and_reap_combos(self, crop, combos, constants=()):
         """
         """
 
         self.last_ds = combos_sow_and_reap_to_ds(
-            combos=combos,
+            crop, combos,
             constants={**self._constants, **dict(constants)},
-            fn=self.fn,
-            crop_name=crop_name,
-            crop_dir=crop_dir,
-            save_fn=save_fn,
-            batchsize=batchsize,
-            num_batches=num_batches,
             var_names=self._var_names,
             var_dims=self._var_dims,
             var_coords=self._var_coords,
@@ -414,58 +390,32 @@ class Harvester(object):
         self.merge_into_full_ds(self.last_ds, overwrite=overwrite,
                                 sync_with_disk=sync_with_disk)
 
-    def sow_combos(self, combos, *, constants=(),
-                   crop_name=None,
-                   crop_dir=None,
-                   save_fn=None,
-                   batchsize=None,
-                   num_batches=None,
-                   hide_progbar=False):
+    def sow_combos(self, crop, combos, constants=(), hide_progbar=False):
         """
         """
-        return self.runner.sow_combos(combos,
+        return self.runner.sow_combos(crop, combos,
                                       constants=constants,
-                                      crop_name=crop_name,
-                                      crop_dir=crop_dir,
-                                      save_fn=save_fn,
-                                      batchsize=batchsize,
-                                      num_batches=num_batches,
                                       hide_progbar=hide_progbar,)
 
-    def harvest_combos_reap(self,
-                            crop_name=None,
-                            crop_dir=None,
+    def harvest_combos_reap(self, crop,
                             save=True,
                             overwrite=None):
         """
         """
 
-        self.runner.reap_combos(crop_name=crop_name, crop_dir=crop_dir)
+        self.runner.reap_combos(crop)
 
         sync_with_disk = save and self.data_name is not None
         self.merge_into_full_ds(self.last_ds, overwrite=overwrite,
                                 sync_with_disk=sync_with_disk)
 
-    def harvest_combos_sow_and_reap(self, combos, *, constants=(),
-                                    crop_name=None,
-                                    crop_dir=None,
-                                    save_fn=None,
-                                    batchsize=None,
-                                    num_batches=None,
+    def harvest_combos_sow_and_reap(self, crop, combos, constants=(),
                                     save=True,
                                     overwrite=None):
         """
         """
 
-        self.runner.sow_and_reap_combos(
-            combos,
-            constants=constants,
-            crop_name=crop_name,
-            crop_dir=crop_dir,
-            save_fn=save_fn,
-            batchsize=batchsize,
-            num_batches=num_batches,
-        )
+        self.runner.sow_and_reap_combos(crop, combos)
         sync_with_disk = save and self.data_name is not None
         self.merge_into_full_ds(self.last_ds, overwrite=overwrite,
                                 sync_with_disk=sync_with_disk)

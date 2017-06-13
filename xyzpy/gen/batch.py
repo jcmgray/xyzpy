@@ -28,6 +28,8 @@ class XYZError(Exception):
     pass
 
 
+# --------------------------------- parsing --------------------------------- #
+
 def parse_crop_details(fn, crop_name, crop_dir):
     """Work out how to structure the sowed data.
 
@@ -43,19 +45,19 @@ def parse_crop_details(fn, crop_name, crop_dir):
 
     Returns
     -------
-        field_folder : str
-            Full path to the field-folder.
+        crop_folder : str
+            Full path to the crop-folder.
     """
     if crop_name is None:
         if fn is None:
             raise ValueError("Either `fn` or `crop_name` must be give.")
         crop_name = _get_fn_name(fn)
 
-    field_folder = os.path.join(
+    crop_folder = os.path.join(
         crop_dir if crop_dir is not None else os.getcwd(),
         ".xyz-{}".format(crop_name))
 
-    return field_folder
+    return crop_folder
 
 
 class Crop(object):
@@ -65,47 +67,24 @@ class Crop(object):
 
     def __init__(self, *,
                  fn=None,
-                 crop_name=None,
-                 crop_dir=None,
+                 name=None,
+                 folder=None,
                  save_fn=None,
                  batchsize=None,
                  num_batches=None):
-
-        self.fn = fn
-        self.crop_name = crop_name
-        self.crop_dir = crop_dir
-        self.save_fn = save_fn
-        self.batchsize = batchsize
-        self.num_batches = num_batches
-
-        self.field_folder = parse_crop_details(fn, crop_name, crop_dir)
-
-
-class Sower(object):
-    """Class for sowing a 'field' of batched combos to then 'grow' (on any
-    number of workers sharing the filesystem) and then reap.
-    """
-
-    def __init__(self, *,
-                 fn=None,
-                 crop_name=None,
-                 crop_dir=None,
-                 save_fn=None,
-                 batchsize=None,
-                 num_batches=None,
-                 combos=None):
         """
+
         Parameters
         ----------
             fn : callable (optional)
-                Target function - `crop_name` will be inferred from this if
+                Target function - Crop `name` will be inferred from this if
                 not given explicitly. If given, `Sower` will also default
                 to saving a version of `fn` to disk for `batch.grow` to use.
-            crop_name : str (optional)
+            name : str (optional)
                 Custom name for this set of runs - must be given if `fn`
                 is not.
-            crop_dir : str (optional)
-                If given, alternative directory to put the ".xyz-{crop_name}/"
+            folder : str (optional)
+                If given, alternative directory to put the ".xyz-{name}/"
                 folder in with all the cases and results.
             save_fn : bool (optional)
                 Whether to save the function to disk for `batch.grow` to use.
@@ -118,67 +97,60 @@ class Sower(object):
                 How many total batches to aim for, cannot be specified if
                 `batchsize` is.
         """
+
         self.fn = fn
-        self.field_folder = parse_crop_details(fn, crop_name, crop_dir)
-        self.combos = combos
-        self.choose_batch_settings(batchsize, num_batches)
+        self.name = name
+        self.folder = folder
+        self.save_fn = save_fn
+        self.batchsize = batchsize
+        self.num_batches = num_batches
+
+        # Work out the full directory for the crop
+        self.location = parse_crop_details(fn, name, folder)
 
         # Save function so it can be automatically loaded with all deps?
         if (fn is None) and (save_fn is True):
             raise ValueError("Must specify a function for it to be saved!")
         self.save_fn = save_fn is not False
 
-        # Internal
-        self._batch_cases = []
-        self._counter = 0
-        self._batch_counter = 0
-
-    def choose_batch_settings(self, batchsize, num_batches):
+    def choose_batch_settings(self, combos):
         """Work out how to divide all cases into batches, i.e. ensure
         that ``batchsize * num_batches >= num_cases``.
         """
-        n = prod(len(x) for _, x in self.combos)
+        n = prod(len(x) for _, x in combos)
 
-        if (batchsize is not None) and (num_batches is not None):
+        if (self.batchsize is not None) and (self.num_batches is not None):
             raise ValueError("`batchsize` and `num_batches` cannot both be "
                              "specified.")
 
         # Decide based on batchsize
-        elif num_batches is None:
-            batchsize = batchsize if batchsize is not None else 1
+        elif self.num_batches is None:
+            if self.batchsize is None:
+                self.batchsize = 1
 
-            if not isinstance(batchsize, int):
+            if not isinstance(self.batchsize, int):
                 raise TypeError("`batchsize` must be an integer.")
-            if batchsize < 1:
+            if self.batchsize < 1:
                 raise ValueError("`batchsize` must be >= 1.")
 
-            num_batches = (n // batchsize) + int(n % batchsize != 0)
+            self.num_batches = ((n // self.batchsize) +
+                                int(n % self.batchsize != 0))
 
         # Decide based on num_batches:
         else:
-            if not isinstance(num_batches, int):
+            if not isinstance(self.num_batches, int):
                 raise TypeError("`num_batches` must be an integer.")
-            if num_batches < 1:
+            if self.num_batches < 1:
                 raise ValueError("`num_batches` must be >= 1.")
 
-            batchsize = (n // num_batches) + int(n % num_batches != 0)
-
-        self.batchsize, self.num_batches = batchsize, num_batches
+            self.batchsize = ((n // self.num_batches) +
+                              int(n % self.num_batches != 0))
 
     def ensure_dirs_exists(self):
-        """Make sure the directory structure for this field exists.
+        """Make sure the directory structure for this crop exists.
         """
-        os.makedirs(os.path.join(self.field_folder, "cases"), exist_ok=True)
-        os.makedirs(os.path.join(self.field_folder, "results"), exist_ok=True)
-
-    def save_info(self):
-        """Save information about the sowed cases.
-        """
-        joblib.dump({
-            'combos': self.combos,
-            'batchsize': self.batchsize,
-            'num_batches': self.num_batches,
-        }, os.path.join(self.field_folder, INFO_NM))
+        os.makedirs(os.path.join(self.location, "cases"), exist_ok=True)
+        os.makedirs(os.path.join(self.location, "results"), exist_ok=True)
 
     def save_function_to_disk(self):
         """Save the base function to disk using cloudpickle
@@ -186,31 +158,69 @@ class Sower(object):
         import cloudpickle
 
         joblib.dump(cloudpickle.dumps(self.fn),
-                    os.path.join(self.field_folder, FNCT_NM))
+                    os.path.join(self.location, FNCT_NM))
+
+    def save_info(self, combos):
+        """Save information about the sowed cases.
+        """
+        joblib.dump({
+            'combos': combos,
+            'batchsize': self.batchsize,
+            'num_batches': self.num_batches,
+        }, os.path.join(self.location, INFO_NM))
+
+    def prepare(self, combos):
+        self.ensure_dirs_exists()
+        if self.save_fn:
+            self.save_function_to_disk()
+        self.save_info(combos)
+
+
+class Sower(object):
+    """Class for sowing a 'crop' of batched combos to then 'grow' (on any
+    number of workers sharing the filesystem) and then reap.
+    """
+
+    def __init__(self, crop, combos):
+        """
+        Parameters
+        ----------
+            crop : xyzpy.batch.Crop instance
+                Description of where and how to store the cases and results.
+            combos : mapping_like
+                Description of combinations from which to sow cases from.
+
+        """
+        self.combos = combos
+        self.crop = crop
+        self.crop.choose_batch_settings(combos)
+        # Internal
+        self._batch_cases = []
+        self._counter = 0
+        self._batch_counter = 0
 
     def save_batch(self):
         """Save the current batch of cases to disk using joblib.dump
          and start the next batch.
         """
         self._batch_counter += 1
-        joblib.dump(self._batch_cases,
-                    os.path.join(self.field_folder, "cases",
-                                 BTCH_NM.format(self._batch_counter)))
+        joblib.dump(
+            self._batch_cases,
+            os.path.join(self.crop.location,
+                         "cases",
+                         BTCH_NM.format(self._batch_counter)))
 
-    # Context manager
+    # Context manager #
 
     def __enter__(self):
-        self.ensure_dirs_exists()
-        self.save_info()
-        if self.save_fn:
-            self.save_function_to_disk()
+        self.crop.prepare(self.combos)
         return self
 
     def __call__(self, **kwargs):
         self._batch_cases.append(kwargs)
         self._counter += 1
 
-        if self._counter == self.batchsize:
+        if self._counter == self.crop.batchsize:
             self.save_batch()
             self._batch_cases = []
             self._counter = 0
@@ -221,14 +231,7 @@ class Sower(object):
             self.save_batch()
 
 
-def combos_sow(combos, *, constants=None,
-               fn=None,
-               crop_name=None,
-               crop_dir=None,
-               save_fn=None,
-               batchsize=None,
-               num_batches=None,
-               hide_progbar=False):
+def combos_sow(crop, combos, constants=None, hide_progbar=False):
 
     combos = _parse_combos(combos)
     constants = _parse_constants(constants)
@@ -236,23 +239,12 @@ def combos_sow(combos, *, constants=None,
     # Sort to ensure order remains same for reaping results (don't hash kwargs)
     combos = sorted(combos, key=lambda x: x[0])
 
-    sow_opts = {
-        'fn': fn,
-        'crop_name': crop_name,
-        'crop_dir': crop_dir,
-        'batchsize': batchsize,
-        'num_batches': num_batches,
-        'save_fn': save_fn,
-        'combos': combos,
-    }
-
-    with Sower(**sow_opts) as s:
-        _combo_runner(fn=s, combos=combos, constants=constants,
+    with Sower(crop, combos) as sow_fn:
+        _combo_runner(fn=sow_fn, combos=combos, constants=constants,
                       hide_progbar=hide_progbar)
 
 
-def grow(batch_number, fn=None, crop_name=None, crop_dir=None,
-         check_mpi=True):
+def grow(batch_number, crop=None, fn=None, check_mpi=True):
     """Automatically process a batch of cases into results. Should be run in an
     ".xyz-{fn_name}" folder.
 
@@ -260,39 +252,35 @@ def grow(batch_number, fn=None, crop_name=None, crop_dir=None,
     ----------
         batch_number : int
             Which batch to 'grow' into a set of results.
+        crop : xyzpy.batch.Crop instance
+            Description of where and how to store the cases and results.
         fn : callable, optional
             If specified, the function used to generate the results, otherwise
             the function will be loaded from disk.
-        crop_name : str, optional
-            Name of the set of results, will be taken as the name of ``fn``
-            if not given.
-        crop_dir : str, optional
-            Directory within which the 'field' is, taken as current working
-            directory if not given.
         check_mpi : bool, optional
             Whether to check if the process is rank 0 and only save results if
             so - allows mpi functions to be simply used. Defaults to true,
             this should only be turned off if e.g. a pool of workers is being
             used to run different ``grow`` instances.
     """
-    if fn is crop_name is crop_dir is None:
-        field_folder = os.getcwd()
+    if crop is None:
         if os.path.relpath('.', '..')[:5] != ".xyz-":
             raise XYZError("`grow` should be run in a "
                            "\"{crop_dir}/.xyz-{crop_name}\" folder, else "
                            "`crop_dir` and `crop_name` (or `fn`) should be "
                            "specified.")
+        crop_location = os.getcwd()
     else:
-        field_folder = parse_crop_details(fn, crop_name, crop_dir)
+        crop_location = crop.location
 
     # load function
     if fn is None:
         fn = cloudpickle.loads(
-            joblib.load(os.path.join(field_folder, FNCT_NM)))
+            joblib.load(os.path.join(crop_location, FNCT_NM)))
 
     # load cases to evaluate
     cases = joblib.load(
-        os.path.join(field_folder, "cases", BTCH_NM.format(batch_number)))
+        os.path.join(crop_location, "cases", BTCH_NM.format(batch_number)))
 
     # process each case
     results = tuple(fn(**kws) for kws in cases)
@@ -308,11 +296,13 @@ def grow(batch_number, fn=None, crop_name=None, crop_dir=None,
 
     if rank == 0:
         # save to results
-        joblib.dump(results, os.path.join(field_folder, "results",
+        joblib.dump(results, os.path.join(crop_location,
+                                          "results",
                                           RSLT_NM.format(batch_number)))
 
         # delete set of runs
-        os.remove(os.path.join(field_folder, "cases",
+        os.remove(os.path.join(crop_location,
+                               "cases",
                                BTCH_NM.format(batch_number)))
 
 
@@ -321,30 +311,21 @@ def grow(batch_number, fn=None, crop_name=None, crop_dir=None,
 # --------------------------------------------------------------------------- #
 
 class Reaper(object):
-    """
+    """Class that acts as a stateful function to retrieve already sown and
+    grow results.
     """
 
-    def __init__(self, fn=None, crop_name=None, crop_dir=None,
-                 num_batches=None):
+    def __init__(self, crop, num_batches):
         """Class for retrieving the batched, flat, 'grown' results.
 
         Parameters
         ----------
-            fn : callable (optional)
-                Target function - `crop_name` will be inferred from this if
-                not given explicitly.
-            crop_name : str (optional)
-                Custom name for the set of batches - must be given if `fn`
-                is not.
-            crop_dir : str (optional)
-                If given, alternative to current working directory for results
-                to be reaped from.
+            crop : xyzpy.batch.Crop instance
+                Description of where and how to store the cases and results.
         """
-        self.field_folder = parse_crop_details(fn, crop_name, crop_dir)
+        self.crop = crop
 
-        files = (os.path.join(self.field_folder,
-                              "results",
-                              RSLT_NM.format(i))
+        files = (os.path.join(self.crop.location, "results", RSLT_NM.format(i))
                  for i in range(1, num_batches + 1))
 
         def wait_to_load(x):
@@ -365,27 +346,33 @@ class Reaper(object):
         return next(self.results)
 
     def __exit__(self, exception_type, exception_value, traceback):
-        if tuple(*self.results):
-            raise XYZError("Not all results reaped!")
-        else:
-            shutil.rmtree(self.field_folder)
+        # if tuple(*self.results):
+        #     raise XYZError("Not all results reaped!")
+        # else:
+        #     shutil.rmtree(self.crop.location)
+        pass
 
 
-def combos_reap(fn=None, crop_name=None, crop_dir=None):
+def combos_reap(crop):
+    """Reap already sown and grow results from specified crop.
+
+    Parameters
+    ----------
+        crop : xyzpy.batch.Crop instance
+            Description of where and how to store the cases and results.
     """
-    """
-    field_folder = parse_crop_details(fn, crop_name, crop_dir)
     # Load same combinations as cases saved with
-    settings = joblib.load(os.path.join(field_folder, INFO_NM))
+    settings = joblib.load(os.path.join(crop.location, INFO_NM))
 
-    with Reaper(fn, crop_name, crop_dir,
-                num_batches=settings['num_batches']) as r:
-        results = _combo_runner(fn=r, combos=settings['combos'], constants={})
+    with Reaper(crop, num_batches=settings['num_batches']) as reap_fn:
+        results = _combo_runner(fn=reap_fn,
+                                combos=settings['combos'],
+                                constants={})
 
     return results
 
 
-def combos_reap_to_ds(fn=None, crop_name=None, crop_dir=None, *,
+def combos_reap_to_ds(crop,
                       var_names=None,
                       var_dims=None,
                       var_coords=None,
@@ -396,15 +383,8 @@ def combos_reap_to_ds(fn=None, crop_name=None, crop_dir=None, *,
 
     Parameters
     ----------
-        fn : callable (optional)
-            Target function - `crop_name` will be inferred from this if
-            not given explicitly.
-        crop_name : str (optional)
-            Custom name for the set of batches - must be given if `fn`
-            is not.
-        crop_dir : str (optional)
-            If given, alternative to current working directory for results
-            to be reaped from.
+        crop : xyzpy.batch.Crop instance
+            Description of where and how to store the cases and results.
         var_names : str, sequence of strings, or None
             Variable name(s) of the output(s) of `fn`, set to None if
             fn outputs data already labelled in a Dataset or DataArray.
@@ -422,24 +402,20 @@ def combos_reap_to_ds(fn=None, crop_name=None, crop_dir=None, *,
             Like `constants` but they will not be recorded.
         attrs : mapping, optional
             Any extra attributes to store.
-        **combo_runner_settings: dict-like, optional
-            Arguments supplied to `combo_runner`.
 
     Returns
     -------
         xarray.Dataset
             Multidimensional labelled dataset contatining all the results.
     """
-    field_folder = parse_crop_details(fn, crop_name, crop_dir)
     # Load same combinations as cases saved with
-    settings = joblib.load(os.path.join(field_folder, INFO_NM))
+    settings = joblib.load(os.path.join(crop.location, INFO_NM))
 
     constants = _parse_constants(constants)
     attrs = _parse_attrs(attrs)
 
-    with Reaper(fn, crop_name, crop_dir,
-                num_batches=settings['num_batches']) as r:
-        ds = combo_runner_to_ds(fn=r,
+    with Reaper(crop, num_batches=settings['num_batches']) as reap_fn:
+        ds = combo_runner_to_ds(fn=reap_fn,
                                 combos=settings['combos'],
                                 var_names=var_names,
                                 var_dims=var_dims,
@@ -452,57 +428,38 @@ def combos_reap_to_ds(fn=None, crop_name=None, crop_dir=None, *,
     return ds
 
 
-def combos_sow_and_reap(combos, *, constants=None,
-                        fn=None,
-                        crop_name=None,
-                        crop_dir=None,
-                        save_fn=None,
-                        batchsize=None,
-                        num_batches=None):
+def combos_sow_and_reap(crop, combos, constants=None):
     """Sow combos and immediately (wait to) reap the results.
+
+    Parameters
+    ----------
+        crop : xyzpy.batch.Crop instance
+            Description of where and how to store the cases and results.
+        combos : mapping_like
+            Description of combinations from which to sow cases from.
     """
-
-    combos_sow(combos,
-               constants=constants,
-               fn=fn,
-               crop_name=crop_name,
-               crop_dir=crop_dir,
-               save_fn=save_fn,
-               batchsize=batchsize,
-               num_batches=num_batches,
-               hide_progbar=True)
-
-    return combos_reap(fn=fn, crop_name=crop_name, crop_dir=crop_dir)
+    combos_sow(crop, combos, constants=constants, hide_progbar=True)
+    return combos_reap(crop)
 
 
-def combos_sow_and_reap_to_ds(combos, *, constants=None,
-                              fn=None,
-                              crop_name=None,
-                              crop_dir=None,
-                              save_fn=None,
-                              batchsize=None,
-                              num_batches=None,
+def combos_sow_and_reap_to_ds(crop, combos, constants=None,
                               var_names=None,
                               var_dims=None,
                               var_coords=None,
                               attrs=None,
                               parse=True):
-    """
-    """
+    """Sow combos and immediately (wait to) reap the results to a dataset.
 
-    combos_sow(combos,
-               constants=constants,
-               fn=fn,
-               crop_name=crop_name,
-               crop_dir=crop_dir,
-               save_fn=save_fn,
-               batchsize=batchsize,
-               num_batches=num_batches,
-               hide_progbar=True)
+    Parameters
+    ----------
+        crop : xyzpy.batch.Crop instance
+            Description of where and how to store the cases and results.
+        combos : mapping_like
+            Description of combinations from which to sow cases from.
 
-    return combos_reap_to_ds(fn=fn,
-                             crop_name=crop_name,
-                             crop_dir=crop_dir,
+    """
+    combos_sow(crop, combos, constants=constants, hide_progbar=True)
+    return combos_reap_to_ds(crop,
                              var_names=var_names,
                              var_dims=var_dims,
                              var_coords=var_coords,
