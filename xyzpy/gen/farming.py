@@ -26,6 +26,7 @@ from .prepare import (
 from .combo_runner import combo_runner_to_ds
 from .case_runner import case_runner_to_ds
 from .batch import (
+    Crop,
     combos_sow,
     combos_reap_to_ds,
     combos_sow_and_reap_to_ds,
@@ -197,9 +198,27 @@ class Runner(object):
             **{**self.default_runner_settings, **runner_settings})
         return self.last_ds
 
+    def Crop(self,
+             name=None,
+             folder=None,
+             save_fn=None,
+             batchsize=None,
+             num_batches=None):
+        """
+        """
+        return Crop(fn=self.fn,
+                    name=name,
+                    folder=folder,
+                    save_fn=save_fn,
+                    batchsize=batchsize,
+                    num_batches=num_batches)
+
     def sow_combos(self, crop, combos, constants=(), hide_progbar=False):
         """
         """
+        if crop.fn is None:
+            crop.fn = self.fn
+
         combos_sow(crop, combos,
                    constants={**self._constants, **dict(constants)},
                    hide_progbar=hide_progbar)
@@ -220,6 +239,8 @@ class Runner(object):
     def sow_and_reap_combos(self, crop, combos, constants=()):
         """
         """
+        if crop.fn is None:
+            crop.fn = self.fn
 
         self.last_ds = combos_sow_and_reap_to_ds(
             crop, combos,
@@ -389,6 +410,21 @@ class Harvester(object):
         sync_with_disk = save and self.data_name is not None
         self.merge_into_full_ds(self.last_ds, overwrite=overwrite,
                                 sync_with_disk=sync_with_disk)
+
+    def Crop(self,
+             name=None,
+             folder=None,
+             save_fn=None,
+             batchsize=None,
+             num_batches=None):
+        """
+        """
+        return Crop(fn=self.runner.fn,
+                    name=name,
+                    folder=folder,
+                    save_fn=save_fn,
+                    batchsize=batchsize,
+                    num_batches=num_batches)
 
     def sow_combos(self, crop, combos, constants=(), hide_progbar=False):
         """

@@ -98,7 +98,7 @@ class Crop(object):
                 `batchsize` is.
         """
 
-        self.fn = fn
+        self._fn = fn
         self.name = name
         self.folder = folder
         self.save_fn = save_fn
@@ -112,6 +112,23 @@ class Crop(object):
         if (fn is None) and (save_fn is True):
             raise ValueError("Must specify a function for it to be saved!")
         self.save_fn = save_fn is not False
+
+    def _get_fn(self):
+        return self._fn
+
+    def _set_fn(self, fn):
+        if self.save_fn is None and fn is not None:
+            self.save_fn = True
+        self._fn = fn
+
+    def _del_fn(self):
+        self._fn = None
+        self.save_fn = False
+
+    fn = property(_get_fn, _set_fn, _del_fn,
+                  "Function to save with the Crop for automatic loading and "
+                  "running. Default crop name will be inferred from this if"
+                  "not given explicitly as well.")
 
     def choose_batch_settings(self, combos):
         """Work out how to divide all cases into batches, i.e. ensure
@@ -157,7 +174,7 @@ class Crop(object):
         """
         import cloudpickle
 
-        joblib.dump(cloudpickle.dumps(self.fn),
+        joblib.dump(cloudpickle.dumps(self._fn),
                     os.path.join(self.location, FNCT_NM))
 
     def save_info(self, combos):
@@ -346,11 +363,10 @@ class Reaper(object):
         return next(self.results)
 
     def __exit__(self, exception_type, exception_value, traceback):
-        # if tuple(*self.results):
-        #     raise XYZError("Not all results reaped!")
-        # else:
-        #     shutil.rmtree(self.crop.location)
-        pass
+        if tuple(*self.results):
+            raise XYZError("Not all results reaped!")
+        else:
+            shutil.rmtree(self.crop.location)
 
 
 def combos_reap(crop):
