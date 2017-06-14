@@ -647,7 +647,7 @@ def qsub_grow(crop,
     with open(script_file, mode='w') as f:
         f.write(script)
 
-    subprocess.run(['qsub', script_file], shell=True)
+    subprocess.run(['qsub', script_file])
 
     os.remove(script_file)
 
