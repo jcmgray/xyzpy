@@ -77,6 +77,9 @@ class TestSowerReaper:
             for i in range(1, 4):
                 grow(i, Crop(folder=tdir, name='foo_add'))
 
+                if i == 1:
+                    assert crop.missing_results() == (2, 3,)
+
             # reap results
             results = combos_reap(crop)
 

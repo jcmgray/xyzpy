@@ -193,21 +193,32 @@ class Crop(object):
             self.save_function_to_disk()
         self.save_info(combos)
 
+    def calc_progress(self):
+        self.num_cases = len(glob(
+            os.path.join(self.location, "cases", BTCH_NM.format("*"))))
+        self.num_results = len(glob(
+            os.path.join(self.location, "results", RSLT_NM.format("*"))))
+        self.total = self.num_cases + self.num_results
+
+    def missing_results(self):
+        self.calc_progress()
+        return tuple(filter(
+            lambda x: os.path.isfile(os.path.join(self.location,
+                                                  "cases",
+                                                  BTCH_NM.format(x))),
+            range(1, self.total + 1)
+        ))
+
     def __repr__(self):
         # Location and name, underlined
         if not os.path.exists(self.location):
-            return self.location + "\nNot yet sown or already reaped."
+            return self.location + "\n * Not yet sown or already reaped *"
 
         loc_len = len(self.location)
         name_len = len(self.name)
 
-        # Progress
-        num_cases = len(glob(
-            os.path.join(self.location, "cases", BTCH_NM.format("*"))))
-        num_results = len(glob(
-            os.path.join(self.location, "results", RSLT_NM.format("*"))))
-        total = num_cases + num_results
-        percentage = 100 * num_results / total
+        self.calc_progress()
+        percentage = 100 * self.num_results / self.total
 
         # Progress bar
         total_bars = 20
@@ -220,8 +231,8 @@ class Crop(object):
             location=self.location,
             under_crop_dir="-" * (loc_len - name_len),
             under_crop_name="=" * name_len,
-            num_results=num_results,
-            total=total,
+            num_results=self.num_results,
+            total=self.total,
             bsz=self.batchsize,
             done_bars="#" * bars,
             not_done_spaces=" " * (total_bars - bars),
