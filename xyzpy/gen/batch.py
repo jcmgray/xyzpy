@@ -31,7 +31,7 @@ class XYZError(Exception):
 
 # --------------------------------- parsing --------------------------------- #
 
-def parse_crop_details(fn, crop_name, crop_dir):
+def parse_crop_details(fn, crop_name, crop_parent):
     """Work out how to structure the sowed data.
 
     Parameters
@@ -40,13 +40,13 @@ def parse_crop_details(fn, crop_name, crop_dir):
             Function to infer name crop_name from, if not given.
         crop_name : str (optional)
             Specific name to give this set of runs.
-        crop_dir : str (optional)
+        crop_parent : str (optional)
             Specific directory to put the ".xyz-{crop_name}/" folder in
             with all the cases and results.
 
     Returns
     -------
-        crop_folder : str
+        crop_location : str
             Full path to the crop-folder.
     """
     if crop_name is None:
@@ -54,11 +54,10 @@ def parse_crop_details(fn, crop_name, crop_dir):
             raise ValueError("Either `fn` or `crop_name` must be give.")
         crop_name = _get_fn_name(fn)
 
-    crop_folder = os.path.join(
-        crop_dir if crop_dir is not None else os.getcwd(),
-        ".xyz-{}".format(crop_name))
+    crop_parent = crop_parent if crop_parent is not None else os.getcwd()
+    crop_location = os.path.join(crop_parent, ".xyz-{}".format(crop_name))
 
-    return crop_folder
+    return crop_location, crop_name, crop_parent
 
 
 class Crop(object):
@@ -69,7 +68,7 @@ class Crop(object):
     def __init__(self, *,
                  fn=None,
                  name=None,
-                 folder=None,
+                 parent=None,
                  save_fn=None,
                  batchsize=None,
                  num_batches=None):
@@ -84,7 +83,7 @@ class Crop(object):
             name : str (optional)
                 Custom name for this set of runs - must be given if `fn`
                 is not.
-            folder : str (optional)
+            parent : str (optional)
                 If given, alternative directory to put the ".xyz-{name}/"
                 folder in with all the cases and results.
             save_fn : bool (optional)
@@ -101,13 +100,14 @@ class Crop(object):
 
         self._fn = fn
         self.name = name
-        self.folder = folder
+        self.parent = parent
         self.save_fn = save_fn
         self.batchsize = batchsize
         self.num_batches = num_batches
 
         # Work out the full directory for the crop
-        self.location = parse_crop_details(fn, name, folder)
+        self.location, self.name, self.parent = \
+            parse_crop_details(fn, name, parent)
 
         # Save function so it can be automatically loaded with all deps?
         if (fn is None) and (save_fn is True):
@@ -330,8 +330,8 @@ def grow(batch_number, crop=None, fn=None, check_mpi=True, hide_progbar=False):
     if crop is None:
         if os.path.relpath('.', '..')[:5] != ".xyz-":
             raise XYZError("`grow` should be run in a "
-                           "\"{crop_dir}/.xyz-{crop_name}\" folder, else "
-                           "`crop_dir` and `crop_name` (or `fn`) should be "
+                           "\"{crop_parent}/.xyz-{crop_name}\" folder, else "
+                           "`crop_parent` and `crop_name` (or `fn`) should be "
                            "specified.")
         crop_location = os.getcwd()
     else:
@@ -531,3 +531,126 @@ def combos_sow_and_reap_to_ds(crop, combos, constants=None,
                              constants=constants,
                              attrs=attrs,
                              parse=parse)
+
+
+# --------------------------------------------------------------------------- #
+#                     Automatic Batch Submission Scripts                      #
+# --------------------------------------------------------------------------- #
+
+_BASE_QSUB_SCRIPT = """#!/bin/bash -l
+#$ -S /bin/bash
+#$ -l h_rt={hours}:{minutes}:{seconds}
+#$ -l mem={gigabytes}G
+#$ -l tmpfs={temp_gigabytes}G
+#$ -N {name}
+mkdir -p {output_directory}
+#$ -wd {output_directory}
+#$ -pe smp {num_threads}
+#$ -t {run_start}-{run_stop}
+cd {working_directory}
+
+python <<EOF
+from xyzpy.gen.batch import grow, Crop
+crop = Crop(name='{name}')
+crop = grow($SGE_TASK_ID, crop=crop)
+EOF
+"""
+
+_BASE_QSUB_SCRIPT_MISSING = """#!/bin/bash -l
+#$ -S /bin/bash
+#$ -l h_rt={hours}:{minutes}:{seconds}
+#$ -l mem={gigabytes}G
+#$ -l tmpfs={temp_gigabytes}G
+#$ -N {name}
+mkdir -p {output_directory}
+#$ -wd {output_directory}
+#$ -pe smp {num_threads}
+#$ -t {run_start}-{run_stop}
+cd {working_directory}
+
+python <<EOF
+from xyzpy.gen.batch import grow, Crop
+crop = Crop(name='{name}')
+batch_ids = {batch_ids}
+crop = grow(batch_ids[$SGE_TASK_ID - 1], crop=crop)
+EOF
+"""
+
+
+def gen_qsub_script(crop,
+                    hours=None,
+                    minutes=None,
+                    seconds=None,
+                    gigabytes=2,
+                    temp_gigabytes=1,
+                    output_directory="$HOME/Scratch/output",
+                    num_threads=1):
+    """
+    """
+
+    if hours is minutes is seconds is None:
+        hours, minutes, seconds = 0, 20, 0
+    else:
+        hours = 0 if hours is None else int(hours)
+        minutes = 0 if minutes is None else int(minutes)
+        seconds = 0 if seconds is None else int(seconds)
+
+    crop.calc_progress()
+
+    opts = {
+        'hours': hours,
+        'minutes': minutes,
+        'seconds': seconds,
+        'gigabytes': gigabytes,
+        'temp_gigabytes': temp_gigabytes,
+        'name': crop.name,
+        'output_directory': output_directory,
+        'working_directory': crop.parent,
+        'num_threads': num_threads,
+        'run_start': 1,
+    }
+
+    if crop.num_results == 0:
+        script = _BASE_QSUB_SCRIPT
+        opts['run_stop'] = crop.total
+    else:
+        script = _BASE_QSUB_SCRIPT_MISSING
+        batch_ids = crop.missing_results()
+        opts['run_stop'] = len(batch_ids)
+        opts['batch_ids'] = batch_ids
+
+    return script.format(**opts)
+
+
+def qsub_grow(crop,
+              hours=None,
+              minutes=None,
+              seconds=None,
+              gigabytes=2,
+              temp_gigabytes=1,
+              output_directory="$HOME/Scratch/output",
+              num_threads=1):
+    import subprocess
+    from tempfile import NamedTemporaryFile
+
+    script = gen_qsub_script(crop,
+                             hours=hours,
+                             minutes=minutes,
+                             seconds=seconds,
+                             gigabytes=gigabytes,
+                             temp_gigabytes=temp_gigabytes,
+                             output_directory=output_directory,
+                             num_threads=num_threads)
+
+    script_file = os.path.join(crop.location, "__qsub_script__.sh")
+
+    with open(script_file, mode='w') as f:
+        f.write(script)
+
+    subprocess.run(['qsub', script_file], shell=True)
+
+    os.remove(script_file)
+
+
+Crop.gen_qsub_script = gen_qsub_script
+Crop.qsub_grow = qsub_grow

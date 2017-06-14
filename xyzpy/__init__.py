@@ -28,6 +28,15 @@ from .gen.case_runner import (
     find_missing_cases,
     fill_missing_cases
 )
+from .gen.batch import(
+    Crop,
+    combos_sow,
+    grow,
+    combos_reap,
+    combos_reap_to_ds,
+    combos_sow_and_reap,
+    combos_sow_and_reap_to_ds,
+)
 from .gen.farming import (
     Runner,
     Harvester
@@ -77,6 +86,13 @@ __all__ = ["Runner",
            "case_runner_to_ds",
            "find_missing_cases",
            "fill_missing_cases",
+           "Crop",
+           "combos_sow",
+           "grow",
+           "combos_reap",
+           "combos_reap_to_ds",
+           "combos_sow_and_reap",
+           "combos_sow_and_reap_to_ds",
            "cache_to_disk",
            "save_ds",
            "load_ds",
