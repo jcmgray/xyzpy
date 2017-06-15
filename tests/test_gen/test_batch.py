@@ -44,7 +44,6 @@ class TestSowerReaper:
             assert crop_loc[-len(expected):] == expected
 
     def test_checks(self):
-
         with pytest.raises(ValueError):
             Crop(name='custom', save_fn=True)
 
@@ -55,6 +54,23 @@ class TestSowerReaper:
         with pytest.raises(ValueError):
             c = Crop(fn=foo_add, save_fn=False, batchsize=-1)
             c.choose_batch_settings([('a', [1, 2])])
+
+        with pytest.raises(ValueError):
+            c = Crop(fn=foo_add, save_fn=False, batchsize=1, num_batches=2)
+            c.choose_batch_settings([('a', [1, 2, 3])])
+
+        with pytest.raises(ValueError):
+            c = Crop(fn=foo_add, save_fn=False, batchsize=2, num_batches=3)
+            c.choose_batch_settings([('a', [1, 2, 3])])
+
+        c = Crop(fn=foo_add, save_fn=False, batchsize=1, num_batches=3)
+        c.choose_batch_settings([('a', [1, 2, 3])])
+
+        c = Crop(fn=foo_add, save_fn=False, batchsize=2, num_batches=2)
+        c.choose_batch_settings([('a', [1, 2, 3])])
+
+        c = Crop(fn=foo_add, save_fn=False, batchsize=3, num_batches=1)
+        c.choose_batch_settings([('a', [1, 2, 3])])
 
         with pytest.raises(XYZError):
             grow(1)

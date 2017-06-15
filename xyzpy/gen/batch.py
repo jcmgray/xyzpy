@@ -140,8 +140,12 @@ class Crop(object):
         n = prod(len(x) for _, x in combos)
 
         if (self.batchsize is not None) and (self.num_batches is not None):
-            raise ValueError("`batchsize` and `num_batches` cannot both be "
-                             "specified.")
+            # Check that they are set correctly
+            pos_tot = self.batchsize * self.num_batches
+            if not (n <= pos_tot < n + self.batchsize):
+                raise ValueError("`batchsize` and `num_batches` cannot both"
+                                 "be " "specified if they do not not multiply"
+                                 "to the correct number of total cases.")
 
         # Decide based on batchsize
         elif self.num_batches is None:
@@ -418,9 +422,10 @@ class Reaper(object):
         return next(self.results)
 
     def __exit__(self, exception_type, exception_value, traceback):
-        self.crop.calc_progress()
-        if self.crop.num_cases != 0:
+        # Check everything gone acccording to plan
+        if tuple(self.results):
             raise XYZError("Not all results reaped!")
+        # Clean up everything
         else:
             shutil.rmtree(self.crop.location)
 
