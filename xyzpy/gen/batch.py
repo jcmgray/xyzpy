@@ -597,7 +597,7 @@ def gen_qsub_script(crop,
     if output_directory is None:
         from os.path import expanduser
         home = expanduser("~")
-        output_directory = os.join(home, 'Scratch', 'output')
+        output_directory = os.path.join(home, 'Scratch', 'output')
 
     crop.calc_progress()
 
@@ -632,7 +632,7 @@ def qsub_grow(crop,
               seconds=None,
               gigabytes=2,
               temp_gigabytes=1,
-              output_directory="$HOME/Scratch/output",
+              output_directory=None,
               num_threads=1):
     import subprocess
     from tempfile import NamedTemporaryFile
