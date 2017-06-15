@@ -636,7 +636,7 @@ def gen_qsub_script(crop,
 
     if crop.num_results == 0:
         script = _BASE_QSUB_SCRIPT
-        opts['run_stop'] = crop.total
+        opts['run_stop'] = crop.num_batches
     else:
         script = _BASE_QSUB_SCRIPT_MISSING
         batch_ids = crop.missing_results()
