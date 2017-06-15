@@ -40,7 +40,7 @@ class TestSowerReaper:
             with pytest.raises(ValueError):
                 parse_crop_details(fn, crop_name, crop_loc)
         else:
-            crop_loc = parse_crop_details(fn, crop_name, crop_loc)
+            crop_loc = parse_crop_details(fn, crop_name, crop_loc)[0]
             assert crop_loc[-len(expected):] == expected
 
     def test_checks(self):

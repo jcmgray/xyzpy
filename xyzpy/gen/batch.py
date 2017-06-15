@@ -62,7 +62,9 @@ def parse_crop_details(fn, crop_name, crop_parent):
 
 class Crop(object):
     """Encapsulates all the details describing a single 'crop', that is,
-    its location, name, and batch size/number.
+    its location, name, and batch size/number. Also allows tracking of
+    crop's progress, and experimentally, automatic submission of
+    workers to grid engine to complete un-grown cases.
     """
 
     def __init__(self, *,
@@ -187,6 +189,11 @@ class Crop(object):
             'num_batches': self.num_batches,
         }, os.path.join(self.location, INFO_NM))
 
+    def load_info(self):
+        settings = joblib.load(os.path.join(self.location, INFO_NM))
+        self.batchsize = settings['batchsize']
+        self.num_batches = settings['num_batches']
+
     def prepare(self, combos):
         self.ensure_dirs_exists()
         if self.save_fn:
@@ -194,20 +201,20 @@ class Crop(object):
         self.save_info(combos)
 
     def calc_progress(self):
+        self.load_info()
         self.num_cases = len(glob(
             os.path.join(self.location, "cases", BTCH_NM.format("*"))))
         self.num_results = len(glob(
             os.path.join(self.location, "results", RSLT_NM.format("*"))))
-        self.total = self.num_cases + self.num_results
 
     def missing_results(self):
         self.calc_progress()
-        return tuple(filter(
-            lambda x: os.path.isfile(os.path.join(self.location,
-                                                  "cases",
-                                                  BTCH_NM.format(x))),
-            range(1, self.total + 1)
-        ))
+        return tuple(
+            filter(
+                lambda x: not os.path.isfile(
+                    os.path.join(self.location, "results", RSLT_NM.format(x))),
+                range(1, self.num_batches + 1)
+            ))
 
     def __repr__(self):
         # Location and name, underlined
@@ -218,7 +225,7 @@ class Crop(object):
         name_len = len(self.name)
 
         self.calc_progress()
-        percentage = 100 * self.num_results / self.total
+        percentage = 100 * self.num_results / self.num_batches
 
         # Progress bar
         total_bars = 20
@@ -232,7 +239,7 @@ class Crop(object):
             under_crop_dir="-" * (loc_len - name_len),
             under_crop_name="=" * name_len,
             num_results=self.num_results,
-            total=self.total,
+            total=self.num_batches,
             bsz=self.batchsize,
             done_bars="#" * bars,
             not_done_spaces=" " * (total_bars - bars),
@@ -366,11 +373,6 @@ def grow(batch_number, crop=None, fn=None, check_mpi=True, hide_progbar=False):
                                           "results",
                                           RSLT_NM.format(batch_number)))
 
-        # delete set of runs
-        os.remove(os.path.join(crop_location,
-                               "cases",
-                               BTCH_NM.format(batch_number)))
-
 
 # --------------------------------------------------------------------------- #
 #                              Gathering results                              #
@@ -381,7 +383,7 @@ class Reaper(object):
     grow results.
     """
 
-    def __init__(self, crop, num_batches):
+    def __init__(self, crop, num_batches, wait=False):
         """Class for retrieving the batched, flat, 'grown' results.
 
         Parameters
@@ -394,6 +396,9 @@ class Reaper(object):
         files = (os.path.join(self.crop.location, "results", RSLT_NM.format(i))
                  for i in range(1, num_batches + 1))
 
+        def load(x):
+            return joblib.load(x)
+
         def wait_to_load(x):
             while not os.path.exists(x):
                 sleep(0.2)
@@ -403,7 +408,8 @@ class Reaper(object):
             else:
                 raise ValueError("{} is not a file.".format(x))
 
-        self.results = chain.from_iterable(map(wait_to_load, files))
+        self.results = chain.from_iterable(map(
+            wait_to_load if wait else load, files))
 
     def __enter__(self):
         return self
@@ -412,13 +418,14 @@ class Reaper(object):
         return next(self.results)
 
     def __exit__(self, exception_type, exception_value, traceback):
-        if tuple(*self.results):
+        self.crop.calc_progress()
+        if self.crop.num_cases != 0:
             raise XYZError("Not all results reaped!")
         else:
             shutil.rmtree(self.crop.location)
 
 
-def combos_reap(crop):
+def combos_reap(crop, wait=False):
     """Reap already sown and grow results from specified crop.
 
     Parameters
@@ -429,7 +436,10 @@ def combos_reap(crop):
     # Load same combinations as cases saved with
     settings = joblib.load(os.path.join(crop.location, INFO_NM))
 
-    with Reaper(crop, num_batches=settings['num_batches']) as reap_fn:
+    with Reaper(crop,
+                num_batches=settings['num_batches'],
+                wait=wait) as reap_fn:
+
         results = _combo_runner(fn=reap_fn,
                                 combos=settings['combos'],
                                 constants={})
@@ -443,7 +453,8 @@ def combos_reap_to_ds(crop,
                       var_coords=None,
                       constants=None,
                       attrs=None,
-                      parse=True):
+                      parse=True,
+                      wait=False):
     """Reap a function over sowed combinations and output to a Dataset.
 
     Parameters
@@ -479,7 +490,10 @@ def combos_reap_to_ds(crop,
     constants = _parse_constants(constants)
     attrs = _parse_attrs(attrs)
 
-    with Reaper(crop, num_batches=settings['num_batches']) as reap_fn:
+    with Reaper(crop,
+                num_batches=settings['num_batches'],
+                wait=wait) as reap_fn:
+
         ds = combo_runner_to_ds(fn=reap_fn,
                                 combos=settings['combos'],
                                 var_names=var_names,
@@ -504,7 +518,7 @@ def combos_sow_and_reap(crop, combos, constants=None):
             Description of combinations from which to sow cases from.
     """
     combos_sow(crop, combos, constants=constants, hide_progbar=True)
-    return combos_reap(crop)
+    return combos_reap(crop, wait=True)
 
 
 def combos_sow_and_reap_to_ds(crop, combos, constants=None,
@@ -530,7 +544,8 @@ def combos_sow_and_reap_to_ds(crop, combos, constants=None,
                              var_coords=var_coords,
                              constants=constants,
                              attrs=attrs,
-                             parse=parse)
+                             parse=parse,
+                             wait=True)
 
 
 # --------------------------------------------------------------------------- #
@@ -635,7 +650,6 @@ def qsub_grow(crop,
               output_directory=None,
               num_threads=1):
     import subprocess
-    from tempfile import NamedTemporaryFile
 
     script = gen_qsub_script(crop,
                              hours=hours,
