@@ -583,17 +583,21 @@ def gen_qsub_script(crop,
                     seconds=None,
                     gigabytes=2,
                     temp_gigabytes=1,
-                    output_directory="$HOME/Scratch/output",
+                    output_directory=None,
                     num_threads=1):
     """
     """
-
     if hours is minutes is seconds is None:
         hours, minutes, seconds = 0, 20, 0
     else:
         hours = 0 if hours is None else int(hours)
         minutes = 0 if minutes is None else int(minutes)
         seconds = 0 if seconds is None else int(seconds)
+
+    if output_directory is None:
+        from os.path import expanduser
+        home = expanduser("~")
+        output_directory = os.join(home, 'Scratch', 'output')
 
     crop.calc_progress()
 
