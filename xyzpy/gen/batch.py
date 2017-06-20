@@ -235,10 +235,12 @@ class Crop(object):
         total_bars = 20
         bars = int(percentage * total_bars / 100)
 
-        return ("{location}\n"
+        return ("\n"
+                "{location}\n"
                 "{under_crop_dir}{under_crop_name}\n"
                 "{num_results} / {total} batches of size {bsz} completed\n"
-                "[{done_bars}{not_done_spaces}] : {percentage:.1f}%").format(
+                "[{done_bars}{not_done_spaces}] : {percentage:.1f}%"
+                "\n").format(
             location=self.location,
             under_crop_dir="-" * (loc_len - name_len),
             under_crop_name="=" * name_len,

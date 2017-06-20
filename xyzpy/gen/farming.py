@@ -278,6 +278,16 @@ class Runner(object):
             **{**self.default_runner_settings, **runner_settings})
         return self.last_ds
 
+    def __repr__(self):
+        string = "Runner.fn: {self.fn}\n"
+        if self.fn_args is not None:
+            string += "    fn_args: {self.fn_args}\n"
+        string += "    var_names: {self.var_names}\n"
+        if self.var_dims is not None:
+            string += "    var_dims: {self.var_dims}\n"
+
+        return string.format(self=self)
+
 
 # --------------------------------------------------------------------------- #
 #                                 HARVESTER                                   #
@@ -408,7 +418,8 @@ class Harvester(object):
         self.runner.run_combos(combos, **runner_settings)
 
         sync_with_disk = save and self.data_name is not None
-        self.merge_into_full_ds(self.last_ds, overwrite=overwrite,
+        self.merge_into_full_ds(self.last_ds,
+                                overwrite=overwrite,
                                 sync_with_disk=sync_with_disk)
 
     def Crop(self,
@@ -442,7 +453,8 @@ class Harvester(object):
         self.runner.reap_combos(crop)
 
         sync_with_disk = save and self.data_name is not None
-        self.merge_into_full_ds(self.last_ds, overwrite=overwrite,
+        self.merge_into_full_ds(self.last_ds,
+                                overwrite=overwrite,
                                 sync_with_disk=sync_with_disk)
 
     def harvest_combos_sow_and_reap(self, crop, combos, constants=(),
@@ -452,8 +464,10 @@ class Harvester(object):
         """
 
         self.runner.sow_and_reap_combos(crop, combos)
+
         sync_with_disk = save and self.data_name is not None
-        self.merge_into_full_ds(self.last_ds, overwrite=overwrite,
+        self.merge_into_full_ds(self.last_ds,
+                                overwrite=overwrite,
                                 sync_with_disk=sync_with_disk)
 
     def harvest_cases(self, cases, *,
@@ -466,5 +480,16 @@ class Harvester(object):
         self.runner.run_cases(cases, **runner_settings)
 
         sync_with_disk = save and self.data_name is not None
-        self.merge_into_full_ds(self.last_ds, overwrite=overwrite,
+        self.merge_into_full_ds(self.last_ds,
+                                overwrite=overwrite,
                                 sync_with_disk=sync_with_disk)
+
+    def __repr__(self):
+
+        string = ("Harvester\n"
+                  "---------\n"
+                  "{self.runner}"
+                  ">->->->->\n"
+                  "{self.data_name}    [{self.engine}]")
+
+        return string.format(self=self)
