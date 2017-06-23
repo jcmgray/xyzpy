@@ -95,6 +95,18 @@ def trimna(obj):
     return trimmed_obj
 
 
+def sort_dims(ds):
+    """Make sure all the dimensions on all the variables appear in the
+    same order.
+    """
+    dim_list = tuple(ds.dims)
+
+    for var in ds.data_vars:
+        var_dims = (d for d in dim_list if
+                    d in ds[var].dims)
+        ds[var] = ds[var].transpose(*var_dims)
+
+
 def check_runs(obj, dim='run', var=None, sel=()):
     """Print out information about the range and any missing values for an
     integer dimension.

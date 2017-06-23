@@ -28,7 +28,7 @@ from .gen.case_runner import (
     find_missing_cases,
     fill_missing_cases
 )
-from .gen.batch import(
+from .gen.batch import (
     Crop,
     combos_sow,
     grow,
@@ -46,6 +46,7 @@ from .manage import (
     save_ds,
     load_ds,
     trimna,
+    sort_dims,
     check_runs,
     auto_xyz_ds,
 )
@@ -97,6 +98,7 @@ __all__ = ["Runner",
            "save_ds",
            "load_ds",
            "trimna",
+           "sort_dims",
            "check_runs",
            "auto_xyz_ds",
            "convert_colors",
