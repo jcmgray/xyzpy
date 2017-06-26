@@ -53,7 +53,6 @@ class PlotterBokeh(Plotter):
                 toolbar_sticky=False,
                 active_scroll="wheel_zoom",
                 logo=None,
-                webgl=False
             )
 
     def set_axes_labels(self):
@@ -138,15 +137,15 @@ class PlotterBokeh(Plotter):
                              for _ in range(len(self._z_vals))]
 
         for i, (zlabel, data) in enumerate(zip(szlbs, self._gen_xy())):
-            self._sources[i].data['x'] = data['x']
-            self._sources[i].data['y'] = data['y']
-            self._sources[i].data['z_coo'] = [zlabel] * len(data['x'])
+            self._sources[i].add(data['x'], 'x')
+            self._sources[i].add(data['y'], 'y')
+            self._sources[i].add([zlabel] * len(data['x']), 'z_coo')
             if self.y_err:
                 y_err_p = data['y'] + data['ye']
                 y_err_m = data['y'] - data['ye']
-                self._sources[i].data['y_err_xs'] = list(zip(data['x'],
-                                                             data['x']))
-                self._sources[i].data['y_err_ys'] = list(zip(y_err_p, y_err_m))
+                self._sources[i].add(
+                    list(zip(data['x'], data['x'])), 'y_err_xs')
+                self._sources[i].add(list(zip(y_err_p, y_err_m)), 'y_err_ys')
 
     def plot_lines(self):
         """Plot the data and a corresponding legend.
