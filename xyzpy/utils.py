@@ -48,6 +48,7 @@ def unzip(its, zip_level=1):
             return (zip(*_unzipper(it, zip_level - 1)) for it in its)
         else:
             return its
+
     return zip(*_unzipper(its, zip_level)) if zip_level else its
 
 
@@ -108,8 +109,11 @@ def progbar(it=None, nb=False, **kwargs):
 def update_upon_eval(fn, pbar):
     """Decorate `fn` such that every time it is called, `pbar` is updated
     """
+
+    @functools.wraps(fn)
     def new_fn(*args, **kwargs):
         result = fn(*args, **kwargs)
         pbar.update()
         return result
+
     return new_fn

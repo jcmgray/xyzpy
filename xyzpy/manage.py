@@ -45,6 +45,16 @@ def save_ds(ds, file_name, engine="h5netcdf"):
         None
     """
     file_name = _auto_add_extension(file_name, engine)
+
+    # Parse out 'bad' netcdf types (only attributes -> values not so important)
+    for attr, val in ds.attrs.items():
+        if val is None:
+            ds.attrs[attr] = "None"
+        if val is True:
+            ds.attrs[attr] = "True"
+        if val is False:
+            ds.attrs[attr] = "False"
+
     ds.to_netcdf(file_name, engine=engine)
 
 
