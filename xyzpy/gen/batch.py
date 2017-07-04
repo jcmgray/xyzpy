@@ -480,6 +480,10 @@ def combos_reap(crop, wait=False):
             Whether to wait for results to appear. If false (default) all
             results need to be in place before the reap.
     """
+    if not (wait or crop.is_ready_to_reap()):
+        raise XYZError("This crop is not ready to reap yet - results are"
+                       " missing.")
+
     # Load same combinations as cases saved with
     settings = joblib.load(os.path.join(crop.location, INFO_NM))
 
@@ -534,6 +538,10 @@ def combos_reap_to_ds(crop,
         xarray.Dataset
             Multidimensional labelled dataset contatining all the results.
     """
+    if not (wait or crop.is_ready_to_reap()):
+        raise XYZError("This crop is not ready to reap yet - results are"
+                       " missing.")
+
     # Load same combinations as cases saved with
     settings = joblib.load(os.path.join(crop.location, INFO_NM))
 
