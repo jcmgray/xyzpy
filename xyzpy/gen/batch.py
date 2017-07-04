@@ -70,7 +70,7 @@ class Crop(object):
     def __init__(self, *,
                  fn=None,
                  name=None,
-                 parent=None,
+                 parent_dir=None,
                  save_fn=None,
                  batchsize=None,
                  num_batches=None):
@@ -85,7 +85,7 @@ class Crop(object):
             name : str (optional)
                 Custom name for this set of runs - must be given if `fn`
                 is not.
-            parent : str (optional)
+            parent_dir : str (optional)
                 If given, alternative directory to put the ".xyz-{name}/"
                 folder in with all the cases and results.
             save_fn : bool (optional)
@@ -102,14 +102,14 @@ class Crop(object):
 
         self._fn = fn
         self.name = name
-        self.parent = parent
+        self.parent_dir = parent_dir
         self.save_fn = save_fn
         self.batchsize = batchsize
         self.num_batches = num_batches
 
         # Work out the full directory for the crop
-        self.location, self.name, self.parent = \
-            parse_crop_details(fn, name, parent)
+        self.location, self.name, self.parent_dir = \
+            parse_crop_details(fn, name, parent_dir)
 
         # Save function so it can be automatically loaded with all deps?
         if (fn is None) and (save_fn is True):
@@ -173,7 +173,7 @@ class Crop(object):
     def ensure_dirs_exists(self):
         """Make sure the directory structure for this crop exists.
         """
-        os.makedirs(os.path.join(self.location, "cases"), exist_ok=True)
+        os.makedirs(os.path.join(self.location, "batches"), exist_ok=True)
         os.makedirs(os.path.join(self.location, "results"), exist_ok=True)
 
     def save_function_to_disk(self):
@@ -194,31 +194,68 @@ class Crop(object):
         }, os.path.join(self.location, INFO_NM))
 
     def load_info(self):
+        """
+        """
         settings = joblib.load(os.path.join(self.location, INFO_NM))
         self.batchsize = settings['batchsize']
         self.num_batches = settings['num_batches']
 
     def prepare(self, combos):
+        """Write information about this crop and the supplied combos to disk.
+        Typically done at start of sow, not when Crop instantiated.
+        """
         self.ensure_dirs_exists()
         if self.save_fn:
             self.save_function_to_disk()
         self.save_info(combos)
 
+    def is_prepared(self):
+        """Check whether this crop has been written to disk.
+        """
+        return os.path.exists(os.path.join(self.location, INFO_NM))
+
     def calc_progress(self):
-        self.load_info()
-        self.num_cases = len(glob(
-            os.path.join(self.location, "cases", BTCH_NM.format("*"))))
-        self.num_results = len(glob(
-            os.path.join(self.location, "results", RSLT_NM.format("*"))))
+        """
+        """
+        if self.is_prepared():
+            self.load_info()
+            self._num_sown_batches = len(glob(
+                os.path.join(self.location, "batches", BTCH_NM.format("*"))))
+            self._num_results = len(glob(
+                os.path.join(self.location, "results", RSLT_NM.format("*"))))
+        else:
+            self._num_sown_batches = -1
+            self._num_results = -1
+
+    @property
+    def num_sown_batches(self):
+        """Total number of batches to be run/grown.
+        """
+        self.calc_progress()
+        return self._num_sown_batches
+
+    @property
+    def num_results(self):
+        self.calc_progress()
+        return self._num_results
+
+    def is_ready_to_reap(self):
+        self.calc_progress()
+        return (
+            self._num_results > 0 and
+            (self._num_results == self.num_sown_batches)
+        )
 
     def missing_results(self):
+        """
+        """
         self.calc_progress()
-        return tuple(
-            filter(
-                lambda x: not os.path.isfile(
-                    os.path.join(self.location, "results", RSLT_NM.format(x))),
-                range(1, self.num_batches + 1)
-            ))
+
+        def no_result_exists(x):
+            return not os.path.isfile(
+                os.path.join(self.location, "results", RSLT_NM.format(x)))
+
+        return tuple(filter(no_result_exists, range(1, self.num_batches + 1)))
 
     def __repr__(self):
         # Location and name, underlined
@@ -229,7 +266,7 @@ class Crop(object):
         name_len = len(self.name)
 
         self.calc_progress()
-        percentage = 100 * self.num_results / self.num_batches
+        percentage = 100 * self._num_results / self.num_batches
 
         # Progress bar
         total_bars = 20
@@ -244,7 +281,7 @@ class Crop(object):
             location=self.location,
             under_crop_dir="-" * (loc_len - name_len),
             under_crop_name="=" * name_len,
-            num_results=self.num_results,
+            num_results=self._num_results,
             total=self.num_batches,
             bsz=self.batchsize,
             done_bars="#" * bars,
@@ -284,7 +321,7 @@ class Sower(object):
         joblib.dump(
             self._batch_cases,
             os.path.join(self.crop.location,
-                         "cases",
+                         "batches",
                          BTCH_NM.format(self._batch_counter)))
 
     # Context manager #
@@ -357,7 +394,7 @@ def grow(batch_number, crop=None, fn=None, check_mpi=True, hide_progbar=False):
 
     # load cases to evaluate
     cases = joblib.load(
-        os.path.join(crop_location, "cases", BTCH_NM.format(batch_number)))
+        os.path.join(crop_location, "batches", BTCH_NM.format(batch_number)))
 
     # process each case
     results = tuple(
@@ -439,6 +476,9 @@ def combos_reap(crop, wait=False):
     ----------
         crop : xyzpy.batch.Crop instance
             Description of where and how to store the cases and results.
+        wait : bool, optional
+            Whether to wait for results to appear. If false (default) all
+            results need to be in place before the reap.
     """
     # Load same combinations as cases saved with
     settings = joblib.load(os.path.join(crop.location, INFO_NM))
@@ -485,6 +525,9 @@ def combos_reap_to_ds(crop,
             Like `constants` but they will not be recorded.
         attrs : mapping, optional
             Any extra attributes to store.
+        wait : bool, optional
+            Whether to wait for results to appear. If false (default) all
+            results need to be in place before the reap.
 
     Returns
     -------
@@ -610,7 +653,7 @@ def gen_qsub_script(crop,
     """
     """
     if hours is minutes is seconds is None:
-        hours, minutes, seconds = 0, 20, 0
+        hours, minutes, seconds = 1, 0, 0
     else:
         hours = 0 if hours is None else int(hours)
         minutes = 0 if minutes is None else int(minutes)
@@ -631,7 +674,7 @@ def gen_qsub_script(crop,
         'temp_gigabytes': temp_gigabytes,
         'name': crop.name,
         'output_directory': output_directory,
-        'working_directory': crop.parent,
+        'working_directory': crop.parent_dir,
         'num_threads': num_threads,
         'run_start': 1,
     }
@@ -656,6 +699,12 @@ def qsub_grow(crop,
               temp_gigabytes=1,
               output_directory=None,
               num_threads=1):
+    """Automagically submit SGE jobs to grow all missing results.
+    """
+    if crop.is_ready_to_reap():
+        print("Crop ready to reap: nothing to submit.")
+        return
+
     import subprocess
 
     script = gen_qsub_script(crop,

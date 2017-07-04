@@ -94,7 +94,7 @@ class TestRunner:
     def test_sow_reap_seperate(self, fn3_fba_runner, fn3_fba_ds):
         with tempfile.TemporaryDirectory() as tmpdir:
             r = fn3_fba_runner
-            crop = r.Crop(parent=tmpdir, num_batches=2)
+            crop = r.Crop(parent_dir=tmpdir, num_batches=2)
             r.sow_combos(crop, (('a', (1, 2)),
                                 ('b', (3, 4))))
             for i in [1, 2]:
@@ -105,7 +105,7 @@ class TestRunner:
     def test_sow_and_reap(self, fn3_fba_runner, fn3_fba_ds):
         with tempfile.TemporaryDirectory() as tmpdir:
             r = fn3_fba_runner
-            crop = r.Crop(parent=tmpdir, num_batches=2)
+            crop = r.Crop(parent_dir=tmpdir, num_batches=2)
 
             def concurrent_grow():
                 # wait for cases to be sown
@@ -174,7 +174,7 @@ class TestHarvester:
         with tempfile.TemporaryDirectory() as tmpdir:
             fl_pth = os.path.join(tmpdir, 'test.h5')
             h = Harvester(fn3_fba_runner, fl_pth)
-            crop = h.Crop(parent=tmpdir, num_batches=2)
+            crop = h.Crop(parent_dir=tmpdir, num_batches=2)
 
             h.sow_combos(crop, (('a', (1, 2)), ('b', (3, 4))))
 
@@ -192,7 +192,7 @@ class TestHarvester:
         with tempfile.TemporaryDirectory() as tmpdir:
             fl_pth = os.path.join(tmpdir, 'test.h5')
             h = Harvester(fn3_fba_runner, fl_pth)
-            crop = h.Crop(parent=tmpdir, num_batches=2)
+            crop = h.Crop(parent_dir=tmpdir, num_batches=2)
 
             def concurrent_grow():
                 # wait for cases to be sown

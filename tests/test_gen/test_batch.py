@@ -86,16 +86,25 @@ class TestSowerReaper:
         with TemporaryDirectory() as tdir:
 
             # sow seeds
-            crop = Crop(fn=foo_add, parent=tdir, batchsize=5)
+            crop = Crop(fn=foo_add, parent_dir=tdir, batchsize=5)
+
+            assert not crop.is_prepared()
+            assert crop.num_sown_batches == crop.num_results == -1
+
             combos_sow(crop, combos, constants={'c': True})
+
+            assert crop.is_prepared()
+            assert crop.num_sown_batches == 3
+            assert crop.num_results == 0
 
             # grow seeds
             for i in range(1, 4):
-                grow(i, Crop(parent=tdir, name='foo_add'))
+                grow(i, Crop(parent_dir=tdir, name='foo_add'))
 
                 if i == 1:
                     assert crop.missing_results() == (2, 3,)
 
+            assert crop.is_ready_to_reap()
             # reap results
             results = combos_reap(crop)
 
@@ -116,15 +125,15 @@ class TestSowerReaper:
 
         with TemporaryDirectory() as tdir:
             # sow seeds
-            c1 = Crop(name='run1', fn=foo_add, parent=tdir, batchsize=5)
+            c1 = Crop(name='run1', fn=foo_add, parent_dir=tdir, batchsize=5)
             combos_sow(c1, combos1, constants={'c': True})
-            c2 = Crop(name='run2', fn=foo_add, parent=tdir, batchsize=5)
+            c2 = Crop(name='run2', fn=foo_add, parent_dir=tdir, batchsize=5)
             combos_sow(c2, combos2, constants={'c': True})
 
             # grow seeds
             for i in range(1, 4):
-                grow(i, Crop(parent=tdir, name='run1'))
-                grow(i, Crop(parent=tdir, name='run2'))
+                grow(i, Crop(parent_dir=tdir, name='run1'))
+                grow(i, Crop(parent_dir=tdir, name='run2'))
 
             # reap results
             results1 = combos_reap(c1)
@@ -141,12 +150,12 @@ class TestSowerReaper:
         with TemporaryDirectory() as tdir:
 
             # sow seeds
-            crop = Crop(fn=foo3_scalar, parent=tdir, batchsize=5)
+            crop = Crop(fn=foo3_scalar, parent_dir=tdir, batchsize=5)
             combos_sow(crop, combos)
 
             # grow seeds
             for i in range(1, 6):
-                grow(i, Crop(parent=tdir, name='foo3_scalar'))
+                grow(i, Crop(parent_dir=tdir, name='foo3_scalar'))
 
             ds = combos_reap_to_ds(crop, var_names=['bananas'])
 

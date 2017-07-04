@@ -200,7 +200,7 @@ class Runner(object):
 
     def Crop(self,
              name=None,
-             parent=None,
+             parent_dir=None,
              save_fn=None,
              batchsize=None,
              num_batches=None):
@@ -208,7 +208,7 @@ class Runner(object):
         """
         return Crop(fn=self.fn,
                     name=name,
-                    parent=parent,
+                    parent_dir=parent_dir,
                     save_fn=save_fn,
                     batchsize=batchsize,
                     num_batches=num_batches)
@@ -424,7 +424,7 @@ class Harvester(object):
 
     def Crop(self,
              name=None,
-             parent=None,
+             parent_dir=None,
              save_fn=None,
              batchsize=None,
              num_batches=None):
@@ -432,7 +432,7 @@ class Harvester(object):
         """
         return Crop(fn=self.runner.fn,
                     name=name,
-                    parent=parent,
+                    parent_dir=parent_dir,
                     save_fn=save_fn,
                     batchsize=batchsize,
                     num_batches=num_batches)
