@@ -444,7 +444,10 @@ def array_interp1d(fx, x, ix, kind='cubic', return_func=False, **kwargs):
         ix = np.linspace(x[0], x[-1], ix)
 
     def fx_interp(fx):
-        ifn = interpolate.interp1d(x, fx, kind=kind, **kwargs)
+        ma = np.isfinite(fx)
+        ifn = interpolate.interp1d(x[ma], fx[ma], kind=kind,
+                                   bounds_error=False,
+                                   **kwargs)
         return ifn(ix)
 
     if return_func:
@@ -461,7 +464,7 @@ def xr_interp1d(xobj, dim, ix=100, kind='cubic', **kwargs):
     # make re-useable single arg function
     fn = array_interp1d(None, x=x, ix=ix, kind=kind,
                         return_func=True, **kwargs)
-    return xr_1d_apply(fn, xobj, dim, new_dim=ix, leave_nan=False)
+    return xr_1d_apply(fn, xobj, dim, new_dim=ix, leave_nan=True)
 
 
 xr.Dataset.interp = xr_interp1d
