@@ -2,6 +2,8 @@
 
 # TODO: add singlet dimensions (for all or given vars) ---------------------- #
 
+import os
+from glob import glob
 import numpy as np
 import xarray as xr
 
@@ -171,3 +173,50 @@ def auto_xyz_ds(x, y_z):
         ds = xr.Dataset(coords={'x': x, 'z': np.arange(n_y)},
                         data_vars={'y': (['z', 'x'], y_z)})
     return ds
+
+
+def merge_sync_conflict_datasets(base_name, engine='h5netcdf',
+                                 combine_first=False):
+    """Glob files based on `base_name`, merge them, save this new dataset if
+    it contains new info, then clean up the conflicts.
+
+    Parameters
+    ----------
+        base_name : str
+            Base file name to glob on - should include '*'.
+        engine : str , optional
+            Load and save engine used by xarray.
+    """
+    fnames = glob(base_name)
+    if len(fnames) < 2:
+        print('Nothing to do - need multiple files to merge.')
+        return
+
+    # make sure first filename is the shortest -> assumed original
+    fnames.sort(key=lambda x: len(x))
+
+    print("Merging:\n{}\ninto ->\n{}\n".format(fnames, fnames[0]))
+
+    def load_dataset(fname):
+        return load_ds(fname, engine=engine)
+
+    datasets = list(map(load_dataset, fnames))
+
+    # combine all the conflicts
+    if combine_first:
+        full_dataset = datasets[0]
+        for ds in datasets[1:]:
+            full_dataset = full_dataset.combine_first(ds)
+    else:
+        full_dataset = xr.merge(datasets)
+
+    # save new dataset?
+    if full_dataset.identical(datasets[0]):
+        # nothing to do
+        pass
+    else:
+        save_ds(full_dataset, fnames[0], engine=engine)
+
+    # clean up conflicts
+    for fname in fnames[1:]:
+        os.remove(fname)

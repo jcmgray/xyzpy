@@ -1,3 +1,8 @@
+"""
+"""
+# TODO: marker alpha
+
+
 import functools
 import itertools
 from ..manage import auto_xyz_ds
@@ -14,6 +19,8 @@ def _init_bokeh_nb():
 
 
 def bshow(figs, nb=True, interactive=False, **kwargs):
+    """
+    """
     from bokeh.plotting import show
     if nb:
         _init_bokeh_nb()
@@ -44,6 +51,7 @@ class PlotterBokeh(Plotter):
         else:
             # Currently axes scale type must be set at figure creation?
             self._plot = figure(
+                # convert figsize to roughly matplotlib dimensions
                 width=int(self.figsize[0] * 80 + 100),
                 height=int(self.figsize[1] * 80),
                 x_axis_type=('log' if self.xlog else 'linear'),
@@ -93,18 +101,21 @@ class PlotterBokeh(Plotter):
         """
         from bokeh.models import Span
 
+        span_opts = {
+            'level': 'glyph',
+            'line_dash': 'dashed',
+            'line_color': (127, 127, 127),
+            'line_width': self.span_width,
+        }
+
         if self.hlines:
             for hl in self.hlines:
-                self._plot.add_layout(Span(location=hl, dimension='width',
-                                           level='glyph', line_dash='dashed',
-                                           line_color=(127, 127, 127),
-                                           line_width=self.span_width))
+                self._plot.add_layout(Span(
+                    location=hl, dimension='width', **span_opts))
         if self.vlines:
             for vl in self.vlines:
-                self._plot.add_layout(Span(location=vl, dimension='height',
-                                           level='glyph', line_dash='dashed',
-                                           line_color=(127, 127, 127),
-                                           line_width=self.span_width))
+                self._plot.add_layout(Span(
+                    location=vl, dimension='height', **span_opts))
 
     def set_gridlines(self):
         """Set whether to use gridlines or not.
@@ -128,18 +139,24 @@ class PlotterBokeh(Plotter):
 
     def set_sources(self):
         """Set the source dictionaries to be used by the plotter functions.
+        This is seperate to allow interactive updates of the data.
         """
-        self._zlbls, szlbs = itertools.tee(self._zlbls)
+        # 'copy' the zlabels iterator into src_zlbs
+        self._zlbls, src_zlbs = itertools.tee(self._zlbls)
 
+        # Initialise with empty dicts
         if not hasattr(self, "_sources"):
             from bokeh.plotting import ColumnDataSource
             self._sources = [ColumnDataSource(dict())
                              for _ in range(len(self._z_vals))]
 
-        for i, (zlabel, data) in enumerate(zip(szlbs, self._gen_xy())):
+        # range through all data and update the sources
+        for i, (zlabel, data) in enumerate(zip(src_zlbs, self._gen_xy())):
             self._sources[i].add(data['x'], 'x')
             self._sources[i].add(data['y'], 'y')
             self._sources[i].add([zlabel] * len(data['x']), 'z_coo')
+
+            # check if should set y_err as well
             if self.y_err:
                 y_err_p = data['y'] + data['ye']
                 y_err_m = data['y'] - data['ye']
@@ -159,20 +176,26 @@ class PlotterBokeh(Plotter):
             legend_pics = []
 
             if self.lines:
-                line = self._plot.line('x', 'y', source=src, color=col,
-                                       line_dash=next(self._lines),
-                                       line_width=next(self._lws) * 1.5)
+                line = self._plot.line(
+                    'x', 'y',
+                    source=src,
+                    color=col,
+                    line_dash=next(self._lines),
+                    line_width=next(self._lws) * 1.5,
+                )
                 legend_pics.append(line)
 
             if self.markers:
                 marker = next(self._mrkrs)
-                m = getattr(self._plot, marker)('x', 'y',
-                                                source=src,
-                                                name=zlabel,
-                                                color=col,
-                                                fill_alpha=0.5,
-                                                line_width=0.5,
-                                                size=self._markersize)
+                m = getattr(self._plot, marker)(
+                    'x', 'y',
+                    source=src,
+                    name=zlabel,
+                    color=col,
+                    fill_alpha=0.5,
+                    line_width=0.5,
+                    size=self._markersize,
+                )
                 legend_pics.append(m)
 
             # Check if errors specified as well
@@ -181,6 +204,7 @@ class PlotterBokeh(Plotter):
                     xs='y_err_xs', ys='y_err_ys', source=src, color=col)
                 legend_pics.append(err)
 
+            # Add the names and styles of drawn lines for the legend
             if self._use_legend:
                 self._lgnd_items.append((zlabel, legend_pics))
 
@@ -255,7 +279,7 @@ def ilineplot(ds, x, y, z=None, return_fig=False,
 #                    Miscellenous bokeh plotting functions                    #
 # --------------------------------------------------------------------------- #
 
-def xyz_ilineplot(x, y_z, **ilineplot_opts):
+def auto_ilineplot(x, y_z, **ilineplot_opts):
     """ Take some x-coordinates and an array, convert them to a Dataset
     treating as multiple lines, then send to ilineplot. """
     ds = auto_xyz_ds(x, y_z)

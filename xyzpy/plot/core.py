@@ -16,7 +16,9 @@ _PLOTTER_DEFAULTS = {
     'backend': 'MATPLOTLIB',
     'figsize': (7, 6),
     'axes_loc': None,
+    'axes_rloc': None,
     'add_to_axes': None,
+    'add_to_xaxes': None,
     'add_to_fig': None,
     'subplot': None,
     'fignum': 1,
@@ -55,6 +57,7 @@ _PLOTTER_DEFAULTS = {
     'xtitle_pad': 5,
     'xlims': None,
     'xticks': None,
+    'xtick_labels': None,
     'xticklabels_hide': False,
     'xlog': False,
     'bins': 30,
@@ -65,6 +68,7 @@ _PLOTTER_DEFAULTS = {
     'ylims': None,
     'yticks': None,
     'yticklabels_hide': False,
+    'yticklabels_right': None,
     'ylog': False,
     # Titles and text
     'title': None,
@@ -100,12 +104,18 @@ _PLOTTER_DEFAULTS = {
     'fontsize_zlabels': 13,
     'fontsize_panel_label': 15,
     'math_serif': True,
+    # backend options
+    'rasterize': False,
+    'webgl': False,
 }
 
 _PLOTTER_OPTS = list(_PLOTTER_DEFAULTS.keys())
 
 
-class Plotter:
+class Plotter(object):
+    """
+    """
+
     def __init__(self, ds, x, y, z=None, y_err=None, **kwargs):
         """
         """

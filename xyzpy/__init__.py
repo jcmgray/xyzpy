@@ -49,6 +49,7 @@ from .manage import (
     sort_dims,
     check_runs,
     auto_xyz_ds,
+    merge_sync_conflict_datasets,
 )
 from .signal import (
     wfdiff,
@@ -62,19 +63,20 @@ from .plot.color import (
 from .plot.plotter_matplotlib import (
     LinePlot,
     lineplot,
+    AutoLinePlot,
+    auto_lineplot,
     Scatter,
     scatter,
     Histogram,
     histogram,
     HeatMap,
     heatmap,
-    xyz_lineplot,
     visualize_matrix
 )
 # Making interactive plots with bokeh
 from .plot.plotter_bokeh import (
     ilineplot,
-    xyz_ilineplot
+    auto_ilineplot
 )
 
 __all__ = ["Runner",
@@ -100,10 +102,13 @@ __all__ = ["Runner",
            "trimna",
            "sort_dims",
            "check_runs",
+           "merge_sync_conflict_datasets",
            "auto_xyz_ds",
            "convert_colors",
            "LinePlot",
            "lineplot",
+           "auto_lineplot",
+           "AutoLinePlot",
            "Scatter",
            "scatter",
            "Histogram",
@@ -111,8 +116,7 @@ __all__ = ["Runner",
            "HeatMap",
            "heatmap",
            "ilineplot",
-           "xyz_lineplot",
-           "xyz_ilineplot",
+           "auto_ilineplot",
            "visualize_matrix",
            "unzip",
            "progbar",

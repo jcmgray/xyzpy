@@ -32,21 +32,43 @@ class PlotterMatplotlib(Plotter):
         mpl.rcParams['font.family'] = self.font
         import matplotlib.pyplot as plt
 
+        if self.axes_rloc is not None:
+            if self.axes_loc is not None:
+                raise ValueError("Cannot specify absolute and relative "
+                                 "location of axes at the same time.")
+            if self.add_to_fig is None:
+                raise ValueError("Can only specify relative axes position "
+                                 "when adding to a figure, i.e. when "
+                                 "add_to_fig != None")
+
+        if self.axes_rloc is not None:
+            self._axes_loc = self._cax_rel2abs_rect(
+                self.axes_rloc, self.add_to_fig.get_axes()[-1])
+        else:
+            self._axes_loc = self.axes_loc
+
         # Add a new set of axes to an existing plot
         if self.add_to_fig is not None and self.subplot is None:
             self._fig = self.add_to_fig
             self._axes = self._fig.add_axes((0.4, 0.6, 0.30, 0.25)
-                                            if self.axes_loc is None else
-                                            self.axes_loc)
+                                            if self._axes_loc is None else
+                                            self._axes_loc)
+
         # Add lines to an existing set of axes
         elif self.add_to_axes is not None:
             self._fig = self.add_to_axes
             self._axes = self._fig.get_axes()[-1]
 
+        # Add lines to existing axes but only sharing the x-axis
+        elif self.add_to_xaxes is not None:
+            self._fig = self.add_to_xaxes
+            self._axes = self._fig.get_axes()[-1].twinx()
+
         elif self.subplot is not None:
             # Add new axes as subplot to existing subplot
             if self.add_to_fig is not None:
                 self._fig = self.add_to_fig
+
             # New figure but add as subplot
             else:
                 self._fig = plt.figure(self.fignum, figsize=self.figsize,
@@ -57,8 +79,8 @@ class PlotterMatplotlib(Plotter):
         else:
             self._fig = plt.figure(self.fignum, figsize=self.figsize, dpi=100)
             self._axes = self._fig.add_axes((0.15, 0.15, 0.8, 0.75)
-                                            if self.axes_loc is None else
-                                            self.axes_loc)
+                                            if self._axes_loc is None else
+                                            self._axes_loc)
         self._axes.set_title("" if self.title is None else self.title,
                              fontsize=self.fontsize_title)
 
@@ -70,7 +92,6 @@ class PlotterMatplotlib(Plotter):
             self._axes.set_ylabel(self._ytitle, fontsize=self.fontsize_ytitle)
             self._axes.yaxis.labelpad = self.ytitle_pad
             if self.ytitle_right:
-                self._axes.yaxis.tick_right()
                 self._axes.yaxis.set_label_position("right")
 
     def set_axes_scale(self):
@@ -123,25 +144,36 @@ class PlotterMatplotlib(Plotter):
 
         if self.xticks is not None:
             self._axes.set_xticks(self.xticks, minor=False)
-            (self._axes.get_xaxis()
-             .set_major_formatter(mpl.ticker.ScalarFormatter()))
+            self._axes.get_xaxis().set_major_formatter(
+                mpl.ticker.ScalarFormatter())
         if self.yticks is not None:
             self._axes.set_yticks(self.yticks, minor=False)
-            (self._axes.get_yaxis()
-             .set_major_formatter(mpl.ticker.ScalarFormatter()))
+            self._axes.get_yaxis().set_major_formatter(
+                mpl.ticker.ScalarFormatter())
+
+        if self.xtick_labels is not None:
+            self._axes.set_xticklabels(self.xtick_labels)
+
         if self.xticklabels_hide:
             (self._axes.get_xaxis()
              .set_major_formatter(mpl.ticker.NullFormatter()))
         if self.yticklabels_hide:
             (self._axes.get_yaxis()
              .set_major_formatter(mpl.ticker.NullFormatter()))
+
         self._axes.tick_params(labelsize=self.fontsize_ticks, direction='out',
                                bottom='bottom' in self.ticks_where,
                                top='top' in self.ticks_where,
                                left='left' in self.ticks_where,
                                right='right' in self.ticks_where)
 
+        if self.yticklabels_right or (self.yticklabels_right is None and
+                                      self.ytitle_right is True):
+            self._axes.yaxis.tick_right()
+
     def _cax_rel2abs_rect(self, rel_rect, cax=None):
+        """Turn a relative axes specification into a absolute one.
+        """
         if cax is None:
             cax = self._axes
         bbox = cax.get_position()
@@ -170,7 +202,9 @@ class PlotterMatplotlib(Plotter):
                 'markerfacecolor': col[:3] + (self.marker_alpha * col[3] / 2,),
                 'label': next(self._zlbls) if self._use_legend else None,
                 'zorder': next(self._zordrs),
-                'linestyle': next(self._lines)}
+                'linestyle': next(self._lines),
+                'rasterized': self.rasterize,
+            }
 
             if 'ye' in data:
                 self._axes.errorbar(data['x'], data['y'], yerr=data['ye'],
@@ -199,6 +233,7 @@ class PlotterMatplotlib(Plotter):
                 'alpha': self.marker_alpha,
                 'label': next(self._zlbls) if self._use_legend else None,
                 'zorder': next(self._zordrs),
+                'rasterized': self.rasterize,
             }
 
             self._legend_handles.append(
@@ -232,7 +267,8 @@ class PlotterMatplotlib(Plotter):
             'normed': True,
             'histtype': 'stepfilled',
             'fill': True,
-            'stacked': self.stacked
+            'stacked': self.stacked,
+            'rasterized': self.rasterize,
         }
 
         _, _, patches = self._axes.hist(xs, **histogram_opts)
@@ -394,9 +430,26 @@ def lineplot(ds, x, y, z=None, y_err=None, **kwargs):
     return LinePlot(ds, x, y, z, **kwargs)()
 
 
+class AutoLinePlot(LinePlot):
+    """The non-dataset input version of Lineplot - automatically converts
+    two arrays to a dataset with names 'x', 'y', 'z'.
+    """
+
+    def __init__(self, x, y_z, **lineplot_opts):
+        ds = auto_xyz_ds(x, y_z)
+        super().__init__(ds, 'x', 'y', z='z', **lineplot_opts)
+
+
+def auto_lineplot(x, y_z, **lineplot_opts):
+    """Function-version of AutoLinePlot
+    """
+    return AutoLinePlot(x, y_z, **lineplot_opts)()
+
+
 # --------------------------------------------------------------------------- #
 
 _SCATTER_ALT_DEFAULTS = (
+    ('legend_handlelength', 0),
 )
 
 
@@ -523,6 +576,7 @@ _HEATMAP_ALT_DEFAULTS = (
     ('colormap', 'inferno'),
     ('method', 'pcolormesh'),
     ('gridlines', False),
+    ('rasterize', True),
 )
 
 
@@ -547,7 +601,7 @@ class HeatMap(PlotterMatplotlib):
             self._heatmap_var,
             norm=self._color_norm,
             cmap=xyz_colormaps(self.colormap),
-            rasterized=True)
+            rasterized=self.rasterize)
 
     def __call__(self):
 
@@ -574,14 +628,6 @@ def heatmap(ds, x, y, z, **kwargs):
     """
     """
     return HeatMap(ds, x, y, z, **kwargs)()
-
-
-def xyz_lineplot(x, y_z, **lineplot_opts):
-    """ Take some x-coordinates and an array, convert them to a Dataset
-    treating as multiple lines, then send to lineplot. """
-    ds = auto_xyz_ds(x, y_z)
-    # Plot dataset
-    return lineplot(ds, 'x', 'y', 'z', **lineplot_opts)
 
 
 # --------------- Miscellenous matplotlib plotting functions ---------------- #
