@@ -84,8 +84,8 @@ class Runner(object):
         """
         self.fn = fn
         self._var_names = _parse_var_names(var_names)
-        if fn_args:
-            self._fn_args = _parse_fn_args(fn_args)
+        self._fn_args = (_parse_fn_args(fn_args) if fn_args is not None else
+                         None)
         self._var_dims = _parse_var_dims(var_dims, self._var_names)
         self._var_coords = _parse_var_coords(var_coords)
         self._constants = _parse_constants(constants)
