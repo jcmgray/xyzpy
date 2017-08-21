@@ -193,7 +193,7 @@ def merge_sync_conflict_datasets(base_name, engine='h5netcdf',
         return
 
     # make sure first filename is the shortest -> assumed original
-    fnames.sort(key=lambda x: len(x))
+    fnames.sort(key=len)
 
     print("Merging:\n{}\ninto ->\n{}\n".format(fnames, fnames[0]))
 
