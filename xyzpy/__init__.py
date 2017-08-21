@@ -30,12 +30,7 @@ from .gen.case_runner import (
 )
 from .gen.batch import (
     Crop,
-    combos_sow,
     grow,
-    combos_reap,
-    combos_reap_to_ds,
-    combos_sow_and_reap,
-    combos_sow_and_reap_to_ds,
 )
 from .gen.farming import (
     Runner,

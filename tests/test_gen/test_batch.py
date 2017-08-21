@@ -7,10 +7,7 @@ from xyzpy.gen.batch import (
     XYZError,
     Crop,
     parse_crop_details,
-    combos_sow,
     grow,
-    combos_reap,
-    combos_reap_to_ds,
 )
 
 from . import foo3_scalar
@@ -34,7 +31,7 @@ class TestSowerReaper:
             (None, None, 'custom_dir', 'raises'),
 
         ])
-    def test_parse_field_details(self, fn, crop_name, crop_loc, expected):
+    def test_parse_crop_details(self, fn, crop_name, crop_loc, expected):
 
         if expected == 'raises':
             with pytest.raises(ValueError):
@@ -91,7 +88,7 @@ class TestSowerReaper:
             assert not crop.is_prepared()
             assert crop.num_sown_batches == crop.num_results == -1
 
-            combos_sow(crop, combos, constants={'c': True})
+            crop.sow_combos(combos, constants={'c': True})
 
             assert crop.is_prepared()
             assert crop.num_sown_batches == 3
@@ -106,7 +103,7 @@ class TestSowerReaper:
 
             assert crop.is_ready_to_reap()
             # reap results
-            results = combos_reap(crop)
+            results = crop.reap()
 
         assert results == expected
 
@@ -126,9 +123,9 @@ class TestSowerReaper:
         with TemporaryDirectory() as tdir:
             # sow seeds
             c1 = Crop(name='run1', fn=foo_add, parent_dir=tdir, batchsize=5)
-            combos_sow(c1, combos1, constants={'c': True})
+            c1.sow_combos(combos1, constants={'c': True})
             c2 = Crop(name='run2', fn=foo_add, parent_dir=tdir, batchsize=5)
-            combos_sow(c2, combos2, constants={'c': True})
+            c2.sow_combos(combos2, constants={'c': True})
 
             # grow seeds
             for i in range(1, 4):
@@ -136,8 +133,8 @@ class TestSowerReaper:
                 grow(i, Crop(parent_dir=tdir, name='run2'))
 
             # reap results
-            results1 = combos_reap(c1)
-            results2 = combos_reap(c2)
+            results1 = c1.reap()
+            results2 = c2.reap()
 
         assert results1 == expected1
         assert results2 == expected2
@@ -151,12 +148,25 @@ class TestSowerReaper:
 
             # sow seeds
             crop = Crop(fn=foo3_scalar, parent_dir=tdir, batchsize=5)
-            combos_sow(crop, combos)
+            crop.sow_combos(combos)
 
             # grow seeds
             for i in range(1, 6):
                 grow(i, Crop(parent_dir=tdir, name='foo3_scalar'))
 
-            ds = combos_reap_to_ds(crop, var_names=['bananas'])
+            ds = crop.reap_combos_to_ds(var_names=['bananas'])
 
         assert ds.sel(a=2, b=30, c=400)['bananas'].data == 432
+
+
+# XXX: test instatiating with harverster/runner
+# XXX: test save and load info
+
+
+class TestFarmingBatches:
+
+    def test_with_runner(self):
+        pass
+
+    def test_with_harvester(self):
+        pass

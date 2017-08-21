@@ -25,12 +25,7 @@ from .prepare import (
 )
 from .combo_runner import combo_runner_to_ds
 from .case_runner import case_runner_to_ds
-from .batch import (
-    Crop,
-    combos_sow,
-    combos_reap_to_ds,
-    combos_sow_and_reap_to_ds,
-)
+from .batch import Crop
 from ..manage import load_ds, save_ds
 
 
@@ -206,52 +201,12 @@ class Runner(object):
              num_batches=None):
         """
         """
-        return Crop(fn=self.fn,
+        return Crop(runner=self,
                     name=name,
                     parent_dir=parent_dir,
                     save_fn=save_fn,
                     batchsize=batchsize,
                     num_batches=num_batches)
-
-    def sow_combos(self, crop, combos, constants=(), hide_progbar=False):
-        """
-        """
-        if crop.fn is None:
-            crop.fn = self.fn
-
-        combos_sow(crop, combos,
-                   constants={**self._constants, **dict(constants)},
-                   hide_progbar=hide_progbar)
-
-    def reap_combos(self, crop):
-        """
-        """
-        self.last_ds = combos_reap_to_ds(
-            crop,
-            var_names=self._var_names,
-            var_dims=self._var_dims,
-            var_coords=self._var_coords,
-            attrs={**self._attrs, **self._constants},
-            parse=False,
-        )
-        return self.last_ds
-
-    def sow_and_reap_combos(self, crop, combos, constants=()):
-        """
-        """
-        if crop.fn is None:
-            crop.fn = self.fn
-
-        self.last_ds = combos_sow_and_reap_to_ds(
-            crop, combos,
-            constants={**self._constants, **dict(constants)},
-            var_names=self._var_names,
-            var_dims=self._var_dims,
-            var_coords=self._var_coords,
-            attrs=self._attrs,
-            parse=False,
-        )
-        return self.last_ds
 
     def run_cases(self, cases, **runner_settings):
         """Run cases using the function and save to dataset.
@@ -399,6 +354,14 @@ class Harvester(object):
         if sync_with_disk:
             self.save_to_disk()
 
+    def add(self, new_ds, save, overwrite):
+        """Add a new dataset to this harvester.
+        """
+        sync_with_disk = save and self.data_name is not None
+        self.merge_into_full_ds(new_ds,
+                                overwrite=overwrite,
+                                sync_with_disk=sync_with_disk)
+
     def harvest_combos(self, combos, *, save=True, overwrite=None,
                        **runner_settings):
         """Run combos, automatically merging into an on-disk dataset.
@@ -415,60 +378,8 @@ class Harvester(object):
 
         """
 
-        self.runner.run_combos(combos, **runner_settings)
-
-        sync_with_disk = save and self.data_name is not None
-        self.merge_into_full_ds(self.last_ds,
-                                overwrite=overwrite,
-                                sync_with_disk=sync_with_disk)
-
-    def Crop(self,
-             name=None,
-             parent_dir=None,
-             save_fn=None,
-             batchsize=None,
-             num_batches=None):
-        """
-        """
-        return Crop(fn=self.runner.fn,
-                    name=name,
-                    parent_dir=parent_dir,
-                    save_fn=save_fn,
-                    batchsize=batchsize,
-                    num_batches=num_batches)
-
-    def sow_combos(self, crop, combos, constants=(), hide_progbar=False):
-        """
-        """
-        return self.runner.sow_combos(crop, combos,
-                                      constants=constants,
-                                      hide_progbar=hide_progbar,)
-
-    def harvest_combos_reap(self, crop,
-                            save=True,
-                            overwrite=None):
-        """
-        """
-
-        self.runner.reap_combos(crop)
-
-        sync_with_disk = save and self.data_name is not None
-        self.merge_into_full_ds(self.last_ds,
-                                overwrite=overwrite,
-                                sync_with_disk=sync_with_disk)
-
-    def harvest_combos_sow_and_reap(self, crop, combos, constants=(),
-                                    save=True,
-                                    overwrite=None):
-        """
-        """
-
-        self.runner.sow_and_reap_combos(crop, combos)
-
-        sync_with_disk = save and self.data_name is not None
-        self.merge_into_full_ds(self.last_ds,
-                                overwrite=overwrite,
-                                sync_with_disk=sync_with_disk)
+        ds = self.runner.run_combos(combos, **runner_settings)
+        self.add(ds, save=save, overwrite=overwrite)
 
     def harvest_cases(self, cases, *,
                       save=True,
@@ -476,16 +387,27 @@ class Harvester(object):
                       **runner_settings):
         """Run cases, automatically merging into an on-disk dataset.
         """
+        ds = self.runner.run_cases(cases, **runner_settings)
+        self.add(ds, save=save, overwrite=overwrite)
 
-        self.runner.run_cases(cases, **runner_settings)
-
-        sync_with_disk = save and self.data_name is not None
-        self.merge_into_full_ds(self.last_ds,
-                                overwrite=overwrite,
-                                sync_with_disk=sync_with_disk)
+    def Crop(self,
+             name=None,
+             parent_dir=None,
+             save_fn=None,
+             batchsize=None,
+             num_batches=None):
+        """Return a Crop instance with this Harvester, from which `fn`
+        will be set, and then combos can be sown, grown, and reaped into the
+        Harvester.full_ds.
+        """
+        return Crop(harvester=self,
+                    name=name,
+                    parent_dir=parent_dir,
+                    save_fn=save_fn,
+                    batchsize=batchsize,
+                    num_batches=num_batches)
 
     def __repr__(self):
-
         string = ("Harvester\n"
                   "---------\n"
                   "{self.runner}"

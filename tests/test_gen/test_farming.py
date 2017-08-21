@@ -95,11 +95,11 @@ class TestRunner:
         with tempfile.TemporaryDirectory() as tmpdir:
             r = fn3_fba_runner
             crop = r.Crop(parent_dir=tmpdir, num_batches=2)
-            r.sow_combos(crop, (('a', (1, 2)),
-                                ('b', (3, 4))))
+            crop.sow_combos((('a', (1, 2)),
+                             ('b', (3, 4))))
             for i in [1, 2]:
                 grow(i, crop)
-            r.reap_combos(crop)
+            crop.reap()
             assert r.last_ds.identical(fn3_fba_ds)
 
     def test_sow_and_reap(self, fn3_fba_runner, fn3_fba_ds):
@@ -116,8 +116,9 @@ class TestRunner:
             with ThreadPoolExecutor(1) as pool:
                 pool.submit(concurrent_grow)
 
-                r.sow_and_reap_combos(crop, (('a', (1, 2)),
-                                             ('b', (3, 4))))
+                crop.sow_combos((('a', (1, 2)),
+                                 ('b', (3, 4))))
+                crop.reap(wait=True)
 
             assert r.last_ds.identical(fn3_fba_ds)
 
@@ -176,17 +177,17 @@ class TestHarvester:
             h = Harvester(fn3_fba_runner, fl_pth)
             crop = h.Crop(parent_dir=tmpdir, num_batches=2)
 
-            h.sow_combos(crop, (('a', (1, 2)), ('b', (3, 4))))
+            crop.sow_combos((('a', (1, 2)), ('b', (3, 4))))
 
             for i in [1, 2]:
                 grow(i, crop)
-            h.harvest_combos_reap(crop)
+            crop.reap()
 
             hds = load_ds(fl_pth)
 
-        assert h.last_ds.identical(fn3_fba_ds)
-        assert h.full_ds.identical(fn3_fba_ds)
-        assert hds.identical(fn3_fba_ds)
+            assert h.last_ds.identical(fn3_fba_ds)
+            assert h.full_ds.identical(fn3_fba_ds)
+            assert hds.identical(fn3_fba_ds)
 
     def test_harvest_combos_new_sow_and_reap(self, fn3_fba_runner, fn3_fba_ds):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -202,8 +203,8 @@ class TestHarvester:
 
             with ThreadPoolExecutor(1) as pool:
                 pool.submit(concurrent_grow)
-                h.harvest_combos_sow_and_reap(crop,
-                                              (('a', (1, 2)), ('b', (3, 4))))
+                crop.sow_combos((('a', (1, 2)), ('b', (3, 4))))
+                crop.reap(wait=True)
 
             hds = load_ds(fl_pth)
 

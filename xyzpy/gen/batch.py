@@ -3,6 +3,9 @@ import shutil
 from itertools import chain
 from time import sleep
 from glob import glob
+import warnings
+import pickle
+import copy
 
 try:
     import joblib
@@ -36,18 +39,22 @@ def parse_crop_details(fn, crop_name, crop_parent):
 
     Parameters
     ----------
-        fn : callable (optional)
-            Function to infer name crop_name from, if not given.
-        crop_name : str (optional)
-            Specific name to give this set of runs.
-        crop_parent : str (optional)
-            Specific directory to put the ".xyz-{crop_name}/" folder in
-            with all the cases and results.
+    fn : callable, optional
+        Function to infer name crop_name from, if not given.
+    crop_name : str, optional
+        Specific name to give this set of runs.
+    crop_parent : str, optional
+        Specific directory to put the ".xyz-{crop_name}/" folder in
+        with all the cases and results.
 
     Returns
     -------
-        crop_location : str
-            Full path to the crop-folder.
+    crop_location : str
+        Full path to the crop-folder.
+    crop_name : str
+        Name of the crop.
+    crop_parent : str
+        Parent folder of the crop.
     """
     if crop_name is None:
         if fn is None:
@@ -60,11 +67,69 @@ def parse_crop_details(fn, crop_name, crop_parent):
     return crop_location, crop_name, crop_parent
 
 
+def parse_fn_runner_harvester(fn, runner, harvester):
+    """
+    """
+    if harvester is not None:
+        if (runner is not None) or (fn is not None):
+            warnings.warn(
+                "If `harvester` is set `runner` and `fn` are ignored.")
+        harvester = harvester
+        runner = harvester.runner
+        fn = harvester.runner.fn
+    elif runner is not None:
+        if fn is not None:
+            warnings.warn("If `runner` is set `fn` is ignored.")
+        harvester = None
+        runner = runner
+        fn = runner.fn
+    else:
+        harvester = None
+        runner = None
+        fn = fn
+    return fn, runner, harvester
+
+
 class Crop(object):
     """Encapsulates all the details describing a single 'crop', that is,
     its location, name, and batch size/number. Also allows tracking of
     crop's progress, and experimentally, automatic submission of
     workers to grid engine to complete un-grown cases.
+
+        Parameters
+        ----------
+            fn : callable, optional
+                Target function - Crop `name` will be inferred from this if
+                not given explicitly. If given, `Sower` will also default
+                to saving a version of `fn` to disk for `batch.grow` to use.
+            name : str, optional
+                Custom name for this set of runs - must be given if `fn`
+                is not.
+            parent_dir : str, optional
+                If given, alternative directory to put the ".xyz-{name}/"
+                folder in with all the cases and results.
+            save_fn : bool, optional
+                Whether to save the function to disk for `batch.grow` to use.
+                Will default to True if `fn` is given.
+            batchsize : int, optional
+                How many cases to group into a single batch per worker.
+                By default, batchsize=1. Cannot be specified if `num_batches`
+                is.
+            num_batches : int, optional
+                How many total batches to aim for, cannot be specified if
+                `batchsize` is.
+            runner : xyzpy.Runner, optional
+                A Runner instance, from which the `fn` can be inferred and
+                which can also allow the Crop to reap itself straight to a
+                dataset.
+            harvester : xyzpy.Harvester, optional
+                A Harvester instance, from which the `fn` can be inferred and
+                which can also allow the Crop to reap itself straight to a
+                on-disk dataset.
+            autoload : bool, optional
+                If True, check for the existence of a Crop written to disk
+                with the same location, and if found, load it.
+
     """
 
     def __init__(self, *,
@@ -73,34 +138,14 @@ class Crop(object):
                  parent_dir=None,
                  save_fn=None,
                  batchsize=None,
-                 num_batches=None):
-        """
+                 num_batches=None,
+                 runner=None,
+                 harvester=None,
+                 autoload=True):
 
-        Parameters
-        ----------
-            fn : callable (optional)
-                Target function - Crop `name` will be inferred from this if
-                not given explicitly. If given, `Sower` will also default
-                to saving a version of `fn` to disk for `batch.grow` to use.
-            name : str (optional)
-                Custom name for this set of runs - must be given if `fn`
-                is not.
-            parent_dir : str (optional)
-                If given, alternative directory to put the ".xyz-{name}/"
-                folder in with all the cases and results.
-            save_fn : bool (optional)
-                Whether to save the function to disk for `batch.grow` to use.
-                Will default to True if `fn` is given.
-            batchsize : int (optional)
-                How many cases to group into a single batch per worker.
-                By default, batchsize=1. Cannot be specified if `num_batches`
-                is.
-            num_batches : int (optional)
-                How many total batches to aim for, cannot be specified if
-                `batchsize` is.
-        """
+        self._fn, self.runner, self.harvester = \
+            parse_fn_runner_harvester(fn, runner, harvester)
 
-        self._fn = fn
         self.name = name
         self.parent_dir = parent_dir
         self.save_fn = save_fn
@@ -109,29 +154,14 @@ class Crop(object):
 
         # Work out the full directory for the crop
         self.location, self.name, self.parent_dir = \
-            parse_crop_details(fn, name, parent_dir)
+            parse_crop_details(self._fn, self.name, self.parent_dir)
 
         # Save function so it can be automatically loaded with all deps?
         if (fn is None) and (save_fn is True):
             raise ValueError("Must specify a function for it to be saved!")
         self.save_fn = save_fn is not False
 
-    def _get_fn(self):
-        return self._fn
-
-    def _set_fn(self, fn):
-        if self.save_fn is None and fn is not None:
-            self.save_fn = True
-        self._fn = fn
-
-    def _del_fn(self):
-        self._fn = None
-        self.save_fn = False
-
-    fn = property(_get_fn, _set_fn, _del_fn,
-                  "Function to save with the Crop for automatic loading and "
-                  "running. Default crop name will be inferred from this if"
-                  "not given explicitly as well.")
+    # ------------------------------- methods ------------------------------- #
 
     def choose_batch_settings(self, combos):
         """Work out how to divide all cases into batches, i.e. ensure
@@ -144,7 +174,7 @@ class Crop(object):
             pos_tot = self.batchsize * self.num_batches
             if not (n <= pos_tot < n + self.batchsize):
                 raise ValueError("`batchsize` and `num_batches` cannot both"
-                                 "be " "specified if they do not not multiply"
+                                 "be specified if they do not not multiply"
                                  "to the correct number of total cases.")
 
         # Decide based on batchsize
@@ -176,6 +206,48 @@ class Crop(object):
         os.makedirs(os.path.join(self.location, "batches"), exist_ok=True)
         os.makedirs(os.path.join(self.location, "results"), exist_ok=True)
 
+    def save_info(self, combos):
+        """Save information about the sowed cases.
+        """
+        # If saving Harvester or Runner, strip out function information so
+        #   as just to use pickle.
+        if self.harvester is not None:
+            harvester_copy = copy.deepcopy(self.harvester)
+            harvester_copy.runner.fn = None
+            hrvstr_pkl = pickle.dumps(harvester_copy)
+            runner_pkl = None
+        elif self.runner is not None:
+            hrvstr_pkl = None
+            runner_copy = copy.deepcopy(self.runner)
+            runner_copy.fn = None
+            runner_pkl = pickle.dumps(runner_copy)
+        else:
+            hrvstr_pkl = None
+            runner_pkl = None
+
+        joblib.dump({
+            'combos': combos,
+            'batchsize': self.batchsize,
+            'num_batches': self.num_batches,
+            'harvester': hrvstr_pkl,
+            'runner': runner_pkl,
+        }, os.path.join(self.location, INFO_NM))
+
+    def load_info(self):
+        """Load information about the saved cases.
+        """
+        settings = joblib.load(os.path.join(self.location, INFO_NM))
+        self.batchsize = settings['batchsize']
+        self.num_batches = settings['num_batches']
+
+        hrvstr_pkl = settings['harvester']
+        harvester = None if hrvstr_pkl is None else pickle.loads(hrvstr_pkl)
+        runner_pkl = settings['runner']
+        runner = None if runner_pkl is None else pickle.loads(runner_pkl)
+
+        self._fn, self.runner, self.harvester = \
+            parse_fn_runner_harvester(None, runner, harvester)
+
     def save_function_to_disk(self):
         """Save the base function to disk using cloudpickle
         """
@@ -184,21 +256,33 @@ class Crop(object):
         joblib.dump(cloudpickle.dumps(self._fn),
                     os.path.join(self.location, FNCT_NM))
 
-    def save_info(self, combos):
-        """Save information about the sowed cases.
+    def load_function(self):
+        """Load the saved function from disk, and try to re-insert it back into
+        Harvester or Runner if present.
         """
-        joblib.dump({
-            'combos': combos,
-            'batchsize': self.batchsize,
-            'num_batches': self.num_batches,
-        }, os.path.join(self.location, INFO_NM))
+        import cloudpickle
 
-    def load_info(self):
-        """
-        """
-        settings = joblib.load(os.path.join(self.location, INFO_NM))
-        self.batchsize = settings['batchsize']
-        self.num_batches = settings['num_batches']
+        self._fn = cloudpickle.loads(joblib.load(
+            os.path.join(self.location, FNCT_NM)))
+
+        if self.harvester is not None:
+            if self.harvester.runner.fn is None:
+                self.harvester.runner.fn = self._fn
+            else:
+                # TODO: check equality?
+                raise XYZError("Trying to load this Crop's function, {}, from "
+                               "disk but its Harvester already has a function "
+                               "set: {}.".format(self._fn,
+                                                 self.harvester.runner.fn))
+        elif self.runner is not None:
+            if self.runner.fn is None:
+                self.runner.fn = self._fn
+            else:
+                # TODO: check equality?
+                raise XYZError("Trying to load this Crop's function, {}, from "
+                               "disk but its Runner already has a function "
+                               "set: {}.".format(self._fn,
+                                                 self.runner.fn))
 
     def prepare(self, combos):
         """Write information about this crop and the supplied combos to disk.
@@ -215,7 +299,7 @@ class Crop(object):
         return os.path.exists(os.path.join(self.location, INFO_NM))
 
     def calc_progress(self):
-        """
+        """Calculate how much progressed has been made in growing the cases.
         """
         if self.is_prepared():
             self.load_info()
@@ -226,18 +310,6 @@ class Crop(object):
         else:
             self._num_sown_batches = -1
             self._num_results = -1
-
-    @property
-    def num_sown_batches(self):
-        """Total number of batches to be run/grown.
-        """
-        self.calc_progress()
-        return self._num_sown_batches
-
-    @property
-    def num_results(self):
-        self.calc_progress()
-        return self._num_results
 
     def is_ready_to_reap(self):
         self.calc_progress()
@@ -288,6 +360,200 @@ class Crop(object):
             not_done_spaces=" " * (total_bars - bars),
             percentage=percentage,
         )
+
+    def sow_combos(self, combos, constants=None, hide_progbar=False):
+        """Sow to disk.
+        """
+        combos = _parse_combos(combos)
+        constants = _parse_constants(constants)
+
+        if self.runner is not None:
+            constants = {**self.runner._constants, **constants}
+            constants = {**self.runner._resources, **constants}
+
+        # Sort to ensure order remains same for reaping results
+        #   (don't want to hash kwargs)
+        combos = sorted(combos, key=lambda x: x[0])
+
+        with Sower(self, combos) as sow_fn:
+            _combo_runner(fn=sow_fn, combos=combos, constants=constants,
+                          hide_progbar=hide_progbar)
+
+    def reap_combos(self, wait=False):
+        """Reap already sown and grow results from specified crop.
+
+        Parameters
+        ----------
+        wait : bool, optional
+            Whether to wait for results to appear. If false (default) all
+            results need to be in place before the reap.
+
+        Returns
+        -------
+        results : nested tuple
+            'N-dimensional' tuple containing the results.
+        """
+        if not (wait or self.is_ready_to_reap()):
+            raise XYZError("This crop is not ready to reap yet - results are"
+                           " missing.")
+
+        # Load same combinations as cases saved with
+        settings = joblib.load(os.path.join(self.location, INFO_NM))
+
+        with Reaper(self, num_batches=settings['num_batches'],
+                    wait=wait) as reap_fn:
+
+            results = _combo_runner(fn=reap_fn,
+                                    combos=settings['combos'],
+                                    constants={})
+
+        return results
+
+    def reap_combos_to_ds(self,
+                          var_names=None,
+                          var_dims=None,
+                          var_coords=None,
+                          constants=None,
+                          attrs=None,
+                          parse=True,
+                          wait=False):
+        """Reap a function over sowed combinations and output to a Dataset.
+
+        Parameters
+        ----------
+        var_names : str, sequence of strings, or None
+            Variable name(s) of the output(s) of `fn`, set to None if
+            fn outputs data already labelled in a Dataset or DataArray.
+        var_dims : sequence of either strings or string sequences, optional
+            'Internal' names of dimensions for each variable, the values for
+            each dimension should be contained as a mapping in either
+            `var_coords` (not needed by `fn`) or `constants` (needed by `fn`).
+        var_coords : mapping, optional
+            Mapping of extra coords the output variables may depend on.
+        constants : mapping, optional
+            Arguments to `fn` which are not iterated over, these will be
+            recorded either as attributes or coordinates if they are named
+            in `var_dims`.
+        resources : mapping, optional
+            Like `constants` but they will not be recorded.
+        attrs : mapping, optional
+            Any extra attributes to store.
+        wait : bool, optional
+            Whether to wait for results to appear. If false (default) all
+            results need to be in place before the reap.
+
+        Returns
+        -------
+        xarray.Dataset
+            Multidimensional labelled dataset contatining all the results.
+        """
+        if not (wait or self.is_ready_to_reap()):
+            raise XYZError(
+                "This crop is not ready to reap yet - results are missing.")
+
+        # Load exact same combinations as cases saved with
+        settings = joblib.load(os.path.join(self.location, INFO_NM))
+
+        if parse:
+            constants = _parse_constants(constants)
+            attrs = _parse_attrs(attrs)
+
+        with Reaper(self, num_batches=settings['num_batches'],
+                    wait=wait) as reap_fn:
+
+            # Move constants into attrs, so as not to pass them to the Reaper
+            #   when if fact they were meant for the original function.
+            ds = combo_runner_to_ds(fn=reap_fn,
+                                    combos=settings['combos'],
+                                    var_names=var_names,
+                                    var_dims=var_dims,
+                                    var_coords=var_coords,
+                                    constants={},
+                                    resources={},
+                                    attrs={**attrs, **constants},
+                                    parse=parse)
+
+        return ds
+
+    def reap_runner(self, runner, wait=False):
+        """Reap a Crop over sowed combos and save to a dataset defined by a
+        Runner.
+        """
+        # Can ignore `Runner.resources` as they play no part in desecribing the
+        #   output, though they should be supplied to sow and thus grow.
+        ds = self.reap_combos_to_ds(
+            var_names=runner._var_names,
+            var_dims=runner._var_dims,
+            var_coords=runner._var_coords,
+            constants=runner._constants,
+            attrs=runner._attrs,
+            parse=False,
+            wait=wait)
+        runner.last_ds = ds
+        return ds
+
+    def reap_harvest(self, harvester, wait=False, save=True, overwrite=None):
+        """
+        """
+        if harvester is None:
+            raise ValueError("Cannot reap and harvest if no Harvester is set.")
+
+        ds = self.reap_runner(harvester.runner, wait=wait)
+        self.harvester.add(ds, save=save, overwrite=overwrite)
+        return ds
+
+    def reap(self, wait=False, save=True, overwrite=None):
+        """Reap sown and grown combos from disk. Return a dataset if a runner
+        or harvester is set, otherwise, the raw nested tuple.
+
+        Parameters
+        ----------
+        wait : bool, optional
+            Whether to wait for results to appear. If false (default) all
+            results need to be in place before the reap.
+
+        Returns
+        -------
+        nested tuple or xarray.Dataset
+        """
+        if self.harvester is not None:
+            return self.reap_harvest(self.harvester,
+                                     wait=wait, save=save, overwrite=overwrite)
+        elif self.runner is not None:
+            return self.reap_runner(self.runner, wait=wait)
+        else:
+            return self.reap_combos(wait=wait)
+
+    #  ----------------------------- properties ----------------------------- #
+
+    def _get_fn(self):
+        return self._fn
+
+    def _set_fn(self, fn):
+        if self.save_fn is None and fn is not None:
+            self.save_fn = True
+        self._fn = fn
+
+    def _del_fn(self):
+        self._fn = None
+        self.save_fn = False
+
+    fn = property(_get_fn, _set_fn, _del_fn,
+                  "Function to save with the Crop for automatic loading and "
+                  "running. Default crop name will be inferred from this if"
+                  "not given explicitly as well.")
+
+    @property
+    def num_sown_batches(self):
+        """Total number of batches to be run/grown.
+        """
+        self.calc_progress()
+        return self._num_sown_batches
+
+    @property
+    def num_results(self):
+        self.calc_progress()
+        return self._num_results
 
 
 class Sower(object):
@@ -343,19 +609,6 @@ class Sower(object):
         # Make sure any overfill also saved
         if self._batch_cases:
             self.save_batch()
-
-
-def combos_sow(crop, combos, constants=None, hide_progbar=False):
-
-    combos = _parse_combos(combos)
-    constants = _parse_constants(constants)
-
-    # Sort to ensure order remains same for reaping results (don't hash kwargs)
-    combos = sorted(combos, key=lambda x: x[0])
-
-    with Sower(crop, combos) as sow_fn:
-        _combo_runner(fn=sow_fn, combos=combos, constants=constants,
-                      hide_progbar=hide_progbar)
 
 
 def grow(batch_number, crop=None, fn=None, check_mpi=True, hide_progbar=False):
@@ -469,143 +722,6 @@ class Reaper(object):
             shutil.rmtree(self.crop.location)
 
 
-def combos_reap(crop, wait=False):
-    """Reap already sown and grow results from specified crop.
-
-    Parameters
-    ----------
-        crop : xyzpy.batch.Crop instance
-            Description of where and how to store the cases and results.
-        wait : bool, optional
-            Whether to wait for results to appear. If false (default) all
-            results need to be in place before the reap.
-    """
-    if not (wait or crop.is_ready_to_reap()):
-        raise XYZError("This crop is not ready to reap yet - results are"
-                       " missing.")
-
-    # Load same combinations as cases saved with
-    settings = joblib.load(os.path.join(crop.location, INFO_NM))
-
-    with Reaper(crop,
-                num_batches=settings['num_batches'],
-                wait=wait) as reap_fn:
-
-        results = _combo_runner(fn=reap_fn,
-                                combos=settings['combos'],
-                                constants={})
-
-    return results
-
-
-def combos_reap_to_ds(crop,
-                      var_names=None,
-                      var_dims=None,
-                      var_coords=None,
-                      constants=None,
-                      attrs=None,
-                      parse=True,
-                      wait=False):
-    """Reap a function over sowed combinations and output to a Dataset.
-
-    Parameters
-    ----------
-        crop : xyzpy.batch.Crop instance
-            Description of where and how to store the cases and results.
-        var_names : str, sequence of strings, or None
-            Variable name(s) of the output(s) of `fn`, set to None if
-            fn outputs data already labelled in a Dataset or DataArray.
-        var_dims : sequence of either strings or string sequences, optional
-            'Internal' names of dimensions for each variable, the values for
-            each dimension should be contained as a mapping in either
-            `var_coords` (not needed by `fn`) or `constants` (needed by `fn`).
-        var_coords : mapping, optional
-            Mapping of extra coords the output variables may depend on.
-        constants : mapping, optional
-            Arguments to `fn` which are not iterated over, these will be
-            recorded either as attributes or coordinates if they are named
-            in `var_dims`.
-        resources : mapping, optional
-            Like `constants` but they will not be recorded.
-        attrs : mapping, optional
-            Any extra attributes to store.
-        wait : bool, optional
-            Whether to wait for results to appear. If false (default) all
-            results need to be in place before the reap.
-
-    Returns
-    -------
-        xarray.Dataset
-            Multidimensional labelled dataset contatining all the results.
-    """
-    if not (wait or crop.is_ready_to_reap()):
-        raise XYZError("This crop is not ready to reap yet - results are"
-                       " missing.")
-
-    # Load same combinations as cases saved with
-    settings = joblib.load(os.path.join(crop.location, INFO_NM))
-
-    constants = _parse_constants(constants)
-    attrs = _parse_attrs(attrs)
-
-    with Reaper(crop,
-                num_batches=settings['num_batches'],
-                wait=wait) as reap_fn:
-
-        ds = combo_runner_to_ds(fn=reap_fn,
-                                combos=settings['combos'],
-                                var_names=var_names,
-                                var_dims=var_dims,
-                                var_coords=var_coords,
-                                constants={},
-                                resources={},
-                                attrs={**attrs, **constants},
-                                parse=parse)
-
-    return ds
-
-
-def combos_sow_and_reap(crop, combos, constants=None):
-    """Sow combos and immediately (wait to) reap the results.
-
-    Parameters
-    ----------
-        crop : xyzpy.batch.Crop instance
-            Description of where and how to store the cases and results.
-        combos : mapping_like
-            Description of combinations from which to sow cases from.
-    """
-    combos_sow(crop, combos, constants=constants, hide_progbar=True)
-    return combos_reap(crop, wait=True)
-
-
-def combos_sow_and_reap_to_ds(crop, combos, constants=None,
-                              var_names=None,
-                              var_dims=None,
-                              var_coords=None,
-                              attrs=None,
-                              parse=True):
-    """Sow combos and immediately (wait to) reap the results to a dataset.
-
-    Parameters
-    ----------
-        crop : xyzpy.batch.Crop instance
-            Description of where and how to store the cases and results.
-        combos : mapping_like
-            Description of combinations from which to sow cases from.
-
-    """
-    combos_sow(crop, combos, constants=constants, hide_progbar=True)
-    return combos_reap_to_ds(crop,
-                             var_names=var_names,
-                             var_dims=var_dims,
-                             var_coords=var_coords,
-                             constants=constants,
-                             attrs=attrs,
-                             parse=parse,
-                             wait=True)
-
-
 # --------------------------------------------------------------------------- #
 #                     Automatic Batch Submission Scripts                      #
 # --------------------------------------------------------------------------- #
@@ -621,27 +737,17 @@ mkdir -p {output_directory}
 #$ -pe smp {num_threads}
 #$ -t {run_start}-{run_stop}
 cd {working_directory}
+export OMP_NUM_THREADS={num_threads}
+"""
 
-python <<EOF
+_QSUB_GROW_ALL_SCRIPT = """python <<EOF
 from xyzpy.gen.batch import grow, Crop
 crop = Crop(name='{name}')
 crop = grow($SGE_TASK_ID, crop=crop)
 EOF
 """
 
-_BASE_QSUB_SCRIPT_MISSING = """#!/bin/bash -l
-#$ -S /bin/bash
-#$ -l h_rt={hours}:{minutes}:{seconds}
-#$ -l mem={gigabytes}G
-#$ -l tmpfs={temp_gigabytes}G
-#$ -N {name}
-mkdir -p {output_directory}
-#$ -wd {output_directory}
-#$ -pe smp {num_threads}
-#$ -t {run_start}-{run_stop}
-cd {working_directory}
-
-python <<EOF
+_QSUB_GROW_MISSING_SCRIPT = """python <<EOF
 from xyzpy.gen.batch import grow, Crop
 crop = Crop(name='{name}')
 batch_ids = {batch_ids}
@@ -688,10 +794,10 @@ def gen_qsub_script(crop,
     }
 
     if crop.num_results == 0:
-        script = _BASE_QSUB_SCRIPT
+        script = _BASE_QSUB_SCRIPT + _QSUB_GROW_ALL_SCRIPT
         opts['run_stop'] = crop.num_batches
     else:
-        script = _BASE_QSUB_SCRIPT_MISSING
+        script = _BASE_QSUB_SCRIPT + _QSUB_GROW_MISSING_SCRIPT
         batch_ids = crop.missing_results()
         opts['run_stop'] = len(batch_ids)
         opts['batch_ids'] = batch_ids
