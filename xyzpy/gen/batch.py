@@ -651,7 +651,9 @@ def grow(batch_number, crop=None, fn=None, check_mpi=True, hide_progbar=False):
 
     # process each case
     results = tuple(
-        progbar((fn(**kws) for kws in cases), disable=hide_progbar)
+        progbar((fn(**kws) for kws in cases),
+                disable=hide_progbar,
+                total=len(cases))
     )
 
     # maybe want to run grow as mpiexec (i.e. `fn` itself in parallel),
