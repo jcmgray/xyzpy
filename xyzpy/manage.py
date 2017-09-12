@@ -161,14 +161,22 @@ def check_runs(obj, dim='run', var=None, sel=()):
         sel : mapping (optional)
             Subselect these other coordinates first.
     """
-    if sel:
-        obj = obj.loc[sel]
-    if var:
-        obj = obj[var]
+    try:
+        if sel:
+            obj = obj.loc[sel]
+        if var:
+            obj = obj[var]
 
-    obj = trimna(obj)
-    obj = obj.dropna(dim, how='all')
-    obj = obj[dim].values
+        obj = trimna(obj)
+        obj = obj.dropna(dim, how='all')
+        obj = obj[dim].values
+    except KeyError:
+        print("* NO DATA *")
+        return
+
+    if obj.size == 0:
+        print("* NO DATA *")
+        return
 
     if 'int' not in str(obj.dtype):
         raise TypeError("check_runs can only check integer dimesions.")
