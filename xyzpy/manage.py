@@ -60,42 +60,69 @@ def save_ds(ds, file_name, engine="h5netcdf"):
     ds.to_netcdf(file_name, engine=engine)
 
 
-def load_ds(file_name, engine="h5netcdf", load_to_mem=True, create_new=False):
-    """Loads a xarray dataset.
+def load_ds(file_name,
+            engine="h5netcdf",
+            load_to_mem=None,
+            create_new=False,
+            chunks=None):
+    """Loads a xarray dataset. Basically ``xarray.open_dataset`` with some
+    different defaults and convenient behaviour.
 
     Parameters
     ----------
-        file_name: name of file
-        engine: engine used to load file
-        load_to_mem: once opened, load from disk to memory
-        create_new: if no file exists make a blank one
+    file_name : str
+        Name of file to open.
+    engine : str, optional
+        Engine used to load file.
+    load_to_mem : bool, optional
+        Ince opened, load from disk into memory. Defaults to ``True`` if
+        ``chunks=None``.
+    create_new : bool, optional
+        If no file exists make a blank one.
+    chunks : int or dict
+        Passed to ``xarray.open_dataset`` so that data is stored using
+        ``dask.array``.
+
 
     Returns
     -------
-        ds: loaded Dataset
+    ds : xarray.Dataset
+        Loaded Dataset.
     """
     file_name = _auto_add_extension(file_name, engine)
+
+    if (load_to_mem is None) and (chunks is None):
+        load_to_mem = True
+    else:
+        if load_to_mem and chunks:
+            raise ValueError("``chunks`` redundant if ``load_to_mem`` given.")
+        else:
+            load_to_mem = False
+
     try:
         try:
-            ds = xr.open_dataset(file_name, engine=engine)
+            ds = xr.open_dataset(file_name,
+                                 engine=engine,
+                                 chunks=chunks)
+
         except AttributeError as e1:
             if "object has no attribute" in str(e1) and engine == 'h5netcdf':
-                ds = xr.open_dataset(file_name, engine="netcdf4")
+                ds = xr.open_dataset(file_name,
+                                     engine="netcdf4",
+                                     chunks=chunks)
             else:
                 raise e1
+
         if load_to_mem:
             ds.load()
             ds.close()
+
     except (RuntimeError, OSError) as e2:
         if "o such" in str(e2) and create_new:
             ds = xr.Dataset()
         else:
             raise e2
     return ds
-
-
-xrsave = save_ds
-xrload = load_ds
 
 
 def trimna(obj):

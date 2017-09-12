@@ -84,3 +84,23 @@ class TestSaveAndLoad:
             save_ds(ds1, os.path.join(tmpdir, "test.h5"), engine=engine_save)
             ds2 = load_ds(os.path.join(tmpdir, "test.h5"), engine=engine_load)
             assert ds1.identical(ds2)
+
+    @mark.parametrize(("engine_load"),
+                      ['h5netcdf',
+                       'netcdf4'])
+    def test_dask_load(self, ds_real, engine_load):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            save_ds(ds_real, os.path.join(tmpdir, "test.nc"))
+            ds2 = load_ds(os.path.join(tmpdir, "test.nc"),
+                          engine=engine_load,
+                          chunks=1)
+            assert ds2.chunks['b'] == (1, 1)
+            assert ds_real.identical(ds2)
+
+    @mark.xfail
+    def test_h5netcdf_dask(self, ds1):
+        ds = ds1.chunk()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            save_ds(ds, os.path.join(tmpdir, "test.nc"), engine='h5netcdf')
+            ds2 = load_ds(os.path.join(tmpdir, "test.nc"))
+            assert ds1.identical(ds2)

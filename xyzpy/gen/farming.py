@@ -283,112 +283,130 @@ class Harvester(object):
         """
         return self.runner.last_ds
 
-    def save_to_disk(self):
-        """Save `full_ds` onto disk.
-        """
-        save_ds(self._full_ds, self.data_name, engine=self.engine)
-
-    def try_to_load_from_disk(self):
+    def try_to_load_from_disk(self, chunks=None):
         """Load the disk dataset into `full_ds`.
         """
-
         # Check file exists and can be written to
         if os.access(self.data_name, os.W_OK):
-            self._full_ds = load_ds(self.data_name, engine=self.engine)
+            self._full_ds = load_ds(self.data_name,
+                                    engine=self.engine,
+                                    chunks=chunks)
+
         # Do nothing if file does not exist at all
         elif not os.path.isfile(self.data_name):  # pragma: no cover
             pass
+
         # Catch read-only errors etc.
         else:
             raise OSError("The file '{}' exists but cannot be written "
                           "to".format(self.data_name))
 
+    def save_new_full_ds(self, new_full_ds=None):
+        """Save `full_ds` onto disk.
+        """
+        if new_full_ds is not None:
+            if os.path.exists(self.data_name):
+                os.remove(self.data_name)
+            self._full_ds = new_full_ds
+        save_ds(self._full_ds, self.data_name, engine=self.engine)
+
     def delete_ds(self, backup=True):
         """Delete the on-disk dataset.
         """
-
         if backup:
             import datetime
             ts = '{:%Y%m%d-%H%M%S}'.format(datetime.datetime.now())
             shutil.copy(self.data_name, self.data_name + '.BAK-{}'.format(ts))
+
         os.remove(self.data_name)
 
-    def merge_into_full_ds(self, new_ds, overwrite=None, sync_with_disk=True):
+    def merge_into_full_ds(self, new_ds,
+                           overwrite=None,
+                           sync_with_disk=True,
+                           chunks=None):
         """Merge a new dataset into the in-memory full dataset.
 
         Parameters
         ----------
-            new_ds : xr.Dataset or xr.DataArray
-                Data to be merged into the full dataset.
-            overwrite : {None, False, True}, optional
-                    * ``None`` (default): attempt the merge and only raise if
-                    data conflicts.
-                    * ``True``: overwrite conflicting current data with
-                    that from ``new_ds``.
-                    *``False``: drop any conflicting data from ``new_ds``.
-            sync_with_disk : bool, optional
-                If True (default), load and save the disk dataset before
-                and after merging in the new data.
+        new_ds : xr.Dataset or xr.DataArray
+            Data to be merged into the full dataset.
+        overwrite : {None, False, True}, optional
+                * ``None`` (default): attempt the merge and only raise if
+                data conflicts.
+                * ``True``: overwrite conflicting current data with
+                that from ``new_ds``.
+                *``False``: drop any conflicting data from ``new_ds``.
+        sync_with_disk : bool, optional
+            If True (default), load and save the disk dataset before
+            and after merging in the new data.
+        chunks : bool, optional
+            If not none, passed passed to xarray so that all arrays are loaded
+            into on-disk dask arrays.
         """
 
         if sync_with_disk:
-            self.try_to_load_from_disk()
+            self.try_to_load_from_disk(chunks=chunks)
 
         if isinstance(new_ds, xr.DataArray):
             new_ds = new_ds.to_dataset()
 
+        if chunks is not None:
+            new_ds.chunk(chunks)
+
         if self._full_ds is None:
-            self._full_ds = new_ds.copy(deep=True)
+            new_full_ds = new_ds.copy(deep=True)
         else:
             # Overwrite with new data
             if overwrite is True:
-                self._full_ds = new_ds.combine_first(self._full_ds)
+                new_full_ds = new_ds.combine_first(self._full_ds)
             # Overwrite nothing
             elif overwrite is False:
-                self._full_ds = self._full_ds.combine_first(new_ds)
+                new_full_ds = self._full_ds.combine_first(new_ds)
             # Merge, raising error if the two datasets conflict
             else:
-                self._full_ds.merge(
-                    new_ds, compat='no_conflicts', inplace=True)
+                new_full_ds = self._full_ds.merge(
+                    new_ds, compat='no_conflicts', inplace=False)
 
         if sync_with_disk:
-            self.save_to_disk()
+            self.save_new_full_ds(new_full_ds)
 
-    def add(self, new_ds, save, overwrite):
+    def add(self, new_ds, save=True, overwrite=None, chunks=None):
         """Add a new dataset to this harvester.
         """
         sync_with_disk = save and self.data_name is not None
         self.merge_into_full_ds(new_ds,
                                 overwrite=overwrite,
-                                sync_with_disk=sync_with_disk)
+                                sync_with_disk=sync_with_disk,
+                                chunks=chunks)
 
-    def harvest_combos(self, combos, *, save=True, overwrite=None,
+    def harvest_combos(self, combos, *,
+                       save=True,
+                       overwrite=None,
+                       chunks=None,
                        **runner_settings):
         """Run combos, automatically merging into an on-disk dataset.
 
         Parameters
         ---------
-            combos : mapping_like
-
-            save : bool, optional
-
-            overwrite : bool, optional
-
-            **runner_settings
-
+        combos : mapping_like
+        save : bool, optional
+        overwrite : bool, optional
+        chunks : int or dict, optional
+        **runner_settings
         """
 
         ds = self.runner.run_combos(combos, **runner_settings)
-        self.add(ds, save=save, overwrite=overwrite)
+        self.add(ds, save=save, overwrite=overwrite, chunks=chunks)
 
     def harvest_cases(self, cases, *,
                       save=True,
                       overwrite=None,
+                      chunks=None,
                       **runner_settings):
         """Run cases, automatically merging into an on-disk dataset.
         """
         ds = self.runner.run_cases(cases, **runner_settings)
-        self.add(ds, save=save, overwrite=overwrite)
+        self.add(ds, save=save, overwrite=overwrite, chunks=chunks)
 
     def Crop(self,
              name=None,
