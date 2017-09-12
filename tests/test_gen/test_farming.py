@@ -156,8 +156,8 @@ class TestHarvester:
         with tempfile.TemporaryDirectory() as tmpdir:
             fl_pth = os.path.join(tmpdir, 'test.h5')
             h = Harvester(fn3_fba_runner, fl_pth, full_ds=fn3_fba_ds)
-            h.save_new_full_ds()
-            h.try_to_load_from_disk()
+            h.save_full_ds()
+            h.load_full_ds()
             assert h.full_ds.equals(fn3_fba_ds)
 
     def test_harvest_combos_new(self, fn3_fba_runner, fn3_fba_ds):
@@ -229,7 +229,7 @@ class TestHarvester:
             mod_ds = fn3_fba_ds.copy(deep=True)
             mod_ds['array'].loc[{'a': 1, 'b': 3}] = 999
             h = Harvester(fn3_fba_runner, fl_pth, full_ds=mod_ds)
-            h.save_new_full_ds()
+            h.save_full_ds()
             assert not h.full_ds.equals(fn3_fba_ds)
             h.harvest_combos((('a', (1,)), ('b', (3,))), overwrite=True)
             assert h.full_ds.equals(fn3_fba_ds)
@@ -261,12 +261,16 @@ class TestHarvester:
             mod_ds = fn3_fba_ds.copy(deep=True)
             mod_ds['array'].loc[{'a': 1, 'b': 3}] = 999
             h = Harvester(fn3_fba_runner, fl_pth, full_ds=mod_ds)
-            h.save_new_full_ds()
+            h.save_full_ds()
             assert not h.full_ds.equals(fn3_fba_ds)
             h.harvest_cases([(1, 3)], overwrite=True)
             assert h.full_ds.equals(fn3_fba_ds)
 
     def test_harvest_cases_merge_dask(self, fn3_fba_runner, fn3_fba_ds):
+
+        import dask
+        dask.set_options(get=dask.threaded.get)
+
         with tempfile.TemporaryDirectory() as tmpdir:
             fl_pth = os.path.join(tmpdir, 'test.h5')
             h = Harvester(fn3_fba_runner, fl_pth, engine='netcdf4')
@@ -274,3 +278,20 @@ class TestHarvester:
             h.harvest_cases([(1, 4), (2, 3)], chunks=1)
         assert not h.last_ds.identical(fn3_fba_ds)
         assert h.full_ds.identical(fn3_fba_ds)
+        assert h.full_ds['sum'].chunks is not None
+
+    def test_harvest_cases_merge_dask_default(self, fn3_fba_runner,
+                                              fn3_fba_ds):
+
+        import dask
+        dask.set_options(get=dask.threaded.get)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fl_pth = os.path.join(tmpdir, 'test.h5')
+            h = Harvester(fn3_fba_runner, fl_pth, engine='netcdf4',
+                          chunks=1)
+            h.harvest_cases([(1, 3), (2, 4)])
+            h.harvest_cases([(1, 4), (2, 3)])
+        assert not h.last_ds.identical(fn3_fba_ds)
+        assert h.full_ds.identical(fn3_fba_ds)
+        assert h.full_ds['sum'].chunks is not None

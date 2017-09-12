@@ -250,46 +250,74 @@ class Runner(object):
 
 class Harvester(object):
     """Container class for collecting and aggregating data to disk.
+
+    Parameters
+    ----------
+    runner : Runner instance
+        Performs the runs and describes the results.
+    data_name : str
+        Base file path to save data to.
+    chunks : bool, optional
+        If not None, passed passed to xarray so that the full dataset is
+        loaded and merged into with on-disk dask arrays.
+    engine : str, optional
+        Engine to use to save and load datasets.
+    full_ds : xarray.Dataset, optional
+        Initialize the Harvester with this dataset as the intitial
+        full dataset.
+
+    Members
+    -------
+    full_ds : xarray.Dataset
+        Dataset containing all data harvested so far, by default synced to
+        disk.
+    last_ds : xarray.Dataset
+        Dataset containing just the data from the last harvesting run.
     """
 
-    def __init__(self, runner, data_name=None,
+    def __init__(self, runner, data_name=None, chunks=None,
                  engine='h5netcdf', full_ds=None):
-        """
-        Parameters
-        ----------
-            runner : Runner instance
-                Performs the runs and describes the results.
-            data_name : str
-                Base file path to save data to.
-            engine : str (optional)
-                Internal netcdf engine for xarray to use.
-        """
         self.runner = runner
         self.data_name = data_name
         self.engine = engine
+        self.chunks = chunks
         self._full_ds = full_ds
 
     @property
     def full_ds(self):
-        """Get the dataset containing all saved runs.
+        """Dataset containing all saved runs.
         """
         if self._full_ds is None:
-            self.try_to_load_from_disk()
+            self.load_full_ds()
         return self._full_ds
 
     @property
     def last_ds(self):
-        """The dataset containing last runs data.
+        """Dataset containing the last runs' data.
         """
         return self.runner.last_ds
 
-    def try_to_load_from_disk(self, chunks=None):
-        """Load the disk dataset into `full_ds`.
+    def load_full_ds(self, chunks=None, engine=None):
+        """Load the disk dataset into ``full_ds``.
+
+        Parameters
+        ----------
+        chunks : bool, optional
+            If not None, passed passed to xarray so that the full dataset is
+            loaded and merged into with on-disk dask arrays.
+        engine : str, optional
+            Engine to use to save and load datasets.
         """
+        if engine is None:
+            engine = self.engine
+
+        if chunks is None:
+            chunks = self.chunks
+
         # Check file exists and can be written to
         if os.access(self.data_name, os.W_OK):
             self._full_ds = load_ds(self.data_name,
-                                    engine=self.engine,
+                                    engine=engine,
                                     chunks=chunks)
 
         # Do nothing if file does not exist at all
@@ -301,17 +329,29 @@ class Harvester(object):
             raise OSError("The file '{}' exists but cannot be written "
                           "to".format(self.data_name))
 
-    def save_new_full_ds(self, new_full_ds=None):
+    def save_full_ds(self, new_full_ds=None, engine=None):
         """Save `full_ds` onto disk.
+
+        Parameters
+        ----------
+        new_full_ds : xarray.Dataset, optional
+            Save this dataset as the new full dataset, else use the current
+            full datset.
+        engine : str, optional
+            Engine to use to save and load datasets.
         """
+        if engine is None:
+            engine = self.engine
+
         if new_full_ds is not None:
             if os.path.exists(self.data_name):
                 os.remove(self.data_name)
             self._full_ds = new_full_ds
-        save_ds(self._full_ds, self.data_name, engine=self.engine)
 
-    def delete_ds(self, backup=True):
-        """Delete the on-disk dataset.
+        save_ds(self._full_ds, self.data_name, engine=engine)
+
+    def delete_ds(self, backup=False):
+        """Delete the on-disk dataset, optionally backing it up first.
         """
         if backup:
             import datetime
@@ -320,41 +360,51 @@ class Harvester(object):
 
         os.remove(self.data_name)
 
-    def merge_into_full_ds(self, new_ds,
-                           overwrite=None,
-                           sync_with_disk=True,
-                           chunks=None):
+    def add_ds(self, new_ds,
+               sync=True,
+               overwrite=None,
+               chunks=None,
+               engine=None):
         """Merge a new dataset into the in-memory full dataset.
 
         Parameters
         ----------
         new_ds : xr.Dataset or xr.DataArray
             Data to be merged into the full dataset.
+        sync : bool, optional
+            If True (default), load and save the disk dataset before
+            and after merging in the new data.
         overwrite : {None, False, True}, optional
                 * ``None`` (default): attempt the merge and only raise if
                 data conflicts.
                 * ``True``: overwrite conflicting current data with
-                that from ``new_ds``.
-                *``False``: drop any conflicting data from ``new_ds``.
-        sync_with_disk : bool, optional
-            If True (default), load and save the disk dataset before
-            and after merging in the new data.
+                that from the new dataset.
+                *``False``: drop any conflicting data from the new dataset.
         chunks : bool, optional
-            If not none, passed passed to xarray so that all arrays are loaded
-            into on-disk dask arrays.
+            If not None, passed passed to xarray so that the full dataset is
+            loaded and merged into with on-disk dask arrays.
+        engine : str, optional
+            Engine to use to save and load datasets.
         """
-
-        if sync_with_disk:
-            self.try_to_load_from_disk(chunks=chunks)
-
         if isinstance(new_ds, xr.DataArray):
             new_ds = new_ds.to_dataset()
 
+        # get default chunks if not overidden
+        if chunks is None:
+            chunks = self.chunks
         if chunks is not None:
-            new_ds.chunk(chunks)
+            new_ds = new_ds.chunk(chunks)
+
+        # only sync with disk if data name present
+        sync_with_disk = sync and self.data_name is not None
+        if sync_with_disk:
+            self.load_full_ds(chunks=chunks, engine=engine)
 
         if self._full_ds is None:
+            # No full ds yet, deep copy to maintain distinction between
+            #   'full_ds' and 'last_ds'.
             new_full_ds = new_ds.copy(deep=True)
+
         else:
             # Overwrite with new data
             if overwrite is True:
@@ -368,45 +418,74 @@ class Harvester(object):
                     new_ds, compat='no_conflicts', inplace=False)
 
         if sync_with_disk:
-            self.save_new_full_ds(new_full_ds)
-
-    def add(self, new_ds, save=True, overwrite=None, chunks=None):
-        """Add a new dataset to this harvester.
-        """
-        sync_with_disk = save and self.data_name is not None
-        self.merge_into_full_ds(new_ds,
-                                overwrite=overwrite,
-                                sync_with_disk=sync_with_disk,
-                                chunks=chunks)
+            self.save_full_ds(new_full_ds, engine=engine)
+        else:
+            self._full_ds = new_full_ds
 
     def harvest_combos(self, combos, *,
-                       save=True,
+                       sync=True,
                        overwrite=None,
                        chunks=None,
+                       engine=None,
                        **runner_settings):
         """Run combos, automatically merging into an on-disk dataset.
 
         Parameters
         ---------
         combos : mapping_like
-        save : bool, optional
-        overwrite : bool, optional
-        chunks : int or dict, optional
+            The combos to run.
+        sync : bool, optional
+            If True (default), load and save the disk dataset before
+            and after merging in the new data.
+        overwrite : {None, False, True}, optional
+                * ``None`` (default): attempt the merge and only raise if
+                data conflicts.
+                * ``True``: overwrite conflicting current data with
+                that from the new dataset.
+                *``False``: drop any conflicting data from the new dataset.
+        chunks : bool, optional
+            If not None, passed passed to xarray so that the full dataset is
+            loaded and merged into with on-disk dask arrays.
+        engine : str, optional
+            Engine to use to save and load datasets.
         **runner_settings
         """
 
         ds = self.runner.run_combos(combos, **runner_settings)
-        self.add(ds, save=save, overwrite=overwrite, chunks=chunks)
+        self.add_ds(ds, sync=sync, overwrite=overwrite,
+                    chunks=chunks, engine=engine)
 
     def harvest_cases(self, cases, *,
-                      save=True,
+                      sync=True,
                       overwrite=None,
                       chunks=None,
+                      engine=None,
                       **runner_settings):
         """Run cases, automatically merging into an on-disk dataset.
+
+        Parameters
+        ---------
+        cases : list of dict of tuple
+            The cases to run.
+        sync : bool, optional
+            If True (default), load and save the disk dataset before
+            and after merging in the new data.
+        overwrite : {None, False, True}, optional
+                * ``None`` (default): attempt the merge and only raise if
+                data conflicts.
+                * ``True``: overwrite conflicting current data with
+                that from the new dataset.
+                *``False``: drop any conflicting data from the new dataset.
+        chunks : bool, optional
+            If not None, passed passed to xarray so that the full dataset is
+            loaded and merged into with on-disk dask arrays.
+        engine : str, optional
+            Engine to use to save and load datasets.
+        **runner_settings
         """
         ds = self.runner.run_cases(cases, **runner_settings)
-        self.add(ds, save=save, overwrite=overwrite, chunks=chunks)
+        self.add_ds(ds, sync=sync, overwrite=overwrite, chunks=chunks,
+                    engine=engine)
 
     def Crop(self,
              name=None,

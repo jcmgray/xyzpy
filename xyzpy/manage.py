@@ -94,7 +94,7 @@ def load_ds(file_name,
     if (load_to_mem is None) and (chunks is None):
         load_to_mem = True
     else:
-        if load_to_mem and chunks:
+        if load_to_mem and (chunks is not None):
             raise ValueError("``chunks`` redundant if ``load_to_mem`` given.")
         else:
             load_to_mem = False

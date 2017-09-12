@@ -492,17 +492,17 @@ class Crop(object):
         runner.last_ds = ds
         return ds
 
-    def reap_harvest(self, harvester, wait=False, save=True, overwrite=None):
+    def reap_harvest(self, harvester, wait=False, sync=True, overwrite=None):
         """
         """
         if harvester is None:
             raise ValueError("Cannot reap and harvest if no Harvester is set.")
 
         ds = self.reap_runner(harvester.runner, wait=wait)
-        self.harvester.add(ds, save=save, overwrite=overwrite)
+        self.harvester.add_ds(ds, sync=sync, overwrite=overwrite)
         return ds
 
-    def reap(self, wait=False, save=True, overwrite=None):
+    def reap(self, wait=False, sync=True, overwrite=None):
         """Reap sown and grown combos from disk. Return a dataset if a runner
         or harvester is set, otherwise, the raw nested tuple.
 
@@ -518,7 +518,7 @@ class Crop(object):
         """
         if self.harvester is not None:
             return self.reap_harvest(self.harvester,
-                                     wait=wait, save=save, overwrite=overwrite)
+                                     wait=wait, sync=sync, overwrite=overwrite)
         elif self.runner is not None:
             return self.reap_runner(self.runner, wait=wait)
         else:
