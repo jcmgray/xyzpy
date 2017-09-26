@@ -4,7 +4,10 @@ from numpy.testing import assert_allclose
 import xarray as xr
 
 from xyzpy import Runner
-from xyzpy.signal import nan_wrap_const_length
+from xyzpy.signal import (
+    nan_wrap_const_length,
+    _broadcast_filtfilt_butter,
+)
 
 
 # ------------------------------ fixtures ----------------------------------- #
@@ -120,6 +123,34 @@ class TestFornberg:
     def test_nan(self, nan_ds):
         nan_ds.fdiff('a')
         nan_ds.fdiff('b')
+
+
+class TestFiltFiltButter:
+
+    def test_all_finite(self):
+        n = 20
+        s = 5 * np.random.rand(n)
+        x = np.cumsum(s)
+        y = np.cos(x) + 0.2 * np.random.randn(n)
+        yf = _broadcast_filtfilt_butter(x, y, 2, 0.3)
+        assert np.all(np.isfinite(yf))
+
+    def test_all_nan(self):
+        n = 20
+        s = 5 * np.random.rand(n)
+        x = np.cumsum(s)
+        y = np.tile(np.nan, n)
+        yf = _broadcast_filtfilt_butter(x, y, 2, 0.3)
+        assert np.all(~np.isfinite(yf))
+
+    def test_some_nan(self):
+        n = 20
+        s = 5 * np.random.rand(n)
+        x = np.cumsum(s)
+        y = np.cos(x) + 0.2 * np.random.randn(n)
+        y[[1, 5, 6, 10, 14]] = np.nan
+        yf = _broadcast_filtfilt_butter(x, y, 2, 0.3)
+        assert np.sum(np.isfinite(yf)) == 15
 
 
 @pytest.fixture

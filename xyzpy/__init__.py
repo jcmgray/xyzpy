@@ -50,6 +50,9 @@ from .signal import (
     wfdiff,
     xr_wfdiff,
     xr_sdiff,
+    xr_filter_wiener,
+    xr_filtfilt_butter,
+    xr_unispline,
 )
 from .plot.color import (
     convert_colors,
@@ -74,45 +77,50 @@ from .plot.plotter_bokeh import (
     auto_ilineplot
 )
 
-__all__ = ["Runner",
-           "Harvester",
-           "combo_runner",
-           "combo_runner_to_ds",
-           "case_runner",
-           "find_union_coords",
-           "all_missing_ds",
-           "case_runner_to_ds",
-           "find_missing_cases",
-           "fill_missing_cases",
-           "Crop",
-           "grow",
-           "cache_to_disk",
-           "save_ds",
-           "load_ds",
-           "trimna",
-           "sort_dims",
-           "check_runs",
-           "merge_sync_conflict_datasets",
-           "auto_xyz_ds",
-           "convert_colors",
-           "LinePlot",
-           "lineplot",
-           "auto_lineplot",
-           "AutoLinePlot",
-           "Scatter",
-           "scatter",
-           "Histogram",
-           "histogram",
-           "HeatMap",
-           "heatmap",
-           "ilineplot",
-           "auto_ilineplot",
-           "visualize_matrix",
-           "unzip",
-           "progbar",
-           "wfdiff",
-           "xr_wfdiff",
-           "xr_sdiff"]
+__all__ = [
+    "Runner",
+    "Harvester",
+    "combo_runner",
+    "combo_runner_to_ds",
+    "case_runner",
+    "find_union_coords",
+    "all_missing_ds",
+    "case_runner_to_ds",
+    "find_missing_cases",
+    "fill_missing_cases",
+    "Crop",
+    "grow",
+    "cache_to_disk",
+    "save_ds",
+    "load_ds",
+    "trimna",
+    "sort_dims",
+    "check_runs",
+    "merge_sync_conflict_datasets",
+    "auto_xyz_ds",
+    "convert_colors",
+    "LinePlot",
+    "lineplot",
+    "auto_lineplot",
+    "AutoLinePlot",
+    "Scatter",
+    "scatter",
+    "Histogram",
+    "histogram",
+    "HeatMap",
+    "heatmap",
+    "ilineplot",
+    "auto_ilineplot",
+    "visualize_matrix",
+    "unzip",
+    "progbar",
+    "wfdiff",
+    "xr_wfdiff",
+    "xr_sdiff",
+    "xr_filter_wiener",
+    "xr_filtfilt_butter",
+    "xr_unispline",
+]
 
 
 @xr.register_dataset_accessor('xyz')
@@ -149,3 +157,13 @@ class XYZPY(object):
 
     def ilineplot(self, *args, **kwargs):
         return ilineplot(self._obj, *args, **kwargs)
+
+    def filter_wiener(self, dim, mysize=5, noise=1e-2):
+        return xr_filter_wiener(self._obj, mysize=mysize, noise=noise,)
+
+    def filtfilt_butter(self, dim, N=2, Wn=0.4):
+        return xr_filtfilt_butter(self._obj, N=N, Wn=Wn)
+
+    def xr_unispline(self, dim, err=None, num_knots=11, ix=None):
+        return xr_unispline(self._obj, dim=dim, err=err,
+                            num_knots=num_knots, ix=ix)

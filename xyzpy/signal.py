@@ -20,6 +20,35 @@ from scipy.interpolate import LSQUnivariateSpline
 from .utils import argwhere
 
 
+def preprocess_1d_nan_func(x, y, out):
+    # strip out nan
+    mask = np.isfinite(x) & np.isfinite(y)
+    num_nan = np.sum(~mask)
+
+    if num_nan == x.size:
+        out[:] = np.nan
+        return
+    elif num_nan != 0:
+        x = x[mask]
+        y = y[mask]
+
+    # interpolate to evenly spaced grid
+    x_even = np.linspace(x.min(), x.max(), x.size)
+    y_even = np.interp(x_even, x, y)
+    return x, y, x_even, y_even, num_nan, mask
+
+
+def postprocess_1d_nan_func(x, x_even, yf_even, num_nan, mask, out):
+    # re-interpolate to original spacing
+    yf = np.interp(x, x_even, yf_even)
+
+    if num_nan != 0:
+        out[~mask] = np.nan
+        out[mask] = yf
+    else:
+        out[:] = yf
+
+
 def nan_wrap_const_length(fn):
     """Take a function that accepts two vector arguments y and x and wrap it
     such that only non-nan sections are supplied to it. Assume output vector is
@@ -508,31 +537,73 @@ xr.DataArray.pchip = xr_pchip
 #                           scipy signal filtering                            #
 # --------------------------------------------------------------------------- #
 
-def xr_filter_wiener(xobj, dim, mysize=None, noise=None):
-    func = functools.partial(signal.wiener, mysize=mysize, noise=noise)
-    # First linearly interpolate to make sure evenly spaced
-    xobj_even = xr_interp1d(xobj, dim, ix=xobj[dim].size, kind='linear')
-    return xr_1d_apply(func, xobj_even, dim, new_dim=False)
+
+@guvectorize([(double[:], double[:], int64[:], double[:], double[:])],
+             '(n),(n),(),()->(n)')
+def _gufunc_filter_wiener(x, y, mysize, noise, out):
+    # Pre-process
+    xynm = preprocess_1d_nan_func(x, y, out)
+    if xynm is None:  # all nan
+        return
+    x, y, x_even, y_even, num_nan, mask = xynm
+
+    # filter even data
+    yf_even = signal.wiener(y_even, mysize=mysize, noise=noise)
+
+    # Post-process
+    postprocess_1d_nan_func(x, x_even, yf_even, num_nan, mask, out)
 
 
-xr.DataArray.wiener = xr_filter_wiener
-xr.Dataset.wiener = xr_filter_wiener
+def _broadcast_filter_wiener(x, y, mysize=5, noise=1e-2, axis=-1):
+    if axis != -1:
+        y = y.swapaxes(axis, -1)
+    return _gufunc_filter_wiener(x, y, mysize, noise)
 
 
-def xr_filtfilt(xobj, dim, filt='butter', *args, **kwargs):
-    filter_func = getattr(signal, filt)
-    b, a = filter_func(*args, **kwargs)
+def xr_filter_wiener(obj, dim, mysize=5, noise=1e-2):
+    kwargs = {'mysize': mysize, 'noise': noise, 'axis': -1}
+    input_core_dims = [(dim,), (dim,)]
+    output_core_dims = [(dim,)]
+    args = (obj[dim], obj)
+    return apply_ufunc(_broadcast_filter_wiener, *args,
+                       input_core_dims=input_core_dims,
+                       output_core_dims=output_core_dims,
+                       kwargs=kwargs)
 
-    def func(x):
-        return signal.filtfilt(b, a, x, method='gust')
 
-    # First linearly interpolate to make sure evenly spaced
-    xobj_even = xr_interp1d(xobj, dim, ix=xobj[dim].size, kind='linear')
-    return xr_1d_apply(func, xobj_even, dim, new_dim=False, leave_nan=False)
+@guvectorize([(double[:], double[:], int64[:], double[:], double[:])],
+             '(n),(n),(),()->(n)')
+def _gufunc_filtfilt_butter(x, y, N, Wn, out):
+    # Pre-process
+    xynm = preprocess_1d_nan_func(x, y, out)
+    if xynm is None:  # all nan
+        return
+    x, y, x_even, y_even, num_nan, mask = xynm
+
+    # filter function
+    b, a = signal.butter(N=N, Wn=Wn)
+    # filter even data
+    yf_even = signal.filtfilt(b, a, y_even, method='gust')
+
+    # Post-process
+    postprocess_1d_nan_func(x, x_even, yf_even, num_nan, mask, out)
 
 
-xr.DataArray.filtfilt = xr_filtfilt
-xr.Dataset.filtfilt = xr_filtfilt
+def _broadcast_filtfilt_butter(x, y, N=2, Wn=0.4, axis=-1):
+    if axis != -1:
+        y = y.swapaxes(axis, -1)
+    return _gufunc_filtfilt_butter(x, y, N, Wn)
+
+
+def xr_filtfilt_butter(obj, dim, N=2, Wn=0.4):
+    kwargs = {'N': N, 'Wn': Wn, 'axis': -1}
+    input_core_dims = [(dim,), (dim,)]
+    output_core_dims = [(dim,)]
+    args = (obj[dim], obj)
+    return apply_ufunc(_broadcast_filtfilt_butter, *args,
+                       input_core_dims=input_core_dims,
+                       output_core_dims=output_core_dims,
+                       kwargs=kwargs)
 
 
 # --------------------------------------------------------------------------- #
@@ -636,7 +707,7 @@ def _gufunc_unispline_noerr_upscale(x, y, num_knots, ix, out):
     out[:] = fn_interp(ix)
 
 
-def gufunc_unispline(x, y, err=None, num_knots=11, ix=None, axis=-1):
+def _broadcast_unispline(x, y, err=None, num_knots=11, ix=None, axis=-1):
     """Dispatch to the correct numba gufunc.
     """
     if axis != -1:
@@ -698,7 +769,7 @@ def xr_unispline(obj, dim, err=None, num_knots=11, ix=None):
             input_core_dims = [(dim,), (dim,), (dim,)]
             output_core_dims = [(dim,)]
             args = (obj[dim], obj, err)
-        return apply_ufunc(gufunc_unispline, *args,
+        return apply_ufunc(_broadcast_unispline, *args,
                            input_core_dims=input_core_dims,
                            output_core_dims=output_core_dims,
                            kwargs=kwargs)
@@ -715,13 +786,9 @@ def xr_unispline(obj, dim, err=None, num_knots=11, ix=None):
             input_core_dims = [(dim,), (dim,), (dim,)]
             output_core_dims = [('__temp_dim__',)]
             args = (obj[dim], obj, err)
-        result = apply_ufunc(gufunc_unispline, *args,
+        result = apply_ufunc(_broadcast_unispline, *args,
                              input_core_dims=input_core_dims,
                              output_core_dims=output_core_dims,
                              kwargs=kwargs)
         result['__temp_dim__'] = ix
         return result.rename({'__temp_dim__': dim})
-
-
-xr.DataArray.unispline = xr_unispline
-xr.Dataset.unispline = xr_unispline
