@@ -152,6 +152,9 @@ class TestFiltFiltButter:
         yf = _broadcast_filtfilt_butter(x, y, 2, 0.3)
         assert np.sum(np.isfinite(yf)) == 15
 
+    def test_ds_version(self, ds):
+        ds.xyz.filtfilt_butter(dim='t')
+
 
 @pytest.fixture
 def ds_idx():

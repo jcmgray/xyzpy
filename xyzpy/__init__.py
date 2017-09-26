@@ -159,10 +159,10 @@ class XYZPY(object):
         return ilineplot(self._obj, *args, **kwargs)
 
     def filter_wiener(self, dim, mysize=5, noise=1e-2):
-        return xr_filter_wiener(self._obj, mysize=mysize, noise=noise,)
+        return xr_filter_wiener(self._obj, dim=dim, mysize=mysize, noise=noise)
 
     def filtfilt_butter(self, dim, N=2, Wn=0.4):
-        return xr_filtfilt_butter(self._obj, N=N, Wn=Wn)
+        return xr_filtfilt_butter(self._obj, dim=dim, N=N, Wn=Wn)
 
     def xr_unispline(self, dim, err=None, num_knots=11, ix=None):
         return xr_unispline(self._obj, dim=dim, err=err,
