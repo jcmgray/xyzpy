@@ -1138,15 +1138,13 @@ POLY_FNS = {
 }
 
 
-def _broadcast_polyfit(x, y, ix=None, deg=None, poly='chebyshev', axis=-1):
+def _broadcast_polyfit(x, y, ix=None, deg=0.5, poly='chebyshev', axis=-1):
     """Parse arguments and dispatch to the correct function.
     """
     if axis != -1:
         y = y.swapaxes(axis, -1)
 
-    if deg is None:
-        deg = x.size
-    elif isinstance(deg, float):
+    if isinstance(deg, float):
         deg = int(deg * x.size)
 
     gfn, gfn_upscale = POLY_FNS[poly]
@@ -1161,8 +1159,27 @@ def _broadcast_polyfit(x, y, ix=None, deg=None, poly='chebyshev', axis=-1):
     return gfn_upscale(x, y, ix, deg)
 
 
-def xr_polyfit(obj, dim, ix=None, deg=None, poly='chebyshev'):
-    """
+def xr_polyfit(obj, dim, ix=None, deg=0.5, poly='hermite'):
+    """Fit a polynomial of degree ``deg`` using least-squares along ``dim``.
+
+    Parameters
+    ----------
+    obj : xarray.Dataset or xarray.DataArray
+        The object to fit.
+    dim : str, optional
+        The dimension to fit along.
+    ix : {None, int, array_like}, optional
+        If ``None``, interpolate the polynomial at the original x points.
+        If ``int``, linearly space this many points along the range of the
+        original data and interpolate with these.
+        If array-like, interpolate at these given points.
+    deg : int or float, optional
+        The degree of the polynomial to fit. Used directly if integer. If float
+        supplied, with ``0.0 < deg < 1.0``, the proportion of the total
+        possible degree to use.
+    poly : {'chebyshev', 'polynomial', 'legendre',
+            'laguerre', hermite}, optional
+        The type of polynomial to fit.
     """
     input_core_dims = [(dim,), (dim,)]
     args = (obj[dim], obj)

@@ -191,5 +191,5 @@ class XYZPY(object):
                             num_knots=num_knots, ix=ix)
 
     @functools.wraps(xr_polyfit)
-    def polyfit(self, dim, ix=None, deg=None, poly='chebyshev'):
+    def polyfit(self, dim, ix=None, deg=0.5, poly='chebyshev'):
         return xr_polyfit(self._obj, dim=dim, ix=ix, deg=deg, poly=poly)
