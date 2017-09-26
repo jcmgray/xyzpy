@@ -15,12 +15,35 @@ from scipy import interpolate, signal
 import xarray as xr
 from xarray.core.computation import apply_ufunc
 import numba
-from numba import guvectorize, double, int64
+from numba import guvectorize, double, intc
 from scipy.interpolate import LSQUnivariateSpline
 from .utils import argwhere
 
 
-def preprocess_1d_nan_func(x, y, out):
+def preprocess_nan_func(x, y, out):
+    # strip out nan
+    mask = np.isfinite(x) & np.isfinite(y)
+    num_nan = np.sum(~mask)
+
+    if num_nan == x.size:
+        out[:] = np.nan
+        return
+    elif num_nan != 0:
+        x = x[mask]
+        y = y[mask]
+
+    return x, y, num_nan, mask
+
+
+def postprocess_nan_func(x, yf, num_nan, mask, out):
+    if num_nan != 0:
+        out[~mask] = np.nan
+        out[mask] = yf
+    else:
+        out[:] = yf
+
+
+def preprocess_interp1d_nan_func(x, y, out):
     # strip out nan
     mask = np.isfinite(x) & np.isfinite(y)
     num_nan = np.sum(~mask)
@@ -38,7 +61,7 @@ def preprocess_1d_nan_func(x, y, out):
     return x, y, x_even, y_even, num_nan, mask
 
 
-def postprocess_1d_nan_func(x, x_even, yf_even, num_nan, mask, out):
+def postprocess_interp1d_nan_func(x, x_even, yf_even, num_nan, mask, out):
     # re-interpolate to original spacing
     yf = np.interp(x, x_even, yf_even)
 
@@ -504,45 +527,99 @@ xr.DataArray.interp = xr_interp1d
 #                            pchip interpolation                              #
 # --------------------------------------------------------------------------- #
 
-def array_pchip(fx, x, ix, return_func=False):
+@guvectorize([
+    (intc[:], intc[:], double[:]),
+    (double[:], intc[:], double[:]),
+    (intc[:], double[:], double[:]),
+    (double[:], double[:], double[:]),
+], '(n),(n)->(n)')
+def _gufunc_pchip(x, y, out):
+    xynm = preprocess_nan_func(x, y, out)
+    if xynm is None:
+        return
+    x, y, num_nan, mask = xynm
+
+    # interpolating function
+    ifn = interpolate.PchipInterpolator(x, y)
+    yf = ifn(x)
+    postprocess_nan_func(x, yf, num_nan, mask, out)
+
+
+@guvectorize([
+    (intc[:], intc[:], double[:], double[:]),
+    (double[:], intc[:], double[:], double[:]),
+    (intc[:], double[:], double[:], double[:]),
+    (double[:], double[:], double[:], double[:])
+], '(n),(n),(m)->(m)')
+def _gufunc_pchip_upscale(x, y, ix, out):  # pragma: no cover
+    xynm = preprocess_nan_func(x, y, out)
+    if xynm is None:
+        return
+    x, y, num_nan, mask = xynm
+
+    # interpolating function
+    ifn = interpolate.PchipInterpolator(x, y)
+    out[:] = ifn(ix)
+
+
+def _broadcast_pchip(x, y, ix=100, axis=-1):
+    if axis != -1:
+        y = y.swapaxes(axis, -1)
+
+    if ix is None:
+        return _gufunc_pchip(x, y)
 
     if isinstance(ix, int):
-        ix = np.linspace(x[0], x[-1], ix)
+        # automatic upscale
+        ix = np.linspace(x.min(), x.max(), ix)
 
-    def fx_interp(fx):
-        ifn = interpolate.PchipInterpolator(x, fx)
-        return ifn(ix)
+    # prepare output data to pass in
+    if axis < 0:
+        axis += y.ndim
+    out_shape = y.shape[:-1] + ix.shape
+    out = np.empty(out_shape, dtype=float)
 
-    if return_func:
-        return fx_interp
-    return fx_interp(fx)
+    return _gufunc_pchip_upscale(x, y, ix, out)
 
 
-def xr_pchip(xobj, dim, ix=100):
-    # original grid
-    x = xobj[dim].data
-    # generate interpolation grid if not given as array, and set as coords
+def xr_interp_pchip(obj, dim, ix=100):
+
+    input_core_dims = [(dim,), (dim,)]
+    args = (obj[dim], obj)
+
+    if ix is None:
+        kwargs = {'ix': ix, 'axis': -1}
+        output_core_dims = [(dim,)]
+        return apply_ufunc(_broadcast_pchip, *args, kwargs=kwargs,
+                           input_core_dims=input_core_dims,
+                           output_core_dims=output_core_dims)
+
     if isinstance(ix, int):
-        ix = np.linspace(x[0], x[-1], ix)
-    # make re-useable single arg function
-    fn = array_interp1d(None, x=x, ix=ix, return_func=True)
-    return xr_1d_apply(fn, xobj, dim, new_dim=ix, leave_nan=False)
+        ix = np.linspace(float(obj[dim].min()), float(obj[dim].max()), ix)
 
+    kwargs = {'ix': ix, 'axis': -1}
+    output_core_dims = [('__temp_dim__',)]
 
-xr.Dataset.pchip = xr_pchip
-xr.DataArray.pchip = xr_pchip
+    result = apply_ufunc(_broadcast_pchip, *args, kwargs=kwargs,
+                         input_core_dims=input_core_dims,
+                         output_core_dims=output_core_dims)
+    result['__temp_dim__'] = ix
+    return result.rename({'__temp_dim__': dim})
 
 
 # --------------------------------------------------------------------------- #
 #                           scipy signal filtering                            #
 # --------------------------------------------------------------------------- #
 
-
-@guvectorize([(double[:], double[:], int64[:], double[:], double[:])],
-             '(n),(n),(),()->(n)')
-def _gufunc_filter_wiener(x, y, mysize, noise, out):
+@guvectorize([
+    (intc[:], intc[:], intc[:], double[:], double[:]),
+    (double[:], intc[:], intc[:], double[:], double[:]),
+    (intc[:], double[:], intc[:], double[:], double[:]),
+    (double[:], double[:], intc[:], double[:], double[:]),
+], '(n),(n),(),()->(n)')
+def _gufunc_filter_wiener(x, y, mysize, noise, out):  # pragma: no cover
     # Pre-process
-    xynm = preprocess_1d_nan_func(x, y, out)
+    xynm = preprocess_interp1d_nan_func(x, y, out)
     if xynm is None:  # all nan
         return
     x, y, x_even, y_even, num_nan, mask = xynm
@@ -551,7 +628,7 @@ def _gufunc_filter_wiener(x, y, mysize, noise, out):
     yf_even = signal.wiener(y_even, mysize=mysize, noise=noise)
 
     # Post-process
-    postprocess_1d_nan_func(x, x_even, yf_even, num_nan, mask, out)
+    postprocess_interp1d_nan_func(x, x_even, yf_even, num_nan, mask, out)
 
 
 def _broadcast_filter_wiener(x, y, mysize=5, noise=1e-2, axis=-1):
@@ -571,11 +648,11 @@ def xr_filter_wiener(obj, dim, mysize=5, noise=1e-2):
                        kwargs=kwargs)
 
 
-@guvectorize([(double[:], double[:], int64[:], double[:], double[:])],
+@guvectorize([(double[:], double[:], intc[:], double[:], double[:])],
              '(n),(n),(),()->(n)')
-def _gufunc_filtfilt_butter(x, y, N, Wn, out):
+def _gufunc_filtfilt_butter(x, y, N, Wn, out):  # pragma: no cover
     # Pre-process
-    xynm = preprocess_1d_nan_func(x, y, out)
+    xynm = preprocess_interp1d_nan_func(x, y, out)
     if xynm is None:  # all nan
         return
     x, y, x_even, y_even, num_nan, mask = xynm
@@ -586,7 +663,7 @@ def _gufunc_filtfilt_butter(x, y, N, Wn, out):
     yf_even = signal.filtfilt(b, a, y_even, method='gust')
 
     # Post-process
-    postprocess_1d_nan_func(x, x_even, yf_even, num_nan, mask, out)
+    postprocess_interp1d_nan_func(x, x_even, yf_even, num_nan, mask, out)
 
 
 def _broadcast_filtfilt_butter(x, y, N=2, Wn=0.4, axis=-1):
@@ -666,7 +743,7 @@ xr.Dataset.idxmin = xr_idxmin
 #                      Univariate spline interpolation                        #
 # --------------------------------------------------------------------------- #
 
-@guvectorize([(double[:], double[:], double[:], int64[:], double[:])],
+@guvectorize([(double[:], double[:], double[:], intc[:], double[:])],
              '(n),(n),(n),()->(n)')
 def _gufunc_unispline_err(x, y, err, num_knots, out):
     xi = x.min()
@@ -676,7 +753,7 @@ def _gufunc_unispline_err(x, y, err, num_knots, out):
     out[:] = fn_interp(x)
 
 
-@guvectorize([(double[:], double[:], int64[:], double[:])],
+@guvectorize([(double[:], double[:], intc[:], double[:])],
              '(n),(n),()->(n)')
 def _gufunc_unispline_noerr(x, y, num_knots, out):
     xi = x.min()
@@ -687,7 +764,7 @@ def _gufunc_unispline_noerr(x, y, num_knots, out):
 
 
 @guvectorize([(double[:], double[:], double[:],
-               int64[:], double[:], double[:])],
+               intc[:], double[:], double[:])],
              '(n),(n),(n),(),(m),(m)')
 def _gufunc_unispline_err_upscale(x, y, err, num_knots, ix, out):
     xi = x.min()
@@ -697,7 +774,7 @@ def _gufunc_unispline_err_upscale(x, y, err, num_knots, ix, out):
     out[:] = fn_interp(ix)
 
 
-@guvectorize([(double[:], double[:], int64[:], double[:], double[:])],
+@guvectorize([(double[:], double[:], intc[:], double[:], double[:])],
              '(n),(n),(),(m),(m)')
 def _gufunc_unispline_noerr_upscale(x, y, num_knots, ix, out):
     xi = x.min()

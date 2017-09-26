@@ -16,57 +16,42 @@ from xyzpy.signal import (
 def ds():
     ts = np.linspace(0, 1, 21)
     fs = np.arange(1, 3)
-
     cs = np.empty((fs.size, ts.size))
     sn = np.empty(ts.size)
-
     sn = np.sin(ts)
     for i, f in enumerate(fs):
         cs[i, :] = np.cos(f * ts)
-
-    ds = xr.Dataset(coords={'t': ts, 'f': fs},
-                    data_vars={'cos': (('f', 't'), cs),
-                               'sin': ('t', sn)})
-
-    return ds
+    return xr.Dataset(coords={'t': ts, 'f': fs},
+                      data_vars={'cos': (('f', 't'), cs),
+                                 'sin': ('t', sn)})
 
 
 @pytest.fixture
 def eds():
     ts = np.linspace(0, 1, 100)
     fs = np.arange(1, 3)
-
     cs = np.empty((fs.size, ts.size))
     sn = np.empty((fs.size, ts.size))
-
     for i, f in enumerate(fs):
         cs[i, :] = np.cos(f * ts)
         sn[i, :] = np.sin(f * ts)
-
-    ds = xr.Dataset(coords={'t': ts,
-                            'f': fs},
-                    data_vars={'cos': (('f', 't'), cs),
-                               'sin': (('f', 't'), sn)})
-
-    return ds
+    return xr.Dataset(coords={'t': ts,
+                              'f': fs},
+                      data_vars={'cos': (('f', 't'), cs),
+                                 'sin': (('f', 't'), sn)})
 
 
 @pytest.fixture
 def nan_ds():
     def make_data(a, b):
         return 10. * a + b, a + 10. * b
-
     r = Runner(make_data, ('a10sum', 'b10sum'))
-
     ds1 = r.run_combos((('a', [1, 2, 3]),
                         ('b', [1, 2, 3])))
-
     ds2 = r.run_combos((('a', [2, 3, 4]),
                         ('b', [1, 2, 3])))
-
     ds3 = r.run_combos((('a', [4, 5, 6]),
                         ('b', [4, 5, 6])))
-
     return xr.merge([ds1, ds2, ds3])
 
 
@@ -125,6 +110,37 @@ class TestFornberg:
         nan_ds.fdiff('b')
 
 
+class TestPchip:
+
+    def test_ds_no_upscale(self, ds):
+        nds = ds.xyz.interp_pchip('t', ix=None)
+        assert nds.t.size == ds.t.size
+
+    def test_ds_int_upscale(self, ds):
+        nds = ds.xyz.interp_pchip('t', ix=50)
+        assert 't' in nds
+        assert nds.t.size == 50
+
+    def test_ds_upscale(self, ds):
+        nds = ds.xyz.interp_pchip('t', ix=np.linspace(0.1, 0.3, 13))
+        assert 't' in nds
+        assert nds.t.size == 13
+
+    def test_nan_ds_no_upscale(self, nan_ds):
+        nds = nan_ds.xyz.interp_pchip('a', ix=None)
+        assert nds.a.size == nan_ds.a.size
+
+    def test_nan_ds_int_upscale(self, nan_ds):
+        nds = nan_ds.xyz.interp_pchip('a', ix=50)
+        assert 'a' in nds
+        assert nds.a.size == 50
+
+    def test_nan_ds_upscale(self, nan_ds):
+        nds = nan_ds.xyz.interp_pchip('a', ix=np.linspace(1.5, 2.5, 13))
+        assert 'a' in nds
+        assert nds.a.size == 13
+
+
 class TestFiltFiltButter:
 
     def test_all_finite(self):
@@ -154,6 +170,10 @@ class TestFiltFiltButter:
 
     def test_ds_version(self, ds):
         ds.xyz.filtfilt_butter(dim='t')
+
+    def test_nan_ds_version(self, nan_ds):
+        nan_ds.xyz.filtfilt_butter(dim='a')
+        nan_ds.xyz.filtfilt_butter(dim='b')
 
 
 @pytest.fixture
