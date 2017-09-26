@@ -48,7 +48,9 @@ from .signal import (
     xr_interp_pchip,
     xr_filter_wiener,
     xr_filtfilt_butter,
+    xr_filtfilt_bessel,
     xr_unispline,
+    xr_polyfit,
 )
 from .plot.color import (
     convert_colors,
@@ -116,7 +118,9 @@ __all__ = [
     "xr_interp_pchip",
     "xr_filter_wiener",
     "xr_filtfilt_butter",
+    "xr_filtfilt_bessel",
     "xr_unispline",
+    "xr_polyfit",
 ]
 
 
@@ -177,7 +181,15 @@ class XYZPY(object):
     def filtfilt_butter(self, dim, N=2, Wn=0.4):
         return xr_filtfilt_butter(self._obj, dim=dim, N=N, Wn=Wn)
 
+    @functools.wraps(xr_filtfilt_bessel)
+    def filtfilt_bessel(self, dim, N=2, Wn=0.4):
+        return xr_filtfilt_bessel(self._obj, dim=dim, N=N, Wn=Wn)
+
     @functools.wraps(xr_unispline)
     def unispline(self, dim, err=None, num_knots=11, ix=None):
         return xr_unispline(self._obj, dim=dim, err=err,
                             num_knots=num_knots, ix=ix)
+
+    @functools.wraps(xr_polyfit)
+    def polyfit(self, dim, ix=None, deg=None, poly='chebyshev'):
+        return xr_polyfit(self._obj, dim=dim, ix=ix, deg=deg, poly=poly)

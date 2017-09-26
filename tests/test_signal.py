@@ -7,6 +7,7 @@ from xyzpy import Runner
 from xyzpy.signal import (
     nan_wrap_const_length,
     _broadcast_filtfilt_butter,
+    _broadcast_filtfilt_bessel,
 )
 
 
@@ -141,6 +142,42 @@ class TestPchip:
         assert nds.a.size == 13
 
 
+@pytest.mark.parametrize('poly', ['polynomial',
+                                  'chebyshev',
+                                  'legendre',
+                                  'laguerre',
+                                  'hermite'])
+class TestPolyFit:
+
+    def test_ds_no_upscale(self, ds, poly):
+        nds = ds.xyz.polyfit('t', ix=None, poly=poly)
+        assert nds.t.size == ds.t.size
+
+    def test_ds_int_upscale(self, ds, poly):
+        nds = ds.xyz.polyfit('t', ix=50, poly=poly)
+        assert 't' in nds
+        assert nds.t.size == 50
+
+    def test_ds_upscale(self, ds, poly):
+        nds = ds.xyz.polyfit('t', ix=np.linspace(0.1, 0.3, 13), poly=poly)
+        assert 't' in nds
+        assert nds.t.size == 13
+
+    def test_nan_ds_no_upscale(self, nan_ds, poly):
+        nds = nan_ds.xyz.polyfit('a', ix=None, poly=poly)
+        assert nds.a.size == nan_ds.a.size
+
+    def test_nan_ds_int_upscale(self, nan_ds, poly):
+        nds = nan_ds.xyz.polyfit('a', ix=50, poly=poly)
+        assert 'a' in nds
+        assert nds.a.size == 50
+
+    def test_nan_ds_upscale(self, nan_ds, poly):
+        nds = nan_ds.xyz.polyfit('a', ix=np.linspace(1.5, 2.5, 13), poly=poly)
+        assert 'a' in nds
+        assert nds.a.size == 13
+
+
 class TestFiltFiltButter:
 
     def test_all_finite(self):
@@ -174,6 +211,41 @@ class TestFiltFiltButter:
     def test_nan_ds_version(self, nan_ds):
         nan_ds.xyz.filtfilt_butter(dim='a')
         nan_ds.xyz.filtfilt_butter(dim='b')
+
+
+class TestFiltFiltBessel:
+
+    def test_all_finite(self):
+        n = 20
+        s = 5 * np.random.rand(n)
+        x = np.cumsum(s)
+        y = np.cos(x) + 0.2 * np.random.randn(n)
+        yf = _broadcast_filtfilt_bessel(x, y, 2, 0.3)
+        assert np.all(np.isfinite(yf))
+
+    def test_all_nan(self):
+        n = 20
+        s = 5 * np.random.rand(n)
+        x = np.cumsum(s)
+        y = np.tile(np.nan, n)
+        yf = _broadcast_filtfilt_bessel(x, y, 2, 0.3)
+        assert np.all(~np.isfinite(yf))
+
+    def test_some_nan(self):
+        n = 20
+        s = 5 * np.random.rand(n)
+        x = np.cumsum(s)
+        y = np.cos(x) + 0.2 * np.random.randn(n)
+        y[[1, 5, 6, 10, 14]] = np.nan
+        yf = _broadcast_filtfilt_bessel(x, y, 2, 0.3)
+        assert np.sum(np.isfinite(yf)) == 15
+
+    def test_ds_version(self, ds):
+        ds.xyz.filtfilt_bessel(dim='t')
+
+    def test_nan_ds_version(self, nan_ds):
+        nan_ds.xyz.filtfilt_bessel(dim='a')
+        nan_ds.xyz.filtfilt_bessel(dim='b')
 
 
 @pytest.fixture

@@ -15,7 +15,7 @@ from scipy import interpolate, signal
 import xarray as xr
 from xarray.core.computation import apply_ufunc
 import numba
-from numba import guvectorize, double, intc
+from numba import guvectorize, double, int64
 from scipy.interpolate import LSQUnivariateSpline
 from .utils import argwhere
 
@@ -528,9 +528,9 @@ xr.DataArray.interp = xr_interp1d
 # --------------------------------------------------------------------------- #
 
 @guvectorize([
-    (intc[:], intc[:], double[:]),
-    (double[:], intc[:], double[:]),
-    (intc[:], double[:], double[:]),
+    (int64[:], int64[:], double[:]),
+    (double[:], int64[:], double[:]),
+    (int64[:], double[:], double[:]),
     (double[:], double[:], double[:]),
 ], '(n),(n)->(n)')
 def _gufunc_pchip(x, y, out):
@@ -546,9 +546,9 @@ def _gufunc_pchip(x, y, out):
 
 
 @guvectorize([
-    (intc[:], intc[:], double[:], double[:]),
-    (double[:], intc[:], double[:], double[:]),
-    (intc[:], double[:], double[:], double[:]),
+    (int64[:], int64[:], double[:], double[:]),
+    (double[:], int64[:], double[:], double[:]),
+    (int64[:], double[:], double[:], double[:]),
     (double[:], double[:], double[:], double[:])
 ], '(n),(n),(m)->(m)')
 def _gufunc_pchip_upscale(x, y, ix, out):  # pragma: no cover
@@ -573,13 +573,7 @@ def _broadcast_pchip(x, y, ix=100, axis=-1):
         # automatic upscale
         ix = np.linspace(x.min(), x.max(), ix)
 
-    # prepare output data to pass in
-    if axis < 0:
-        axis += y.ndim
-    out_shape = y.shape[:-1] + ix.shape
-    out = np.empty(out_shape, dtype=float)
-
-    return _gufunc_pchip_upscale(x, y, ix, out)
+    return _gufunc_pchip_upscale(x, y, ix)
 
 
 def xr_interp_pchip(obj, dim, ix=100):
@@ -612,10 +606,10 @@ def xr_interp_pchip(obj, dim, ix=100):
 # --------------------------------------------------------------------------- #
 
 @guvectorize([
-    (intc[:], intc[:], intc[:], double[:], double[:]),
-    (double[:], intc[:], intc[:], double[:], double[:]),
-    (intc[:], double[:], intc[:], double[:], double[:]),
-    (double[:], double[:], intc[:], double[:], double[:]),
+    (int64[:], int64[:], int64[:], double[:], double[:]),
+    (double[:], int64[:], int64[:], double[:], double[:]),
+    (int64[:], double[:], int64[:], double[:], double[:]),
+    (double[:], double[:], int64[:], double[:], double[:]),
 ], '(n),(n),(),()->(n)')
 def _gufunc_filter_wiener(x, y, mysize, noise, out):  # pragma: no cover
     # Pre-process
@@ -648,8 +642,12 @@ def xr_filter_wiener(obj, dim, mysize=5, noise=1e-2):
                        kwargs=kwargs)
 
 
-@guvectorize([(double[:], double[:], intc[:], double[:], double[:])],
-             '(n),(n),(),()->(n)')
+@guvectorize([
+    (int64[:], int64[:], int64[:], double[:], double[:]),
+    (double[:], int64[:], int64[:], double[:], double[:]),
+    (int64[:], double[:], int64[:], double[:], double[:]),
+    (double[:], double[:], int64[:], double[:], double[:]),
+], '(n),(n),(),()->(n)')
 def _gufunc_filtfilt_butter(x, y, N, Wn, out):  # pragma: no cover
     # Pre-process
     xynm = preprocess_interp1d_nan_func(x, y, out)
@@ -658,7 +656,7 @@ def _gufunc_filtfilt_butter(x, y, N, Wn, out):  # pragma: no cover
     x, y, x_even, y_even, num_nan, mask = xynm
 
     # filter function
-    b, a = signal.butter(N=N, Wn=Wn)
+    b, a = signal.butter(N=N[0], Wn=Wn[0])
     # filter even data
     yf_even = signal.filtfilt(b, a, y_even, method='gust')
 
@@ -673,11 +671,78 @@ def _broadcast_filtfilt_butter(x, y, N=2, Wn=0.4, axis=-1):
 
 
 def xr_filtfilt_butter(obj, dim, N=2, Wn=0.4):
+    """Filter (with forward and backward pass) data along ``dim`` using
+    the butterworth design :py:func:`scipy.signal.butter`.
+
+    Parameters
+    ----------
+    obj : xarray.Dataset or xarray.DataArray
+        The object to apply signal filtering to.
+    dim : str
+        The dimension to filter along.
+    N : int, optional
+        The order of the filter.
+    Wn : scalar, optional
+        Critical frequency.
+    """
     kwargs = {'N': N, 'Wn': Wn, 'axis': -1}
     input_core_dims = [(dim,), (dim,)]
     output_core_dims = [(dim,)]
     args = (obj[dim], obj)
     return apply_ufunc(_broadcast_filtfilt_butter, *args,
+                       input_core_dims=input_core_dims,
+                       output_core_dims=output_core_dims,
+                       kwargs=kwargs)
+
+
+@guvectorize([
+    (int64[:], int64[:], int64[:], double[:], double[:]),
+    (double[:], int64[:], int64[:], double[:], double[:]),
+    (int64[:], double[:], int64[:], double[:], double[:]),
+    (double[:], double[:], int64[:], double[:], double[:]),
+], '(n),(n),(),()->(n)')
+def _gufunc_filtfilt_bessel(x, y, N, Wn, out):  # pragma: no cover
+    # Pre-process
+    xynm = preprocess_interp1d_nan_func(x, y, out)
+    if xynm is None:  # all nan
+        return
+    x, y, x_even, y_even, num_nan, mask = xynm
+
+    # filter function
+    b, a = signal.bessel(N=N[0], Wn=Wn[0])
+    # filter even data
+    yf_even = signal.filtfilt(b, a, y_even, method='gust')
+
+    # Post-process
+    postprocess_interp1d_nan_func(x, x_even, yf_even, num_nan, mask, out)
+
+
+def _broadcast_filtfilt_bessel(x, y, N=2, Wn=0.4, axis=-1):
+    if axis != -1:
+        y = y.swapaxes(axis, -1)
+    return _gufunc_filtfilt_bessel(x, y, N, Wn)
+
+
+def xr_filtfilt_bessel(obj, dim, N=2, Wn=0.4):
+    """Filter (with forward and backward pass) data along ``dim`` using
+    the bessel design :py:func:`scipy.signal.bessel`.
+
+    Parameters
+    ----------
+    obj : xarray.Dataset or xarray.DataArray
+        The object to apply signal filtering to.
+    dim : str
+        The dimension to filter along.
+    N : int, optional
+        The order of the filter.
+    Wn : scalar, optional
+        Critical frequency.
+    """
+    kwargs = {'N': N, 'Wn': Wn, 'axis': -1}
+    input_core_dims = [(dim,), (dim,)]
+    output_core_dims = [(dim,)]
+    args = (obj[dim], obj)
+    return apply_ufunc(_broadcast_filtfilt_bessel, *args,
                        input_core_dims=input_core_dims,
                        output_core_dims=output_core_dims,
                        kwargs=kwargs)
@@ -743,8 +808,12 @@ xr.Dataset.idxmin = xr_idxmin
 #                      Univariate spline interpolation                        #
 # --------------------------------------------------------------------------- #
 
-@guvectorize([(double[:], double[:], double[:], intc[:], double[:])],
-             '(n),(n),(n),()->(n)')
+@guvectorize([
+    (int64[:], int64[:], double[:], int64[:], double[:]),
+    (double[:], int64[:], double[:], int64[:], double[:]),
+    (int64[:], double[:], double[:], int64[:], double[:]),
+    (double[:], double[:], double[:], int64[:], double[:]),
+], '(n),(n),(n),()->(n)')
 def _gufunc_unispline_err(x, y, err, num_knots, out):
     xi = x.min()
     xf = x.max()
@@ -753,8 +822,12 @@ def _gufunc_unispline_err(x, y, err, num_knots, out):
     out[:] = fn_interp(x)
 
 
-@guvectorize([(double[:], double[:], intc[:], double[:])],
-             '(n),(n),()->(n)')
+@guvectorize([
+    (int64[:], int64[:], int64[:], double[:]),
+    (double[:], int64[:], int64[:], double[:]),
+    (int64[:], double[:], int64[:], double[:]),
+    (double[:], double[:], int64[:], double[:]),
+], '(n),(n),()->(n)')
 def _gufunc_unispline_noerr(x, y, num_knots, out):
     xi = x.min()
     xf = x.max()
@@ -763,9 +836,12 @@ def _gufunc_unispline_noerr(x, y, num_knots, out):
     out[:] = fn_interp(x)
 
 
-@guvectorize([(double[:], double[:], double[:],
-               intc[:], double[:], double[:])],
-             '(n),(n),(n),(),(m),(m)')
+@guvectorize([
+    (int64[:], int64[:], double[:], int64[:], double[:], double[:]),
+    (double[:], int64[:], double[:], int64[:], double[:], double[:]),
+    (int64[:], double[:], double[:], int64[:], double[:], double[:]),
+    (double[:], double[:], double[:], int64[:], double[:], double[:]),
+], '(n),(n),(n),(),(m),(m)')
 def _gufunc_unispline_err_upscale(x, y, err, num_knots, ix, out):
     xi = x.min()
     xf = x.max()
@@ -774,8 +850,12 @@ def _gufunc_unispline_err_upscale(x, y, err, num_knots, ix, out):
     out[:] = fn_interp(ix)
 
 
-@guvectorize([(double[:], double[:], intc[:], double[:], double[:])],
-             '(n),(n),(),(m),(m)')
+@guvectorize([
+    (int64[:], int64[:], int64[:], double[:], double[:]),
+    (double[:], int64[:], int64[:], double[:], double[:]),
+    (int64[:], double[:], int64[:], double[:], double[:]),
+    (double[:], double[:], int64[:], double[:], double[:]),
+], '(n),(n),(),(m),(m)')
 def _gufunc_unispline_noerr_upscale(x, y, num_knots, ix, out):
     xi = x.min()
     xf = x.max()
@@ -793,24 +873,23 @@ def _broadcast_unispline(x, y, err=None, num_knots=11, ix=None, axis=-1):
     if ix is None:
         if err is None:
             return _gufunc_unispline_noerr(x, y, num_knots)
-        else:
-            return _gufunc_unispline_err(x, y, err, num_knots)
+        return _gufunc_unispline_err(x, y, err, num_knots)
+
+    # prepare interpolaing array to pass in
+    if isinstance(ix, int):
+        ix = np.linspace(x.min(), x.max(), ix)
+
+    # prepare output data to pass in
+    if axis < 0:
+        axis += y.ndim
+    out_shape = y.shape[:-1] + ix.shape
+    out = np.empty(out_shape, dtype=x.dtype)
+
+    if err is None:
+        _gufunc_unispline_noerr_upscale(x, y, num_knots, ix, out)
     else:
-        # prepare interpolaing array to pass in
-        if isinstance(ix, int):
-            ix = np.linspace(x.min(), x.max(), ix)
-
-        # prepare output data to pass in
-        if axis < 0:
-            axis += y.ndim
-        out_shape = y.shape[:-1] + ix.shape
-        out = np.empty(out_shape, dtype=x.dtype)
-
-        if err is None:
-            _gufunc_unispline_noerr_upscale(x, y, num_knots, ix, out)
-        else:
-            _gufunc_unispline_err_upscale(x, y, err, num_knots, ix, out)
-        return out
+        _gufunc_unispline_err_upscale(x, y, err, num_knots, ix, out)
+    return out
 
 
 def xr_unispline(obj, dim, err=None, num_knots=11, ix=None):
@@ -869,3 +948,240 @@ def xr_unispline(obj, dim, err=None, num_knots=11, ix=None):
                              kwargs=kwargs)
         result['__temp_dim__'] = ix
         return result.rename({'__temp_dim__': dim})
+
+
+# --------------------------------------------------------------------------- #
+#                            polynomial fitting                               #
+# --------------------------------------------------------------------------- #
+
+@guvectorize([
+    (int64[:], int64[:], int64[:], double[:]),
+    (double[:], int64[:], int64[:], double[:]),
+    (int64[:], double[:], int64[:], double[:]),
+    (double[:], double[:], int64[:], double[:]),
+], '(n),(n),()->(n)')
+def _gufunc_polyfit(x, y, deg, out):
+    xynm = preprocess_nan_func(x, y, out)
+    if xynm is None:
+        return
+    x, y, num_nan, mask = xynm
+
+    # interpolating function
+    c = np.polynomial.polynomial.polyfit(x, y, deg[0])
+    yf = np.polynomial.polynomial.polyval(x, c)
+    postprocess_nan_func(x, yf, num_nan, mask, out)
+
+
+@guvectorize([
+    (int64[:], int64[:], double[:], int64[:], double[:]),
+    (double[:], int64[:], double[:], int64[:], double[:]),
+    (int64[:], double[:], double[:], int64[:], double[:]),
+    (double[:], double[:], double[:], int64[:], double[:])
+], '(n),(n),(m),()->(m)')
+def _gufunc_polyfit_upscale(x, y, ix, deg, out):  # pragma: no cover
+    xynm = preprocess_nan_func(x, y, out)
+    if xynm is None:
+        return
+    x, y, num_nan, mask = xynm
+
+    # interpolating function
+    c = np.polynomial.polynomial.polyfit(x, y, deg[0])
+    out[:] = np.polynomial.polynomial.polyval(ix, c)
+
+
+@guvectorize([
+    (int64[:], int64[:], int64[:], double[:]),
+    (double[:], int64[:], int64[:], double[:]),
+    (int64[:], double[:], int64[:], double[:]),
+    (double[:], double[:], int64[:], double[:]),
+], '(n),(n),()->(n)')
+def _gufunc_chebfit(x, y, deg, out):
+    xynm = preprocess_nan_func(x, y, out)
+    if xynm is None:
+        return
+    x, y, num_nan, mask = xynm
+
+    # interpolating function
+    c = np.polynomial.chebyshev.chebfit(x, y, deg[0])
+    yf = np.polynomial.chebyshev.chebval(x, c)
+    postprocess_nan_func(x, yf, num_nan, mask, out)
+
+
+@guvectorize([
+    (int64[:], int64[:], double[:], int64[:], double[:]),
+    (double[:], int64[:], double[:], int64[:], double[:]),
+    (int64[:], double[:], double[:], int64[:], double[:]),
+    (double[:], double[:], double[:], int64[:], double[:])
+], '(n),(n),(m),()->(m)')
+def _gufunc_chebfit_upscale(x, y, ix, deg, out):  # pragma: no cover
+    xynm = preprocess_nan_func(x, y, out)
+    if xynm is None:
+        return
+    x, y, num_nan, mask = xynm
+
+    # interpolating function
+    c = np.polynomial.chebyshev.chebfit(x, y, deg[0])
+    out[:] = np.polynomial.chebyshev.chebval(ix, c)
+
+
+@guvectorize([
+    (int64[:], int64[:], int64[:], double[:]),
+    (double[:], int64[:], int64[:], double[:]),
+    (int64[:], double[:], int64[:], double[:]),
+    (double[:], double[:], int64[:], double[:]),
+], '(n),(n),()->(n)')
+def _gufunc_legfit(x, y, deg, out):
+    xynm = preprocess_nan_func(x, y, out)
+    if xynm is None:
+        return
+    x, y, num_nan, mask = xynm
+
+    # interpolating function
+    c = np.polynomial.legendre.legfit(x, y, deg[0])
+    yf = np.polynomial.legendre.legval(x, c)
+    postprocess_nan_func(x, yf, num_nan, mask, out)
+
+
+@guvectorize([
+    (int64[:], int64[:], double[:], int64[:], double[:]),
+    (double[:], int64[:], double[:], int64[:], double[:]),
+    (int64[:], double[:], double[:], int64[:], double[:]),
+    (double[:], double[:], double[:], int64[:], double[:])
+], '(n),(n),(m),()->(m)')
+def _gufunc_legfit_upscale(x, y, ix, deg, out):  # pragma: no cover
+    xynm = preprocess_nan_func(x, y, out)
+    if xynm is None:
+        return
+    x, y, num_nan, mask = xynm
+
+    # interpolating function
+    c = np.polynomial.legendre.legfit(x, y, deg[0])
+    out[:] = np.polynomial.legendre.legval(ix, c)
+
+
+@guvectorize([
+    (int64[:], int64[:], int64[:], double[:]),
+    (double[:], int64[:], int64[:], double[:]),
+    (int64[:], double[:], int64[:], double[:]),
+    (double[:], double[:], int64[:], double[:]),
+], '(n),(n),()->(n)')
+def _gufunc_lagfit(x, y, deg, out):
+    xynm = preprocess_nan_func(x, y, out)
+    if xynm is None:
+        return
+    x, y, num_nan, mask = xynm
+
+    # interpolating function
+    c = np.polynomial.laguerre.lagfit(x, y, deg[0])
+    yf = np.polynomial.laguerre.lagval(x, c)
+    postprocess_nan_func(x, yf, num_nan, mask, out)
+
+
+@guvectorize([
+    (int64[:], int64[:], double[:], int64[:], double[:]),
+    (double[:], int64[:], double[:], int64[:], double[:]),
+    (int64[:], double[:], double[:], int64[:], double[:]),
+    (double[:], double[:], double[:], int64[:], double[:])
+], '(n),(n),(m),()->(m)')
+def _gufunc_lagfit_upscale(x, y, ix, deg, out):  # pragma: no cover
+    xynm = preprocess_nan_func(x, y, out)
+    if xynm is None:
+        return
+    x, y, num_nan, mask = xynm
+
+    # interpolating function
+    c = np.polynomial.laguerre.lagfit(x, y, deg[0])
+    out[:] = np.polynomial.laguerre.lagval(ix, c)
+
+
+@guvectorize([
+    (int64[:], int64[:], int64[:], double[:]),
+    (double[:], int64[:], int64[:], double[:]),
+    (int64[:], double[:], int64[:], double[:]),
+    (double[:], double[:], int64[:], double[:]),
+], '(n),(n),()->(n)')
+def _gufunc_hermfit(x, y, deg, out):
+    xynm = preprocess_nan_func(x, y, out)
+    if xynm is None:
+        return
+    x, y, num_nan, mask = xynm
+
+    # interpolating function
+    c = np.polynomial.hermite.hermfit(x, y, deg[0])
+    yf = np.polynomial.hermite.hermval(x, c)
+    postprocess_nan_func(x, yf, num_nan, mask, out)
+
+
+@guvectorize([
+    (int64[:], int64[:], double[:], int64[:], double[:]),
+    (double[:], int64[:], double[:], int64[:], double[:]),
+    (int64[:], double[:], double[:], int64[:], double[:]),
+    (double[:], double[:], double[:], int64[:], double[:])
+], '(n),(n),(m),()->(m)')
+def _gufunc_hermfit_upscale(x, y, ix, deg, out):  # pragma: no cover
+    xynm = preprocess_nan_func(x, y, out)
+    if xynm is None:
+        return
+    x, y, num_nan, mask = xynm
+
+    # interpolating function
+    c = np.polynomial.hermite.hermfit(x, y, deg[0])
+    out[:] = np.polynomial.hermite.hermval(ix, c)
+
+
+POLY_FNS = {
+    'polynomial': (_gufunc_polyfit, _gufunc_polyfit_upscale),
+    'chebyshev': (_gufunc_chebfit, _gufunc_chebfit_upscale),
+    'legendre': (_gufunc_legfit, _gufunc_legfit_upscale),
+    'laguerre': (_gufunc_lagfit, _gufunc_lagfit_upscale),
+    'hermite': (_gufunc_hermfit, _gufunc_hermfit_upscale),
+}
+
+
+def _broadcast_polyfit(x, y, ix=None, deg=None, poly='chebyshev', axis=-1):
+    """Parse arguments and dispatch to the correct function.
+    """
+    if axis != -1:
+        y = y.swapaxes(axis, -1)
+
+    if deg is None:
+        deg = x.size
+    elif isinstance(deg, float):
+        deg = int(deg * x.size)
+
+    gfn, gfn_upscale = POLY_FNS[poly]
+
+    if ix is None:
+        return gfn(x, y, deg)
+
+    if isinstance(ix, int):
+        # automatic upscale
+        ix = np.linspace(x.min(), x.max(), ix)
+
+    return gfn_upscale(x, y, ix, deg)
+
+
+def xr_polyfit(obj, dim, ix=None, deg=None, poly='chebyshev'):
+    """
+    """
+    input_core_dims = [(dim,), (dim,)]
+    args = (obj[dim], obj)
+
+    if ix is None:
+        kwargs = {'ix': ix, 'axis': -1, 'deg': deg, 'poly': poly}
+        output_core_dims = [(dim,)]
+        return apply_ufunc(_broadcast_polyfit, *args, kwargs=kwargs,
+                           input_core_dims=input_core_dims,
+                           output_core_dims=output_core_dims)
+
+    if isinstance(ix, int):
+        ix = np.linspace(float(obj[dim].min()), float(obj[dim].max()), ix)
+
+    kwargs = {'ix': ix, 'axis': -1, 'deg': deg, 'poly': poly}
+    output_core_dims = [('__temp_dim__',)]
+
+    result = apply_ufunc(_broadcast_polyfit, *args, kwargs=kwargs,
+                         input_core_dims=input_core_dims,
+                         output_core_dims=output_core_dims)
+    result['__temp_dim__'] = ix
+    return result.rename({'__temp_dim__': dim})
