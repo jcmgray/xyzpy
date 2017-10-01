@@ -2,11 +2,6 @@
 """
 # TODO: fornberg, exact number of points
 # TODO: singh     higher different order and k
-# TODO: cwt
-# TODO: peak_find == cwt + interp + idxmax
-# TODO: allow reductions with new_dim=None
-# TODO: only optionally handle nan
-# TODO: check which methods should be parsing nan
 
 import functools
 
@@ -14,13 +9,55 @@ import numpy as np
 from scipy import interpolate, signal
 import xarray as xr
 from xarray.core.computation import apply_ufunc
-import numba
-from numba import guvectorize, double, int64
+from numba import njit, guvectorize, double, int_
 from scipy.interpolate import LSQUnivariateSpline
 from .utils import argwhere
 
 
+_NUMBA_CACHE_DEFAULT = False
+
+
+class LazyCompile(object):
+    """Class that does 'compiles' a function only when called.
+    """
+
+    def __init__(self, fn, compiler):
+        self.fn = fn
+        self.compiler = compiler
+        self.compiled = False
+
+    def compile_fn(self):
+        self._fn = self.compiler(*self.compiler_args,
+                                 **self.compiler_kwargs)(self.fn)
+        self.compiled = True
+
+    def __call__(self, *args, **kwargs):
+        if not self.compiled:
+            self.compile_fn()
+        return self._fn(*args, **kwargs)
+
+
+def lazy_guvectorize(*gufunc_args, **gufunc_kwargs):
+    """Function to wrap LazyCompile around functions.
+    """
+    def actual_fn_wrapper(fn):
+        lazy_fn = LazyCompile(fn, guvectorize)
+        lazy_fn.compiler_args = gufunc_args
+        lazy_fn.compiler_kwargs = gufunc_kwargs
+
+        @functools.wraps(fn)
+        def cached_function(*args, **kwargs):
+            return lazy_fn(*args, **kwargs)
+
+        return cached_function
+
+    return actual_fn_wrapper
+
+
+@njit
 def preprocess_nan_func(x, y, out):
+    """Pre-process data for a 1d function that doesn't accept nan-values.
+    """
     # strip out nan
     mask = np.isfinite(x) & np.isfinite(y)
     num_nan = np.sum(~mask)
@@ -35,7 +72,10 @@ def preprocess_nan_func(x, y, out):
     return x, y, num_nan, mask
 
 
+@njit
 def postprocess_nan_func(x, yf, num_nan, mask, out):
+    """Post-process data for a 1d function that doesn't accept nan-values.
+    """
     if num_nan != 0:
         out[~mask] = np.nan
         out[mask] = yf
@@ -44,6 +84,9 @@ def postprocess_nan_func(x, yf, num_nan, mask, out):
 
 
 def preprocess_interp1d_nan_func(x, y, out):
+    """Pre-process data for a 1d function that doesn't accept nan-values and
+    needs evenly spaced data.
+    """
     # strip out nan
     mask = np.isfinite(x) & np.isfinite(y)
     num_nan = np.sum(~mask)
@@ -62,6 +105,9 @@ def preprocess_interp1d_nan_func(x, y, out):
 
 
 def postprocess_interp1d_nan_func(x, x_even, yf_even, num_nan, mask, out):
+    """Pre-process data for a 1d function that doesn't accept nan-values and
+    needs evenly spaced data.
+    """
     # re-interpolate to original spacing
     yf = np.interp(x, x_even, yf_even)
 
@@ -176,9 +222,9 @@ def xr_1d_apply(func, xobj, dim, new_dim=False, leave_nan=False):
 #                    fornberg's finite difference algortihm                   #
 # --------------------------------------------------------------------------- #
 
-@numba.jit(nopython=True)  # pragma: no cover
+@njit  # pragma: no cover
 def finite_difference_fornberg(fx, x, z, order):
-    """Fornberg finite difference method for single poitn `z`.
+    """Fornberg finite difference method for single point `z`.
     """
     c1 = 1.0
     c4 = x[0] - z
@@ -213,7 +259,7 @@ def finite_difference_fornberg(fx, x, z, order):
     return np.dot(c[:, order], fx)
 
 
-@numba.jit(nopython=True)  # pragma: no cover
+@njit  # pragma: no cover
 def finite_diff_array(fx, x, ix, order, window):
     """Fornberg finite difference method for array of points `ix`.
     """
@@ -331,7 +377,7 @@ def xr_wfdiff(xobj, dim, ix=100, order=1, mode='points', window=5):
         mode : {'points', 'relative', 'absolute'}
             Used in conjuction with window.
             If 'points', the window size is set such that the average number
-            of points in each window is given b `window`.
+            of points in each window is given by `window`.
             If 'relative', the window size is set such that its size relative
             to the total range is given by `window`.
             If 'absolute', the window size is geven explicitly by `window`.
@@ -365,7 +411,7 @@ xr.DataArray.fdiff = xr_wfdiff
 #                         Simple averaged scaled diff                         #
 # --------------------------------------------------------------------------- #
 
-@numba.jit(nopython=True)
+@njit
 def simple_average_diff(fx, x, k=1):
     n = len(x)
     dfx = np.empty(n - k)
@@ -394,7 +440,7 @@ xr.DataArray.sdiff = xr_sdiff
 # ---------------------------------------------------------------------------
 
 @nan_wrap_const_length
-@numba.jit(nopython=True)
+@njit
 def usdiff(fx, x):
     """
     Singh, Ashok K., and B. S. Bhadauria. "Finite difference formulae for
@@ -441,7 +487,7 @@ xr.DataArray.usdiff = xr_usdiff
 
 
 @nan_wrap_const_length
-@numba.jit(nopython=True)
+@njit
 def usdiff_err(efx, x):
     """
     Propagate uncertainties using uneven finite difference formula.
@@ -486,53 +532,103 @@ xr.DataArray.usdiff_err = xr_usdiff_err
 
 
 # --------------------------------------------------------------------------- #
-#                            spline interpolation                             #
+#                                interpolation                                #
 # --------------------------------------------------------------------------- #
 
+_INTERP_INT2STR = {
+    0: 'zero',
+    1: 'slinear',
+    2: 'quadratic',
+    3: 'cubic',
+}
 
-def array_interp1d(fx, x, ix, kind='cubic', return_func=False, **kwargs):
+
+@lazy_guvectorize([
+    (int_[:], int_[:], int_[:], double[:]),
+    (double[:], int_[:], int_[:], double[:]),
+    (int_[:], double[:], int_[:], double[:]),
+    (double[:], double[:], int_[:], double[:]),
+], '(n),(n),()->(n)', cache=_NUMBA_CACHE_DEFAULT, forceobj=True)
+def _gufunc_interp(x, y, order, out):
+    xynm = preprocess_nan_func(x, y, out)
+    if xynm is None:
+        return
+    x, y, num_nan, mask = xynm
+
+    # interpolating function
+    ifn = interpolate.interp1d(x, y, kind=_INTERP_INT2STR[order[0]],
+                               fill_value='extrapolate')
+    yf = ifn(x)
+    postprocess_nan_func(x, yf, num_nan, mask, out)
+
+
+@lazy_guvectorize([
+    (int_[:], int_[:], double[:], int_[:], double[:]),
+    (double[:], int_[:], double[:], int_[:], double[:]),
+    (int_[:], double[:], double[:], int_[:], double[:]),
+    (double[:], double[:], double[:], int_[:], double[:])
+], '(n),(n),(m),()->(m)', cache=_NUMBA_CACHE_DEFAULT, forceobj=True)
+def _gufunc_interp_upscale(x, y, ix, order, out):  # pragma: no cover
+    xynm = preprocess_nan_func(x, y, out)
+    if xynm is None:
+        return
+    x, y, num_nan, mask = xynm
+
+    # interpolating function
+    ifn = interpolate.interp1d(x, y, kind=_INTERP_INT2STR[order[0]],
+                               fill_value='extrapolate')
+    out[:] = ifn(ix)
+
+
+def _broadcast_interp(x, y, ix=100, order=3, axis=-1):
+    if axis != -1:
+        y = y.swapaxes(axis, -1)
+
+    if ix is None:
+        return _gufunc_interp(x, y, order)
 
     if isinstance(ix, int):
-        ix = np.linspace(x[0], x[-1], ix)
+        # automatic upscale
+        ix = np.linspace(x.min(), x.max(), ix)
 
-    def fx_interp(fx):
-        ma = np.isfinite(fx)
-        ifn = interpolate.interp1d(x[ma], fx[ma], kind=kind,
-                                   bounds_error=False,
-                                   **kwargs)
-        return ifn(ix)
-
-    if return_func:
-        return fx_interp
-    return fx_interp(fx)
+    return _gufunc_interp_upscale(x, y, ix, order)
 
 
-def xr_interp1d(xobj, dim, ix=100, kind='cubic', **kwargs):
-    # original grid
-    x = xobj[dim].data
-    # generate interpolation grid if not given as array, and set as coords
+def xr_interp(obj, dim, ix=100, order=3):
+
+    input_core_dims = [(dim,), (dim,)]
+    args = (obj[dim], obj)
+    kwargs = {'ix': ix, 'axis': -1, 'order': order}
+
+    if ix is None:
+        output_core_dims = [(dim,)]
+        return apply_ufunc(_broadcast_interp, *args, kwargs=kwargs,
+                           input_core_dims=input_core_dims,
+                           output_core_dims=output_core_dims)
+
     if isinstance(ix, int):
-        ix = np.linspace(x[0], x[-1], ix)
-    # make re-useable single arg function
-    fn = array_interp1d(None, x=x, ix=ix, kind=kind,
-                        return_func=True, **kwargs)
-    return xr_1d_apply(fn, xobj, dim, new_dim=ix, leave_nan=True)
+        ix = np.linspace(float(obj[dim].min()), float(obj[dim].max()), ix)
 
+    kwargs['ix'] = ix
+    output_core_dims = [('__temp_dim__',)]
 
-xr.Dataset.interp = xr_interp1d
-xr.DataArray.interp = xr_interp1d
+    result = apply_ufunc(_broadcast_interp, *args, kwargs=kwargs,
+                         input_core_dims=input_core_dims,
+                         output_core_dims=output_core_dims)
+    result['__temp_dim__'] = ix
+    return result.rename({'__temp_dim__': dim})
 
 
 # --------------------------------------------------------------------------- #
 #                            pchip interpolation                              #
 # --------------------------------------------------------------------------- #
 
-@guvectorize([
-    (int64[:], int64[:], double[:]),
-    (double[:], int64[:], double[:]),
-    (int64[:], double[:], double[:]),
+@lazy_guvectorize([
+    (int_[:], int_[:], double[:]),
+    (double[:], int_[:], double[:]),
+    (int_[:], double[:], double[:]),
     (double[:], double[:], double[:]),
-], '(n),(n)->(n)')
+], '(n),(n)->(n)', cache=_NUMBA_CACHE_DEFAULT, forceobj=True)
 def _gufunc_pchip(x, y, out):
     xynm = preprocess_nan_func(x, y, out)
     if xynm is None:
@@ -545,12 +641,12 @@ def _gufunc_pchip(x, y, out):
     postprocess_nan_func(x, yf, num_nan, mask, out)
 
 
-@guvectorize([
-    (int64[:], int64[:], double[:], double[:]),
-    (double[:], int64[:], double[:], double[:]),
-    (int64[:], double[:], double[:], double[:]),
+@lazy_guvectorize([
+    (int_[:], int_[:], double[:], double[:]),
+    (double[:], int_[:], double[:], double[:]),
+    (int_[:], double[:], double[:], double[:]),
     (double[:], double[:], double[:], double[:])
-], '(n),(n),(m)->(m)')
+], '(n),(n),(m)->(m)', cache=_NUMBA_CACHE_DEFAULT, forceobj=True)
 def _gufunc_pchip_upscale(x, y, ix, out):  # pragma: no cover
     xynm = preprocess_nan_func(x, y, out)
     if xynm is None:
@@ -605,12 +701,12 @@ def xr_interp_pchip(obj, dim, ix=100):
 #                           scipy signal filtering                            #
 # --------------------------------------------------------------------------- #
 
-@guvectorize([
-    (int64[:], int64[:], int64[:], double[:], double[:]),
-    (double[:], int64[:], int64[:], double[:], double[:]),
-    (int64[:], double[:], int64[:], double[:], double[:]),
-    (double[:], double[:], int64[:], double[:], double[:]),
-], '(n),(n),(),()->(n)')
+@lazy_guvectorize([
+    (int_[:], int_[:], int_[:], double[:], double[:]),
+    (double[:], int_[:], int_[:], double[:], double[:]),
+    (int_[:], double[:], int_[:], double[:], double[:]),
+    (double[:], double[:], int_[:], double[:], double[:]),
+], '(n),(n),(),()->(n)', cache=_NUMBA_CACHE_DEFAULT, forceobj=True)
 def _gufunc_filter_wiener(x, y, mysize, noise, out):  # pragma: no cover
     # Pre-process
     xynm = preprocess_interp1d_nan_func(x, y, out)
@@ -642,12 +738,12 @@ def xr_filter_wiener(obj, dim, mysize=5, noise=1e-2):
                        kwargs=kwargs)
 
 
-@guvectorize([
-    (int64[:], int64[:], int64[:], double[:], double[:]),
-    (double[:], int64[:], int64[:], double[:], double[:]),
-    (int64[:], double[:], int64[:], double[:], double[:]),
-    (double[:], double[:], int64[:], double[:], double[:]),
-], '(n),(n),(),()->(n)')
+@lazy_guvectorize([
+    (int_[:], int_[:], int_[:], double[:], double[:]),
+    (double[:], int_[:], int_[:], double[:], double[:]),
+    (int_[:], double[:], int_[:], double[:], double[:]),
+    (double[:], double[:], int_[:], double[:], double[:]),
+], '(n),(n),(),()->(n)', cache=_NUMBA_CACHE_DEFAULT, forceobj=True)
 def _gufunc_filtfilt_butter(x, y, N, Wn, out):  # pragma: no cover
     # Pre-process
     xynm = preprocess_interp1d_nan_func(x, y, out)
@@ -695,12 +791,12 @@ def xr_filtfilt_butter(obj, dim, N=2, Wn=0.4):
                        kwargs=kwargs)
 
 
-@guvectorize([
-    (int64[:], int64[:], int64[:], double[:], double[:]),
-    (double[:], int64[:], int64[:], double[:], double[:]),
-    (int64[:], double[:], int64[:], double[:], double[:]),
-    (double[:], double[:], int64[:], double[:], double[:]),
-], '(n),(n),(),()->(n)')
+@lazy_guvectorize([
+    (int_[:], int_[:], int_[:], double[:], double[:]),
+    (double[:], int_[:], int_[:], double[:], double[:]),
+    (int_[:], double[:], int_[:], double[:], double[:]),
+    (double[:], double[:], int_[:], double[:], double[:]),
+], '(n),(n),(),()->(n)', cache=_NUMBA_CACHE_DEFAULT, forceobj=True)
 def _gufunc_filtfilt_bessel(x, y, N, Wn, out):  # pragma: no cover
     # Pre-process
     xynm = preprocess_interp1d_nan_func(x, y, out)
@@ -808,12 +904,12 @@ xr.Dataset.idxmin = xr_idxmin
 #                      Univariate spline interpolation                        #
 # --------------------------------------------------------------------------- #
 
-@guvectorize([
-    (int64[:], int64[:], double[:], int64[:], double[:]),
-    (double[:], int64[:], double[:], int64[:], double[:]),
-    (int64[:], double[:], double[:], int64[:], double[:]),
-    (double[:], double[:], double[:], int64[:], double[:]),
-], '(n),(n),(n),()->(n)')
+@lazy_guvectorize([
+    (int_[:], int_[:], double[:], int_[:], double[:]),
+    (double[:], int_[:], double[:], int_[:], double[:]),
+    (int_[:], double[:], double[:], int_[:], double[:]),
+    (double[:], double[:], double[:], int_[:], double[:]),
+], '(n),(n),(n),()->(n)', cache=_NUMBA_CACHE_DEFAULT, forceobj=True)
 def _gufunc_unispline_err(x, y, err, num_knots, out):
     xi = x.min()
     xf = x.max()
@@ -822,12 +918,12 @@ def _gufunc_unispline_err(x, y, err, num_knots, out):
     out[:] = fn_interp(x)
 
 
-@guvectorize([
-    (int64[:], int64[:], int64[:], double[:]),
-    (double[:], int64[:], int64[:], double[:]),
-    (int64[:], double[:], int64[:], double[:]),
-    (double[:], double[:], int64[:], double[:]),
-], '(n),(n),()->(n)')
+@lazy_guvectorize([
+    (int_[:], int_[:], int_[:], double[:]),
+    (double[:], int_[:], int_[:], double[:]),
+    (int_[:], double[:], int_[:], double[:]),
+    (double[:], double[:], int_[:], double[:]),
+], '(n),(n),()->(n)', cache=_NUMBA_CACHE_DEFAULT, forceobj=True)
 def _gufunc_unispline_noerr(x, y, num_knots, out):
     xi = x.min()
     xf = x.max()
@@ -836,12 +932,12 @@ def _gufunc_unispline_noerr(x, y, num_knots, out):
     out[:] = fn_interp(x)
 
 
-@guvectorize([
-    (int64[:], int64[:], double[:], int64[:], double[:], double[:]),
-    (double[:], int64[:], double[:], int64[:], double[:], double[:]),
-    (int64[:], double[:], double[:], int64[:], double[:], double[:]),
-    (double[:], double[:], double[:], int64[:], double[:], double[:]),
-], '(n),(n),(n),(),(m),(m)')
+@lazy_guvectorize([
+    (int_[:], int_[:], double[:], int_[:], double[:], double[:]),
+    (double[:], int_[:], double[:], int_[:], double[:], double[:]),
+    (int_[:], double[:], double[:], int_[:], double[:], double[:]),
+    (double[:], double[:], double[:], int_[:], double[:], double[:]),
+], '(n),(n),(n),(),(m),(m)', cache=_NUMBA_CACHE_DEFAULT, forceobj=True)
 def _gufunc_unispline_err_upscale(x, y, err, num_knots, ix, out):
     xi = x.min()
     xf = x.max()
@@ -850,12 +946,12 @@ def _gufunc_unispline_err_upscale(x, y, err, num_knots, ix, out):
     out[:] = fn_interp(ix)
 
 
-@guvectorize([
-    (int64[:], int64[:], int64[:], double[:], double[:]),
-    (double[:], int64[:], int64[:], double[:], double[:]),
-    (int64[:], double[:], int64[:], double[:], double[:]),
-    (double[:], double[:], int64[:], double[:], double[:]),
-], '(n),(n),(),(m),(m)')
+@lazy_guvectorize([
+    (int_[:], int_[:], int_[:], double[:], double[:]),
+    (double[:], int_[:], int_[:], double[:], double[:]),
+    (int_[:], double[:], int_[:], double[:], double[:]),
+    (double[:], double[:], int_[:], double[:], double[:]),
+], '(n),(n),(),(m),(m)', cache=_NUMBA_CACHE_DEFAULT, forceobj=True)
 def _gufunc_unispline_noerr_upscale(x, y, num_knots, ix, out):
     xi = x.min()
     xf = x.max()
@@ -954,12 +1050,12 @@ def xr_unispline(obj, dim, err=None, num_knots=11, ix=None):
 #                            polynomial fitting                               #
 # --------------------------------------------------------------------------- #
 
-@guvectorize([
-    (int64[:], int64[:], int64[:], double[:]),
-    (double[:], int64[:], int64[:], double[:]),
-    (int64[:], double[:], int64[:], double[:]),
-    (double[:], double[:], int64[:], double[:]),
-], '(n),(n),()->(n)')
+@lazy_guvectorize([
+    (int_[:], int_[:], int_[:], double[:]),
+    (double[:], int_[:], int_[:], double[:]),
+    (int_[:], double[:], int_[:], double[:]),
+    (double[:], double[:], int_[:], double[:]),
+], '(n),(n),()->(n)', cache=_NUMBA_CACHE_DEFAULT, forceobj=True)
 def _gufunc_polyfit(x, y, deg, out):
     xynm = preprocess_nan_func(x, y, out)
     if xynm is None:
@@ -972,12 +1068,12 @@ def _gufunc_polyfit(x, y, deg, out):
     postprocess_nan_func(x, yf, num_nan, mask, out)
 
 
-@guvectorize([
-    (int64[:], int64[:], double[:], int64[:], double[:]),
-    (double[:], int64[:], double[:], int64[:], double[:]),
-    (int64[:], double[:], double[:], int64[:], double[:]),
-    (double[:], double[:], double[:], int64[:], double[:])
-], '(n),(n),(m),()->(m)')
+@lazy_guvectorize([
+    (int_[:], int_[:], double[:], int_[:], double[:]),
+    (double[:], int_[:], double[:], int_[:], double[:]),
+    (int_[:], double[:], double[:], int_[:], double[:]),
+    (double[:], double[:], double[:], int_[:], double[:])
+], '(n),(n),(m),()->(m)', cache=_NUMBA_CACHE_DEFAULT, forceobj=True)
 def _gufunc_polyfit_upscale(x, y, ix, deg, out):  # pragma: no cover
     xynm = preprocess_nan_func(x, y, out)
     if xynm is None:
@@ -989,12 +1085,12 @@ def _gufunc_polyfit_upscale(x, y, ix, deg, out):  # pragma: no cover
     out[:] = np.polynomial.polynomial.polyval(ix, c)
 
 
-@guvectorize([
-    (int64[:], int64[:], int64[:], double[:]),
-    (double[:], int64[:], int64[:], double[:]),
-    (int64[:], double[:], int64[:], double[:]),
-    (double[:], double[:], int64[:], double[:]),
-], '(n),(n),()->(n)')
+@lazy_guvectorize([
+    (int_[:], int_[:], int_[:], double[:]),
+    (double[:], int_[:], int_[:], double[:]),
+    (int_[:], double[:], int_[:], double[:]),
+    (double[:], double[:], int_[:], double[:]),
+], '(n),(n),()->(n)', cache=_NUMBA_CACHE_DEFAULT, forceobj=True)
 def _gufunc_chebfit(x, y, deg, out):
     xynm = preprocess_nan_func(x, y, out)
     if xynm is None:
@@ -1007,12 +1103,12 @@ def _gufunc_chebfit(x, y, deg, out):
     postprocess_nan_func(x, yf, num_nan, mask, out)
 
 
-@guvectorize([
-    (int64[:], int64[:], double[:], int64[:], double[:]),
-    (double[:], int64[:], double[:], int64[:], double[:]),
-    (int64[:], double[:], double[:], int64[:], double[:]),
-    (double[:], double[:], double[:], int64[:], double[:])
-], '(n),(n),(m),()->(m)')
+@lazy_guvectorize([
+    (int_[:], int_[:], double[:], int_[:], double[:]),
+    (double[:], int_[:], double[:], int_[:], double[:]),
+    (int_[:], double[:], double[:], int_[:], double[:]),
+    (double[:], double[:], double[:], int_[:], double[:])
+], '(n),(n),(m),()->(m)', cache=_NUMBA_CACHE_DEFAULT, forceobj=True)
 def _gufunc_chebfit_upscale(x, y, ix, deg, out):  # pragma: no cover
     xynm = preprocess_nan_func(x, y, out)
     if xynm is None:
@@ -1024,12 +1120,12 @@ def _gufunc_chebfit_upscale(x, y, ix, deg, out):  # pragma: no cover
     out[:] = np.polynomial.chebyshev.chebval(ix, c)
 
 
-@guvectorize([
-    (int64[:], int64[:], int64[:], double[:]),
-    (double[:], int64[:], int64[:], double[:]),
-    (int64[:], double[:], int64[:], double[:]),
-    (double[:], double[:], int64[:], double[:]),
-], '(n),(n),()->(n)')
+@lazy_guvectorize([
+    (int_[:], int_[:], int_[:], double[:]),
+    (double[:], int_[:], int_[:], double[:]),
+    (int_[:], double[:], int_[:], double[:]),
+    (double[:], double[:], int_[:], double[:]),
+], '(n),(n),()->(n)', cache=_NUMBA_CACHE_DEFAULT, forceobj=True)
 def _gufunc_legfit(x, y, deg, out):
     xynm = preprocess_nan_func(x, y, out)
     if xynm is None:
@@ -1042,12 +1138,12 @@ def _gufunc_legfit(x, y, deg, out):
     postprocess_nan_func(x, yf, num_nan, mask, out)
 
 
-@guvectorize([
-    (int64[:], int64[:], double[:], int64[:], double[:]),
-    (double[:], int64[:], double[:], int64[:], double[:]),
-    (int64[:], double[:], double[:], int64[:], double[:]),
-    (double[:], double[:], double[:], int64[:], double[:])
-], '(n),(n),(m),()->(m)')
+@lazy_guvectorize([
+    (int_[:], int_[:], double[:], int_[:], double[:]),
+    (double[:], int_[:], double[:], int_[:], double[:]),
+    (int_[:], double[:], double[:], int_[:], double[:]),
+    (double[:], double[:], double[:], int_[:], double[:])
+], '(n),(n),(m),()->(m)', cache=_NUMBA_CACHE_DEFAULT, forceobj=True)
 def _gufunc_legfit_upscale(x, y, ix, deg, out):  # pragma: no cover
     xynm = preprocess_nan_func(x, y, out)
     if xynm is None:
@@ -1059,12 +1155,12 @@ def _gufunc_legfit_upscale(x, y, ix, deg, out):  # pragma: no cover
     out[:] = np.polynomial.legendre.legval(ix, c)
 
 
-@guvectorize([
-    (int64[:], int64[:], int64[:], double[:]),
-    (double[:], int64[:], int64[:], double[:]),
-    (int64[:], double[:], int64[:], double[:]),
-    (double[:], double[:], int64[:], double[:]),
-], '(n),(n),()->(n)')
+@lazy_guvectorize([
+    (int_[:], int_[:], int_[:], double[:]),
+    (double[:], int_[:], int_[:], double[:]),
+    (int_[:], double[:], int_[:], double[:]),
+    (double[:], double[:], int_[:], double[:]),
+], '(n),(n),()->(n)', cache=_NUMBA_CACHE_DEFAULT, forceobj=True)
 def _gufunc_lagfit(x, y, deg, out):
     xynm = preprocess_nan_func(x, y, out)
     if xynm is None:
@@ -1077,12 +1173,12 @@ def _gufunc_lagfit(x, y, deg, out):
     postprocess_nan_func(x, yf, num_nan, mask, out)
 
 
-@guvectorize([
-    (int64[:], int64[:], double[:], int64[:], double[:]),
-    (double[:], int64[:], double[:], int64[:], double[:]),
-    (int64[:], double[:], double[:], int64[:], double[:]),
-    (double[:], double[:], double[:], int64[:], double[:])
-], '(n),(n),(m),()->(m)')
+@lazy_guvectorize([
+    (int_[:], int_[:], double[:], int_[:], double[:]),
+    (double[:], int_[:], double[:], int_[:], double[:]),
+    (int_[:], double[:], double[:], int_[:], double[:]),
+    (double[:], double[:], double[:], int_[:], double[:])
+], '(n),(n),(m),()->(m)', cache=_NUMBA_CACHE_DEFAULT, forceobj=True)
 def _gufunc_lagfit_upscale(x, y, ix, deg, out):  # pragma: no cover
     xynm = preprocess_nan_func(x, y, out)
     if xynm is None:
@@ -1094,12 +1190,12 @@ def _gufunc_lagfit_upscale(x, y, ix, deg, out):  # pragma: no cover
     out[:] = np.polynomial.laguerre.lagval(ix, c)
 
 
-@guvectorize([
-    (int64[:], int64[:], int64[:], double[:]),
-    (double[:], int64[:], int64[:], double[:]),
-    (int64[:], double[:], int64[:], double[:]),
-    (double[:], double[:], int64[:], double[:]),
-], '(n),(n),()->(n)')
+@lazy_guvectorize([
+    (int_[:], int_[:], int_[:], double[:]),
+    (double[:], int_[:], int_[:], double[:]),
+    (int_[:], double[:], int_[:], double[:]),
+    (double[:], double[:], int_[:], double[:]),
+], '(n),(n),()->(n)', cache=_NUMBA_CACHE_DEFAULT, forceobj=True)
 def _gufunc_hermfit(x, y, deg, out):
     xynm = preprocess_nan_func(x, y, out)
     if xynm is None:
@@ -1112,12 +1208,12 @@ def _gufunc_hermfit(x, y, deg, out):
     postprocess_nan_func(x, yf, num_nan, mask, out)
 
 
-@guvectorize([
-    (int64[:], int64[:], double[:], int64[:], double[:]),
-    (double[:], int64[:], double[:], int64[:], double[:]),
-    (int64[:], double[:], double[:], int64[:], double[:]),
-    (double[:], double[:], double[:], int64[:], double[:])
-], '(n),(n),(m),()->(m)')
+@lazy_guvectorize([
+    (int_[:], int_[:], double[:], int_[:], double[:]),
+    (double[:], int_[:], double[:], int_[:], double[:]),
+    (int_[:], double[:], double[:], int_[:], double[:]),
+    (double[:], double[:], double[:], int_[:], double[:])
+], '(n),(n),(m),()->(m)', cache=_NUMBA_CACHE_DEFAULT, forceobj=True)
 def _gufunc_hermfit_upscale(x, y, ix, deg, out):  # pragma: no cover
     xynm = preprocess_nan_func(x, y, out)
     if xynm is None:

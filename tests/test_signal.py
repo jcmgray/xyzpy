@@ -111,6 +111,37 @@ class TestFornberg:
         nan_ds.fdiff('b')
 
 
+class TestInterp:
+
+    def test_ds_no_upscale(self, ds):
+        nds = ds.xyz.interp('t', ix=None, order=3)
+        assert nds.t.size == ds.t.size
+
+    def test_ds_int_upscale(self, ds):
+        nds = ds.xyz.interp('t', ix=50, order=3)
+        assert 't' in nds
+        assert nds.t.size == 50
+
+    def test_ds_upscale(self, ds):
+        nds = ds.xyz.interp('t', ix=np.linspace(0.1, 0.3, 13), order=3)
+        assert 't' in nds
+        assert nds.t.size == 13
+
+    def test_nan_ds_no_upscale(self, nan_ds):
+        nds = nan_ds.xyz.interp('a', ix=None, order=2)
+        assert nds.a.size == nan_ds.a.size
+
+    def test_nan_ds_int_upscale(self, nan_ds):
+        nds = nan_ds.xyz.interp('a', ix=50, order=2)
+        assert 'a' in nds
+        assert nds.a.size == 50
+
+    def test_nan_ds_upscale(self, nan_ds):
+        nds = nan_ds.xyz.interp('a', ix=np.linspace(1.5, 2.5, 13), order=2)
+        assert 'a' in nds
+        assert nds.a.size == 13
+
+
 class TestPchip:
 
     def test_ds_no_upscale(self, ds):

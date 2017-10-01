@@ -45,6 +45,7 @@ from .signal import (
     wfdiff,
     xr_wfdiff,
     xr_sdiff,
+    xr_interp,
     xr_interp_pchip,
     xr_filter_wiener,
     xr_filtfilt_butter,
@@ -115,6 +116,7 @@ __all__ = [
     "wfdiff",
     "xr_wfdiff",
     "xr_sdiff",
+    "xr_interp",
     "xr_interp_pchip",
     "xr_filter_wiener",
     "xr_filtfilt_butter",
@@ -124,7 +126,6 @@ __all__ = [
 ]
 
 
-@xr.register_dataset_accessor('xyz')
 class XYZPY(object):
     def __init__(self, xarray_obj):
         self._obj = xarray_obj
@@ -169,6 +170,10 @@ class XYZPY(object):
     def ilineplot(self, *args, **kwargs):
         return ilineplot(self._obj, *args, **kwargs)
 
+    @functools.wraps(xr_interp)
+    def interp(self, dim, ix=100, order=3):
+        return xr_interp(self._obj, dim=dim, ix=ix, order=order)
+
     @functools.wraps(xr_interp_pchip)
     def interp_pchip(self, dim, ix=100):
         return xr_interp_pchip(self._obj, dim=dim, ix=ix)
@@ -193,3 +198,7 @@ class XYZPY(object):
     @functools.wraps(xr_polyfit)
     def polyfit(self, dim, ix=None, deg=0.5, poly='chebyshev'):
         return xr_polyfit(self._obj, dim=dim, ix=ix, deg=deg, poly=poly)
+
+
+xr.register_dataarray_accessor('xyz')(XYZPY)
+xr.register_dataset_accessor('xyz')(XYZPY)
