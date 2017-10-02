@@ -27,9 +27,6 @@ else
   source activate test-environment
   conda update -q --file $DIR/requirements-py35.yml
 
-  # keep xarray up-to-date
-  pip install git+git://github.com/pydata/xarray.git -U --no-deps
-
   # continous integration, coverage etc.
-  pip install -U coveralls codeclimate-test-reporter codecov
+  pip install -U codeclimate-test-reporter
 fi

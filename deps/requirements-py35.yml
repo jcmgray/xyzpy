@@ -23,6 +23,7 @@ dependencies:
   - cytoolz
   - coverage
   - cloudpickle
+  - coveralls
+  - codecov
   - pip:
-    - coveralls
     - codeclimate-test-reporter

@@ -72,7 +72,7 @@ def preprocess_nan_func(x, y, out):  # pragma: no cover
 
 
 @njit
-def postprocess_nan_func(x, yf, num_nan, mask, out):  # pragma: no cover
+def postprocess_nan_func(yf, num_nan, mask, out):  # pragma: no cover
     """Post-process data for a 1d function that doesn't accept nan-values.
     """
     if num_nan != 0:
@@ -365,7 +365,7 @@ def diff_u(fx, x, out=None):  # pragma: no cover
                  fx[n - 2] * (h1 + h2) / (h1 * h2) +
                  fx[n - 1] * (h1 + 2 * h2) / (h2 * (h1 + h2)))
 
-    postprocess_nan_func(x, yf, num_nan, mask, out)
+    postprocess_nan_func(yf, num_nan, mask, out)
 
 
 def _broadcast_diff_u(x, fx, axis=-1):
@@ -427,7 +427,7 @@ def diff_u_err(efx, x, out=None):  # pragma: no cover
                  (efx[n - 2] * (h1 + h2) / (h1 * h2))**2 +
                  (efx[n - 1] * (h1 + 2 * h2) / (h2 * (h1 + h2)))**2)**0.5
 
-    postprocess_nan_func(x, yf, num_nan, mask, out)
+    postprocess_nan_func(yf, num_nan, mask, out)
 
 
 def _broadcast_diff_u_err(x, fx, axis=-1):
@@ -477,7 +477,7 @@ def _gufunc_interp(x, y, order, out=None):  # pragma: no cover
     ifn = interpolate.interp1d(x, y, kind=_INTERP_INT2STR[order[0]],
                                fill_value='extrapolate')
     yf = ifn(x)
-    postprocess_nan_func(x, yf, num_nan, mask, out)
+    postprocess_nan_func(yf, num_nan, mask, out)
 
 
 @lazy_guvectorize([
@@ -558,7 +558,7 @@ def _gufunc_pchip(x, y, out=None):  # pragma: no cover
     # interpolating function
     ifn = interpolate.PchipInterpolator(x, y)
     yf = ifn(x)
-    postprocess_nan_func(x, yf, num_nan, mask, out)
+    postprocess_nan_func(yf, num_nan, mask, out)
 
 
 @lazy_guvectorize([
@@ -987,7 +987,7 @@ def _gufunc_polyfit(x, y, deg, out=None):  # pragma: no cover
     # interpolating function
     c = np.polynomial.polynomial.polyfit(x, y, deg[0])
     yf = np.polynomial.polynomial.polyval(x, c)
-    postprocess_nan_func(x, yf, num_nan, mask, out)
+    postprocess_nan_func(yf, num_nan, mask, out)
 
 
 @lazy_guvectorize([
@@ -1022,7 +1022,7 @@ def _gufunc_chebfit(x, y, deg, out=None):  # pragma: no cover
     # interpolating function
     c = np.polynomial.chebyshev.chebfit(x, y, deg[0])
     yf = np.polynomial.chebyshev.chebval(x, c)
-    postprocess_nan_func(x, yf, num_nan, mask, out)
+    postprocess_nan_func(yf, num_nan, mask, out)
 
 
 @lazy_guvectorize([
@@ -1057,7 +1057,7 @@ def _gufunc_legfit(x, y, deg, out=None):  # pragma: no cover
     # interpolating function
     c = np.polynomial.legendre.legfit(x, y, deg[0])
     yf = np.polynomial.legendre.legval(x, c)
-    postprocess_nan_func(x, yf, num_nan, mask, out)
+    postprocess_nan_func(yf, num_nan, mask, out)
 
 
 @lazy_guvectorize([
@@ -1092,7 +1092,7 @@ def _gufunc_lagfit(x, y, deg, out=None):  # pragma: no cover
     # interpolating function
     c = np.polynomial.laguerre.lagfit(x, y, deg[0])
     yf = np.polynomial.laguerre.lagval(x, c)
-    postprocess_nan_func(x, yf, num_nan, mask, out)
+    postprocess_nan_func(yf, num_nan, mask, out)
 
 
 @lazy_guvectorize([
@@ -1127,7 +1127,7 @@ def _gufunc_hermfit(x, y, deg, out=None):  # pragma: no cover
     # interpolating function
     c = np.polynomial.hermite.hermfit(x, y, deg[0])
     yf = np.polynomial.hermite.hermval(x, c)
-    postprocess_nan_func(x, yf, num_nan, mask, out)
+    postprocess_nan_func(yf, num_nan, mask, out)
 
 
 @lazy_guvectorize([
