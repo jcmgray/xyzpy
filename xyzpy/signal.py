@@ -21,10 +21,12 @@ class LazyCompile(object):
     """Class that does 'compiles' a function only when called.
     """
 
-    def __init__(self, fn, compiler):
+    def __init__(self, fn, compiler, compiler_args, compiler_kwargs):
         self.fn = fn
         self.compiler = compiler
         self.compiled = False
+        self.compiler_args
+        self.compiler_kwargs
 
     def compile_fn(self):
         self._fn = self.compiler(*self.compiler_args,
@@ -41,9 +43,7 @@ def lazy_guvectorize(*gufunc_args, **gufunc_kwargs):
     """Function to wrap LazyCompile around functions.
     """
     def actual_fn_wrapper(fn):
-        lazy_fn = LazyCompile(fn, guvectorize)
-        lazy_fn.compiler_args = gufunc_args
-        lazy_fn.compiler_kwargs = gufunc_kwargs
+        lazy_fn = LazyCompile(fn, guvectorize, gufunc_args, gufunc_kwargs)
 
         @functools.wraps(fn)
         def cached_function(*args, **kwargs):
@@ -445,7 +445,7 @@ xr.DataArray.sdiff = xr_sdiff
     (int_[:], double[:], double[:]),
     (double[:], double[:], double[:]),
 ], "(n),(n)->(n)", cache=_NUMBA_CACHE_DEFAULT, nopython=True)
-def diff_u(fx, x, out):
+def diff_u(fx, x, out=None):  # pragma: no cover
     """Singh, Ashok K., and B. S. Bhadauria. "Finite difference formulae for
     unequal sub-intervals using lagrange’s interpolation formula."
     International Journal of Mathematics and Analysis 3.17 (2009): 815-827.
@@ -508,7 +508,7 @@ def xr_diff_u(obj, dim):
     (int_[:], double[:], double[:]),
     (double[:], double[:], double[:]),
 ], "(n),(n)->(n)", cache=_NUMBA_CACHE_DEFAULT, nopython=True)
-def diff_u_err(efx, x, out):
+def diff_u_err(efx, x, out=None):  # pragma: no cover
     """Propagate uncertainties using uneven finite difference formula.
     """
     xynm = preprocess_nan_func(x, efx, out)
@@ -581,8 +581,8 @@ _INTERP_INT2STR = {
     (double[:], int_[:], int_[:], double[:]),
     (int_[:], double[:], int_[:], double[:]),
     (double[:], double[:], int_[:], double[:]),
-], '(n),(n),()->(n)', cache=_NUMBA_CACHE_DEFAULT, forceobj=True)
-def _gufunc_interp(x, y, order, out):
+], '(n),(n),()->(n)', cache=_NUMBA_CACHE_DEFAULT)
+def _gufunc_interp(x, y, order, out=None):  # pragma: no cover
     xynm = preprocess_nan_func(x, y, out)
     if xynm is None:
         return
@@ -600,8 +600,8 @@ def _gufunc_interp(x, y, order, out):
     (double[:], int_[:], double[:], int_[:], double[:]),
     (int_[:], double[:], double[:], int_[:], double[:]),
     (double[:], double[:], double[:], int_[:], double[:])
-], '(n),(n),(m),()->(m)', cache=_NUMBA_CACHE_DEFAULT, forceobj=True)
-def _gufunc_interp_upscale(x, y, ix, order, out):  # pragma: no cover
+], '(n),(n),(m),()->(m)', cache=_NUMBA_CACHE_DEFAULT)
+def _gufunc_interp_upscale(x, y, ix, order, out=None):  # pragma: no cover
     xynm = preprocess_nan_func(x, y, out)
     if xynm is None:
         return
@@ -661,8 +661,8 @@ def xr_interp(obj, dim, ix=100, order=3):
     (double[:], int_[:], double[:]),
     (int_[:], double[:], double[:]),
     (double[:], double[:], double[:]),
-], '(n),(n)->(n)', cache=_NUMBA_CACHE_DEFAULT, forceobj=True)
-def _gufunc_pchip(x, y, out):
+], '(n),(n)->(n)', cache=_NUMBA_CACHE_DEFAULT)
+def _gufunc_pchip(x, y, out=None):  # pragma: no cover
     xynm = preprocess_nan_func(x, y, out)
     if xynm is None:
         return
@@ -679,8 +679,8 @@ def _gufunc_pchip(x, y, out):
     (double[:], int_[:], double[:], double[:]),
     (int_[:], double[:], double[:], double[:]),
     (double[:], double[:], double[:], double[:])
-], '(n),(n),(m)->(m)', cache=_NUMBA_CACHE_DEFAULT, forceobj=True)
-def _gufunc_pchip_upscale(x, y, ix, out):  # pragma: no cover
+], '(n),(n),(m)->(m)', cache=_NUMBA_CACHE_DEFAULT)
+def _gufunc_pchip_upscale(x, y, ix, out=None):  # pragma: no cover
     xynm = preprocess_nan_func(x, y, out)
     if xynm is None:
         return
@@ -739,8 +739,8 @@ def xr_interp_pchip(obj, dim, ix=100):
     (double[:], int_[:], int_[:], double[:], double[:]),
     (int_[:], double[:], int_[:], double[:], double[:]),
     (double[:], double[:], int_[:], double[:], double[:]),
-], '(n),(n),(),()->(n)', cache=_NUMBA_CACHE_DEFAULT, forceobj=True)
-def _gufunc_filter_wiener(x, y, mysize, noise, out):  # pragma: no cover
+], '(n),(n),(),()->(n)', cache=_NUMBA_CACHE_DEFAULT)
+def _gufunc_filter_wiener(x, y, mysize, noise, out=None):  # pragma: no cover
     # Pre-process
     xynm = preprocess_interp1d_nan_func(x, y, out)
     if xynm is None:  # all nan
@@ -776,8 +776,8 @@ def xr_filter_wiener(obj, dim, mysize=5, noise=1e-2):
     (double[:], int_[:], int_[:], double[:], double[:]),
     (int_[:], double[:], int_[:], double[:], double[:]),
     (double[:], double[:], int_[:], double[:], double[:]),
-], '(n),(n),(),()->(n)', cache=_NUMBA_CACHE_DEFAULT, forceobj=True)
-def _gufunc_filtfilt_butter(x, y, N, Wn, out):  # pragma: no cover
+], '(n),(n),(),()->(n)', cache=_NUMBA_CACHE_DEFAULT)
+def _gufunc_filtfilt_butter(x, y, N, Wn, out=None):  # pragma: no cover
     # Pre-process
     xynm = preprocess_interp1d_nan_func(x, y, out)
     if xynm is None:  # all nan
@@ -829,8 +829,8 @@ def xr_filtfilt_butter(obj, dim, N=2, Wn=0.4):
     (double[:], int_[:], int_[:], double[:], double[:]),
     (int_[:], double[:], int_[:], double[:], double[:]),
     (double[:], double[:], int_[:], double[:], double[:]),
-], '(n),(n),(),()->(n)', cache=_NUMBA_CACHE_DEFAULT, forceobj=True)
-def _gufunc_filtfilt_bessel(x, y, N, Wn, out):  # pragma: no cover
+], '(n),(n),(),()->(n)', cache=_NUMBA_CACHE_DEFAULT)
+def _gufunc_filtfilt_bessel(x, y, N, Wn, out=None):  # pragma: no cover
     # Pre-process
     xynm = preprocess_interp1d_nan_func(x, y, out)
     if xynm is None:  # all nan
@@ -942,8 +942,8 @@ xr.Dataset.idxmin = xr_idxmin
     (double[:], int_[:], double[:], int_[:], double[:]),
     (int_[:], double[:], double[:], int_[:], double[:]),
     (double[:], double[:], double[:], int_[:], double[:]),
-], '(n),(n),(n),()->(n)', cache=_NUMBA_CACHE_DEFAULT, forceobj=True)
-def _gufunc_unispline_err(x, y, err, num_knots, out):
+], '(n),(n),(n),()->(n)', cache=_NUMBA_CACHE_DEFAULT)
+def _gufunc_unispline_err(x, y, err, num_knots, out=None):  # pragma: no cover
     xi = x.min()
     xf = x.max()
     t = np.linspace(xi, xf, num_knots)[1:-1]
@@ -956,8 +956,8 @@ def _gufunc_unispline_err(x, y, err, num_knots, out):
     (double[:], int_[:], int_[:], double[:]),
     (int_[:], double[:], int_[:], double[:]),
     (double[:], double[:], int_[:], double[:]),
-], '(n),(n),()->(n)', cache=_NUMBA_CACHE_DEFAULT, forceobj=True)
-def _gufunc_unispline_noerr(x, y, num_knots, out):
+], '(n),(n),()->(n)', cache=_NUMBA_CACHE_DEFAULT)
+def _gufunc_unispline_noerr(x, y, num_knots, out=None):  # pragma: no cover
     xi = x.min()
     xf = x.max()
     t = np.linspace(xi, xf, num_knots)[1:-1]
@@ -970,8 +970,9 @@ def _gufunc_unispline_noerr(x, y, num_knots, out):
     (double[:], int_[:], double[:], int_[:], double[:], double[:]),
     (int_[:], double[:], double[:], int_[:], double[:], double[:]),
     (double[:], double[:], double[:], int_[:], double[:], double[:]),
-], '(n),(n),(n),(),(m),(m)', cache=_NUMBA_CACHE_DEFAULT, forceobj=True)
-def _gufunc_unispline_err_upscale(x, y, err, num_knots, ix, out):
+], '(n),(n),(n),(),(m),(m)', cache=_NUMBA_CACHE_DEFAULT)
+def _gufunc_unispline_err_upscale(x, y, err, num_knots,
+                                  ix, out=None):  # pragma: no cover
     xi = x.min()
     xf = x.max()
     t = np.linspace(xi, xf, num_knots)[1:-1]
@@ -985,7 +986,8 @@ def _gufunc_unispline_err_upscale(x, y, err, num_knots, ix, out):
     (int_[:], double[:], int_[:], double[:], double[:]),
     (double[:], double[:], int_[:], double[:], double[:]),
 ], '(n),(n),(),(m),(m)', cache=_NUMBA_CACHE_DEFAULT, forceobj=True)
-def _gufunc_unispline_noerr_upscale(x, y, num_knots, ix, out):
+def _gufunc_unispline_noerr_upscale(x, y, num_knots,
+                                    ix, out=None):  # pragma: no cover
     xi = x.min()
     xf = x.max()
     t = np.linspace(xi, xf, num_knots)[1:-1]
@@ -1089,7 +1091,7 @@ def xr_unispline(obj, dim, err=None, num_knots=11, ix=None):
     (int_[:], double[:], int_[:], double[:]),
     (double[:], double[:], int_[:], double[:]),
 ], '(n),(n),()->(n)', cache=_NUMBA_CACHE_DEFAULT, forceobj=True)
-def _gufunc_polyfit(x, y, deg, out):
+def _gufunc_polyfit(x, y, deg, out=None):  # pragma: no cover
     xynm = preprocess_nan_func(x, y, out)
     if xynm is None:
         return
@@ -1106,8 +1108,8 @@ def _gufunc_polyfit(x, y, deg, out):
     (double[:], int_[:], double[:], int_[:], double[:]),
     (int_[:], double[:], double[:], int_[:], double[:]),
     (double[:], double[:], double[:], int_[:], double[:])
-], '(n),(n),(m),()->(m)', cache=_NUMBA_CACHE_DEFAULT, forceobj=True)
-def _gufunc_polyfit_upscale(x, y, ix, deg, out):  # pragma: no cover
+], '(n),(n),(m),()->(m)', cache=_NUMBA_CACHE_DEFAULT)
+def _gufunc_polyfit_upscale(x, y, ix, deg, out=None):  # pragma: no cover
     xynm = preprocess_nan_func(x, y, out)
     if xynm is None:
         return
@@ -1123,8 +1125,8 @@ def _gufunc_polyfit_upscale(x, y, ix, deg, out):  # pragma: no cover
     (double[:], int_[:], int_[:], double[:]),
     (int_[:], double[:], int_[:], double[:]),
     (double[:], double[:], int_[:], double[:]),
-], '(n),(n),()->(n)', cache=_NUMBA_CACHE_DEFAULT, forceobj=True)
-def _gufunc_chebfit(x, y, deg, out):
+], '(n),(n),()->(n)', cache=_NUMBA_CACHE_DEFAULT)
+def _gufunc_chebfit(x, y, deg, out=None):  # pragma: no cover
     xynm = preprocess_nan_func(x, y, out)
     if xynm is None:
         return
@@ -1141,8 +1143,8 @@ def _gufunc_chebfit(x, y, deg, out):
     (double[:], int_[:], double[:], int_[:], double[:]),
     (int_[:], double[:], double[:], int_[:], double[:]),
     (double[:], double[:], double[:], int_[:], double[:])
-], '(n),(n),(m),()->(m)', cache=_NUMBA_CACHE_DEFAULT, forceobj=True)
-def _gufunc_chebfit_upscale(x, y, ix, deg, out):  # pragma: no cover
+], '(n),(n),(m),()->(m)', cache=_NUMBA_CACHE_DEFAULT)
+def _gufunc_chebfit_upscale(x, y, ix, deg, out=None):  # pragma: no cover
     xynm = preprocess_nan_func(x, y, out)
     if xynm is None:
         return
@@ -1158,8 +1160,8 @@ def _gufunc_chebfit_upscale(x, y, ix, deg, out):  # pragma: no cover
     (double[:], int_[:], int_[:], double[:]),
     (int_[:], double[:], int_[:], double[:]),
     (double[:], double[:], int_[:], double[:]),
-], '(n),(n),()->(n)', cache=_NUMBA_CACHE_DEFAULT, forceobj=True)
-def _gufunc_legfit(x, y, deg, out):
+], '(n),(n),()->(n)', cache=_NUMBA_CACHE_DEFAULT)
+def _gufunc_legfit(x, y, deg, out=None):  # pragma: no cover
     xynm = preprocess_nan_func(x, y, out)
     if xynm is None:
         return
@@ -1176,8 +1178,8 @@ def _gufunc_legfit(x, y, deg, out):
     (double[:], int_[:], double[:], int_[:], double[:]),
     (int_[:], double[:], double[:], int_[:], double[:]),
     (double[:], double[:], double[:], int_[:], double[:])
-], '(n),(n),(m),()->(m)', cache=_NUMBA_CACHE_DEFAULT, forceobj=True)
-def _gufunc_legfit_upscale(x, y, ix, deg, out):  # pragma: no cover
+], '(n),(n),(m),()->(m)', cache=_NUMBA_CACHE_DEFAULT)
+def _gufunc_legfit_upscale(x, y, ix, deg, out=None):  # pragma: no cover
     xynm = preprocess_nan_func(x, y, out)
     if xynm is None:
         return
@@ -1193,8 +1195,8 @@ def _gufunc_legfit_upscale(x, y, ix, deg, out):  # pragma: no cover
     (double[:], int_[:], int_[:], double[:]),
     (int_[:], double[:], int_[:], double[:]),
     (double[:], double[:], int_[:], double[:]),
-], '(n),(n),()->(n)', cache=_NUMBA_CACHE_DEFAULT, forceobj=True)
-def _gufunc_lagfit(x, y, deg, out):
+], '(n),(n),()->(n)', cache=_NUMBA_CACHE_DEFAULT)
+def _gufunc_lagfit(x, y, deg, out=None):  # pragma: no cover
     xynm = preprocess_nan_func(x, y, out)
     if xynm is None:
         return
@@ -1211,8 +1213,8 @@ def _gufunc_lagfit(x, y, deg, out):
     (double[:], int_[:], double[:], int_[:], double[:]),
     (int_[:], double[:], double[:], int_[:], double[:]),
     (double[:], double[:], double[:], int_[:], double[:])
-], '(n),(n),(m),()->(m)', cache=_NUMBA_CACHE_DEFAULT, forceobj=True)
-def _gufunc_lagfit_upscale(x, y, ix, deg, out):  # pragma: no cover
+], '(n),(n),(m),()->(m)', cache=_NUMBA_CACHE_DEFAULT)
+def _gufunc_lagfit_upscale(x, y, ix, deg, out=None):  # pragma: no cover
     xynm = preprocess_nan_func(x, y, out)
     if xynm is None:
         return
@@ -1228,8 +1230,8 @@ def _gufunc_lagfit_upscale(x, y, ix, deg, out):  # pragma: no cover
     (double[:], int_[:], int_[:], double[:]),
     (int_[:], double[:], int_[:], double[:]),
     (double[:], double[:], int_[:], double[:]),
-], '(n),(n),()->(n)', cache=_NUMBA_CACHE_DEFAULT, forceobj=True)
-def _gufunc_hermfit(x, y, deg, out):
+], '(n),(n),()->(n)', cache=_NUMBA_CACHE_DEFAULT)
+def _gufunc_hermfit(x, y, deg, out=None):  # pragma: no cover
     xynm = preprocess_nan_func(x, y, out)
     if xynm is None:
         return
@@ -1246,8 +1248,8 @@ def _gufunc_hermfit(x, y, deg, out):
     (double[:], int_[:], double[:], int_[:], double[:]),
     (int_[:], double[:], double[:], int_[:], double[:]),
     (double[:], double[:], double[:], int_[:], double[:])
-], '(n),(n),(m),()->(m)', cache=_NUMBA_CACHE_DEFAULT, forceobj=True)
-def _gufunc_hermfit_upscale(x, y, ix, deg, out):  # pragma: no cover
+], '(n),(n),(m),()->(m)', cache=_NUMBA_CACHE_DEFAULT)
+def _gufunc_hermfit_upscale(x, y, ix, deg, out=None):  # pragma: no cover
     xynm = preprocess_nan_func(x, y, out)
     if xynm is None:
         return
