@@ -25,8 +25,8 @@ class LazyCompile(object):
         self.fn = fn
         self.compiler = compiler
         self.compiled = False
-        self.compiler_args
-        self.compiler_kwargs
+        self.compiler_args = compiler_args
+        self.compiler_kwargs = compiler_kwargs
 
     def compile_fn(self):
         self._fn = self.compiler(*self.compiler_args,
@@ -605,11 +605,13 @@ def _gufunc_interp_upscale(x, y, ix, order, out=None):  # pragma: no cover
     xynm = preprocess_nan_func(x, y, out)
     if xynm is None:
         return
-    x, y, num_nan, mask = xynm
+    x, y, _, _ = xynm
 
     # interpolating function
     ifn = interpolate.interp1d(x, y, kind=_INTERP_INT2STR[order[0]],
                                fill_value='extrapolate')
+
+    # no need to nan_func post process and upscaling into exact right size
     out[:] = ifn(ix)
 
 
