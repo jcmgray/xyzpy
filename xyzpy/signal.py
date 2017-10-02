@@ -11,7 +11,6 @@ import xarray as xr
 from xarray.core.computation import apply_ufunc
 from numba import njit, guvectorize, double, int_
 from scipy.interpolate import LSQUnivariateSpline
-from .utils import argwhere
 
 
 _NUMBA_CACHE_DEFAULT = False
@@ -55,7 +54,7 @@ def lazy_guvectorize(*gufunc_args, **gufunc_kwargs):
 
 
 @njit
-def preprocess_nan_func(x, y, out):
+def preprocess_nan_func(x, y, out):  # pragma: no cover
     """Pre-process data for a 1d function that doesn't accept nan-values.
     """
     # strip out nan
@@ -73,7 +72,7 @@ def preprocess_nan_func(x, y, out):
 
 
 @njit
-def postprocess_nan_func(x, yf, num_nan, mask, out):
+def postprocess_nan_func(x, yf, num_nan, mask, out):  # pragma: no cover
     """Post-process data for a 1d function that doesn't accept nan-values.
     """
     if num_nan != 0:
@@ -118,112 +117,12 @@ def postprocess_interp1d_nan_func(x, x_even, yf_even, num_nan, mask, out):
         out[:] = yf
 
 
-def nan_wrap_const_length(fn):
-    """Take a function that accepts two vector arguments y and x and wrap it
-    such that only non-nan sections are supplied to it. Assume output vector is
-    the same length as input.
-    """
-    def nanified(fx, x, *args, **kwargs):
-        notnull = np.isfinite(fx)
-        if np.all(notnull):
-            # All data present
-            return fn(fx, x, *args, **kwargs)
-        elif np.any(notnull):
-            # Some missing data,
-            res = np.tile(np.nan, fx.shape)
-            res[notnull] = fn(fx[notnull], x[notnull], *args, **kwargs)
-            return res
-        else:
-            # No valid data, just return nans
-            return np.tile(np.nan, fx.shape)
-
-    return nanified
-
-
-def xr_1d_apply(func, xobj, dim, new_dim=False, leave_nan=False):
-    """Take a vector function and wrap it so that it can be applied along
-    xarray dimensions.
-    """
-    if leave_nan:
-        # Assume function can handle nan values itself.
-        nnfunc = func
-    else:  # modify function to only act on nonnull data
-        def nnfunc(xin):
-            """Nan wrap a function, but accepting changes to the coordinates.
-            """
-            isnull = ~np.isfinite(xin)
-            # Just use function normally if no missing data
-            if not np.any(isnull):
-                return func(xin)
-
-            # If all null, match new output dimension with np.nan
-            elif np.all(isnull):
-                if new_dim is None:
-                    return np.nan
-                if new_dim is False:
-                    return np.tile(np.nan, xin.size)
-                else:
-                    return np.tile(np.nan, new_dim.size)
-
-            # Partially null: apply function only on not null data
-            else:
-                nonnull = ~isnull
-                part_res = func(xin[nonnull])
-                if new_dim is False:
-                    # just match old shape
-                    res = np.empty(xin.shape, dtype=part_res.dtype)
-                    res[isnull] = np.nan
-                    res[nonnull] = part_res
-                    return res
-                else:  # can't know
-                    return part_res
-
-    new_xobj = xobj.copy(deep=True)
-    # convert to dataset temporarily
-    if isinstance(xobj, xr.DataArray):
-        new_xobj = new_xobj.to_dataset(name='__temp_name__')
-
-    # if the dimension is changing, create a temporary one
-    if not (new_dim is None or new_dim is False):
-        new_xobj.coords['__temp_dim__'] = new_dim
-
-    # calculate fn and insert with new coord
-    for v in new_xobj.data_vars:
-        var = new_xobj[v]
-        if dim in var.dims:
-            old_dims = var.dims
-            axis = argwhere(old_dims, dim)
-            if new_dim is False:
-                new_dims = old_dims
-            elif new_dim is None:
-                new_dims = tuple(d for d in old_dims if d != dim)
-            else:
-                new_dims = tuple((d if d != dim else '__temp_dim__')
-                                 for d in old_dims)
-            new_xobj[v] = (new_dims, np.apply_along_axis(
-                nnfunc, axis, var.data))
-
-    if not (new_dim is None or new_dim is False):
-        new_xobj = new_xobj.drop(dim)
-        new_xobj = new_xobj.rename({'__temp_dim__': dim})
-
-    # convert back to dataarray if originally given, strip temp name
-    if isinstance(xobj, xr.DataArray):
-        # new_xobj = new_xobj.to_array()
-        # new_xobj.name = xobj.name
-        # new_xobj = new_xobj.rename({'__temp_name__': xobj.name})
-        new_xobj = new_xobj['__temp_name__']
-        new_xobj.name = xobj.name
-
-    return new_xobj
-
-
 # --------------------------------------------------------------------------- #
 #                    fornberg's finite difference algortihm                   #
 # --------------------------------------------------------------------------- #
 
-@njit  # pragma: no cover
-def finite_difference_fornberg(fx, x, z, order):
+@njit
+def diff_fornberg(fx, x, z, order):  # pragma: no cover
     """Fornberg finite difference method for single point `z`.
     """
     c1 = 1.0
@@ -259,17 +158,21 @@ def finite_difference_fornberg(fx, x, z, order):
     return np.dot(c[:, order], fx)
 
 
-@njit  # pragma: no cover
-def finite_diff_array(fx, x, ix, order, window):
+@lazy_guvectorize([
+    (int_[:], int_[:], double[:], int_[:], double[:], double[:]),
+    (double[:], int_[:], double[:], int_[:], double[:], double[:]),
+    (int_[:], double[:], double[:], int_[:], double[:], double[:]),
+    (double[:], double[:], double[:], int_[:], double[:], double[:]),
+], '(n),(n),(m),(),()->(m)', cache=_NUMBA_CACHE_DEFAULT, nopython=True)
+def finite_diff_array(fx, x, ix, order, window, out=None):  # pragma: no cover
     """Fornberg finite difference method for array of points `ix`.
     """
-    out = np.empty(len(ix))
     fx = fx.astype(np.float64)
 
-    w = window
+    w = window[0]
     if w < 0:  # use whole window
         for i, z in enumerate(ix):
-            out[i] = finite_difference_fornberg(fx, x, z, order)
+            out[i] = diff_fornberg(fx, x, z, order[0])
     else:
         forward_limit = (x[0] + w / 2)
         foward_win = x[0] + w
@@ -285,11 +188,11 @@ def finite_diff_array(fx, x, ix, order, window):
                 bm = np.less(np.abs(x - z), w)
             wx = x[bm]
             wfx = fx[bm]
-            out[i] = finite_difference_fornberg(wfx, wx, z, order)
-    return out
+            out[i] = diff_fornberg(wfx, wx, z, order[0])
 
 
-def wfdiff(fx, x, ix, order, mode='points', window=5, return_func=False):
+def _diff_fornberg_broadcast(x, fx, ix, order, mode='points',
+                             window=5, axis=-1):
     """Find (d^k fx)/(dx^k) at points ix, using a windowed finite difference.
     This is only appropirate for very nicely sampled/analytic data.
 
@@ -301,59 +204,58 @@ def wfdiff(fx, x, ix, order, mode='points', window=5, return_func=False):
 
     Parameters
     ----------
-        fx : array
-            Function values at grid values.
-        x : array
-            Grid values, same legnth as `fx`, assumed sorted.
-        ix : array or int
-            If array, values at which to evalute finite difference else number
-            of points to linearly space in the range and use.
-        order : int
-            Order of derivate, 0 yields an interpolation.
-        mode : {'points', 'relative', 'absolute'}, optional
-            Used in conjuction with window.
-            If 'points', the window size is set such that the average number
-            of points in each window is given b `window`.
-            If 'relative', the window size is set such that its size relative
-            to the total range is given by `window`.
-            If 'absolute', the window size is geven explicitly by `window`.
-        window : int or float, optional
-            Depends on `mode`,
-                - 'points', target number of points to use for each window.
-                - 'relative' relative size of window compared to full range.
-                - 'absolute' The absolute window size.
-        return_func : bool, optional
-            If True, return the single argument function wfdiff(fx).
+    fx : array
+        Function values at grid values.
+    x : array
+        Grid values, same legnth as `fx`, assumed sorted.
+    ix : array or int
+        If array, values at which to evalute finite difference else number
+        of points to linearly space in the range and use.
+    order : int
+        Order of derivate, 0 yields an interpolation.
+    mode : {'points', 'relative', 'absolute'}, optional
+        Used in conjuction with window.
+        If 'points', the window size is set such that the average number
+        of points in each window is given b `window`.
+        If 'relative', the window size is set such that its size relative
+        to the total range is given by `window`.
+        If 'absolute', the window size is geven explicitly by `window`.
+    window : int or float, optional
+        Depends on `mode`,
+            - 'points', target number of points to use for each window.
+            - 'relative' relative size of window compared to full range.
+            - 'absolute' The absolute window size.
+    return_func : bool, optional
+        If True, return the single argument function wfdiff(fx).
 
     Returns
     -------
-        ifx : array
-            Interpolated kth-derivative of data.
+    ifx : array
+        Interpolated kth-derivative of data.
     """
+    if axis != -1:
+        fx = fx.swapaxes(axis, -1)
+
     if mode in {'p', 'pts', 'points'}:
         abs_win = (x[-1] - x[0]) * window / len(x)
     elif mode in {'r', 'rel', 'relative'}:
         abs_win = (x[-1] - x[0]) * window
     elif mode in {'a', 'abs', 'absolute'}:
-        abs_win = window
+        abs_win = float(window)
     else:
         raise ValueError("mode: {} not valid".format(mode))
 
-    if isinstance(ix, int):
+    if ix is None:
+        ix = x.astype(float)
+    elif isinstance(ix, int):
         ix = np.linspace(x[0], x[-1], ix)
     elif ix.dtype != float:
         ix = ix.astype(float)
-    if x.dtype != float:
-        x = x.astype(float)
 
-    if return_func:
-        return functools.partial(finite_diff_array, x=x, ix=ix,
-                                 order=order, window=abs_win)
-    else:
-        return finite_diff_array(fx, x, ix, order, abs_win)
+    return finite_diff_array(fx, x, ix, order, abs_win)
 
 
-def xr_wfdiff(xobj, dim, ix=100, order=1, mode='points', window=5):
+def xr_diff_fornberg(obj, dim, ix=100, order=1, mode='points', window=5):
     """Find (d^k fx)/(dx^k) at points ix, using a windowed finite difference.
     This is only appropirate for very nicely sampled/analytic data.
 
@@ -365,74 +267,57 @@ def xr_wfdiff(xobj, dim, ix=100, order=1, mode='points', window=5):
 
     Paramters
     ---------
-        xobj : xarray.DataArray or xarray.Dataset
-            Object to find windowed finite difference for.
-        dim : str
-            Dimension to find windowed finite difference along.
-        ix : array or int
-            If array, values at which to evalute finite difference else number
-            of points to linearly space in the range and use.
-        order : int
-            Order of derivate, 0 yields an interpolation.
-        mode : {'points', 'relative', 'absolute'}
-            Used in conjuction with window.
-            If 'points', the window size is set such that the average number
-            of points in each window is given by `window`.
-            If 'relative', the window size is set such that its size relative
-            to the total range is given by `window`.
-            If 'absolute', the window size is geven explicitly by `window`.
-        window : int or float
-            Depends on `mode`,
-                - 'points', target number of points to use for each window.
-                - 'relative' relative size of window compared to full range.
-                - 'absolute' The absolute window size.
+    xobj : xarray.DataArray or xarray.Dataset
+        Object to find windowed finite difference for.
+    dim : str
+        Dimension to find windowed finite difference along.
+    ix : array or int
+        If array, values at which to evalute finite difference else number
+        of points to linearly space in the range and use.
+    order : int
+        Order of derivate, 0 yields an interpolation.
+    mode : {'points', 'relative', 'absolute'}
+        Used in conjuction with window.
+        If 'points', the window size is set such that the average number
+        of points in each window is given by `window`.
+        If 'relative', the window size is set such that its size relative
+        to the total range is given by `window`.
+        If 'absolute', the window size is geven explicitly by `window`.
+    window : int or float
+        Depends on `mode`,
+            - 'points', target number of points to use for each window.
+            - 'relative' relative size of window compared to full range.
+            - 'absolute' The absolute window size.
 
     Returns
     -------
-        new_xobj : xarray.DataArray or xarray.Dataset
-            Object now with windowed finite difference along `dim`.
+    new_xobj : xarray.DataArray or xarray.Dataset
+        Object now with windowed finite difference along `dim`.
     """
-    # original grid
-    x = xobj[dim].data
-    # generate interpolation grid if not given as array, and set as coords
+    input_core_dims = [(dim,), (dim,)]
+    args = (obj[dim], obj)
+
+    if ix is None:
+        kwargs = {'ix': ix, 'axis': -1, 'order': order,
+                  'mode': mode, 'window': window}
+
+        output_core_dims = [(dim,)]
+        return apply_ufunc(_diff_fornberg_broadcast, *args, kwargs=kwargs,
+                           input_core_dims=input_core_dims,
+                           output_core_dims=output_core_dims)
+
     if isinstance(ix, int):
-        ix = np.linspace(x[0], x[-1], ix)
-    # make re-useable single arg function
-    diff_fn = wfdiff(None, x=x, ix=ix, order=order, mode=mode,
-                     window=window, return_func=True)
-    return xr_1d_apply(diff_fn, xobj, dim, new_dim=ix)
+        ix = np.linspace(float(obj[dim].min()), float(obj[dim].max()), ix)
 
+    kwargs = {'ix': ix, 'axis': -1, 'order': order,
+              'mode': mode, 'window': window}
+    output_core_dims = [('__temp_dim__',)]
 
-xr.Dataset.fdiff = xr_wfdiff
-xr.DataArray.fdiff = xr_wfdiff
-
-
-# --------------------------------------------------------------------------- #
-#                         Simple averaged scaled diff                         #
-# --------------------------------------------------------------------------- #
-
-@njit
-def simple_average_diff(fx, x, k=1):
-    n = len(x)
-    dfx = np.empty(n - k)
-    for i in range(n - k):
-        dfx[i] = (fx[i + 1] - fx[i]) / (x[i + 1] - x[i])
-        for j in range(i + 1, i + k):
-            dfx[i] += (fx[j + 1] - fx[j]) / (x[j + 1] - x[j])
-        dfx[i] /= k
-    return dfx
-
-
-def xr_sdiff(xobj, dim, k=1):
-    x = xobj[dim].data
-    n = len(x)
-    nx = sum(x[ki:n - k + ki] for ki in range(k + 1)) / (k + 1)
-    func = functools.partial(simple_average_diff, x=x, k=k)
-    return xr_1d_apply(func, xobj, dim, new_dim=nx)
-
-
-xr.Dataset.sdiff = xr_sdiff
-xr.DataArray.sdiff = xr_sdiff
+    result = apply_ufunc(_diff_fornberg_broadcast, *args, kwargs=kwargs,
+                         input_core_dims=input_core_dims,
+                         output_core_dims=output_core_dims)
+    result['__temp_dim__'] = ix
+    return result.rename({'__temp_dim__': dim})
 
 
 # --------------------------------------------------------------------------- #

@@ -42,11 +42,9 @@ from .manage import (
     merge_sync_conflict_datasets,
 )
 from .signal import (
-    wfdiff,
-    xr_wfdiff,
+    xr_diff_fornberg,
     xr_diff_u,
     xr_diff_u_err,
-    xr_sdiff,
     xr_interp,
     xr_interp_pchip,
     xr_filter_wiener,
@@ -115,11 +113,9 @@ __all__ = [
     "visualize_matrix",
     "unzip",
     "progbar",
-    "wfdiff",
-    "xr_wfdiff",
+    "xr_diff_fornberg",
     "xr_diff_u",
     "xr_diff_u_err",
-    "xr_sdiff",
     "xr_interp",
     "xr_interp_pchip",
     "xr_filter_wiener",
@@ -177,6 +173,11 @@ class XYZPY(object):
     @functools.wraps(trimna)
     def trimna(self):
         return trimna(self._obj)
+
+    @functools.wraps(xr_diff_fornberg)
+    def diff_fornberg(self, dim, ix=100, order=1, mode='points', window=5):
+        return xr_diff_fornberg(self._obj, dim=dim, ix=ix, order=order,
+                                mode=mode, window=window)
 
     @functools.wraps(xr_diff_u)
     def diff_u(self, dim):

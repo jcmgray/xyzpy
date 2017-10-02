@@ -5,7 +5,6 @@ import xarray as xr
 
 from xyzpy import Runner
 from xyzpy.signal import (
-    nan_wrap_const_length,
     _broadcast_filtfilt_butter,
     _broadcast_filtfilt_bessel,
 )
@@ -58,30 +57,10 @@ def nan_ds():
 
 # -------------------------------- tests ------------------------------------ #
 
-class TestNanWrap:
-    def test_no_nan(self):
-
-        def tfoo(a, b):
-            return a + b
-
-        ntfoo = nan_wrap_const_length(tfoo)
-
-        a = np.array([1, 2, 3])
-        b = np.array([10, 20, 30])
-        assert_allclose(ntfoo(a, b), [11, 22, 33])
-
-        a = np.array([np.nan, 2, np.nan])
-        b = np.array([10, 20, 30])
-        assert_allclose(ntfoo(a, b), [np.nan, 22, np.nan])
-
-        a = np.array([np.nan, np.nan, np.nan])
-        b = np.array([10, 20, 30])
-        assert_allclose(ntfoo(a, b), [np.nan, np.nan, np.nan])
-
 
 class TestFornberg:
     def test_order0(self, ds, eds):
-        cds = ds.fdiff('t', order=0)
+        cds = ds.xyz.diff_fornberg('t', order=0)
 
         assert_allclose(cds['cos'].values,
                         eds['cos'].values,
@@ -91,7 +70,7 @@ class TestFornberg:
                         atol=1e-6, rtol=1e-6)
 
     def test_order1(self, ds, eds):
-        cds = ds.fdiff('t', order=1)
+        cds = ds.xyz.diff_fornberg('t', order=1)
 
         for f in range(1, 3):
             assert_allclose(cds['cos'].sel(f=f).values,
@@ -99,7 +78,7 @@ class TestFornberg:
                             atol=1e-4, rtol=1e-3)
 
     def test_order2(self, ds, eds):
-        cds = ds.fdiff('t', order=2)
+        cds = ds.xyz.diff_fornberg('t', order=2)
 
         for f in range(1, 3):
             assert_allclose(cds['cos'].sel(f=f).values,
@@ -107,8 +86,8 @@ class TestFornberg:
                             atol=1e-3, rtol=1e-2)
 
     def test_nan(self, nan_ds):
-        nan_ds.fdiff('a')
-        nan_ds.fdiff('b')
+        nan_ds.xyz.diff_fornberg('a')
+        nan_ds.xyz.diff_fornberg('b')
 
 
 class TestUnevenDiff:
