@@ -44,6 +44,8 @@ from .manage import (
 from .signal import (
     wfdiff,
     xr_wfdiff,
+    xr_diff_u,
+    xr_diff_u_err,
     xr_sdiff,
     xr_interp,
     xr_interp_pchip,
@@ -115,6 +117,8 @@ __all__ = [
     "progbar",
     "wfdiff",
     "xr_wfdiff",
+    "xr_diff_u",
+    "xr_diff_u_err",
     "xr_sdiff",
     "xr_interp",
     "xr_interp_pchip",
@@ -130,9 +134,7 @@ class XYZPY(object):
     def __init__(self, xarray_obj):
         self._obj = xarray_obj
 
-    @functools.wraps(trimna)
-    def trimna(self):
-        return trimna(self._obj)
+    # ------------------------------- Plotting ------------------------------ #
 
     @functools.wraps(LinePlot)
     def LinePlot(self, *args, **kwargs):
@@ -169,6 +171,20 @@ class XYZPY(object):
     @functools.wraps(ilineplot)
     def ilineplot(self, *args, **kwargs):
         return ilineplot(self._obj, *args, **kwargs)
+
+    # ----------------------------- Processing ------------------------------ #
+
+    @functools.wraps(trimna)
+    def trimna(self):
+        return trimna(self._obj)
+
+    @functools.wraps(xr_diff_u)
+    def diff_u(self, dim):
+        return xr_diff_u(self._obj, dim=dim)
+
+    @functools.wraps(xr_diff_u_err)
+    def diff_u_err(self, dim):
+        return xr_diff_u_err(self._obj, dim=dim)
 
     @functools.wraps(xr_interp)
     def interp(self, dim, ix=100, order=3):

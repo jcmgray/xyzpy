@@ -111,6 +111,17 @@ class TestFornberg:
         nan_ds.fdiff('b')
 
 
+class TestUnevenDiff:
+    def test_diff_u(self, eds):
+        for f in range(1, 3):
+            assert_allclose(eds.sel(f=f).xyz.diff_u('t')['cos'].values,
+                            -f * eds.sel(f=f)['sin'].values,
+                            atol=1e-5, rtol=1e-3)
+
+    def test_diff_u_err(self, eds):
+        eds.xyz.diff_u_err('t')
+
+
 class TestInterp:
 
     def test_ds_no_upscale(self, ds):

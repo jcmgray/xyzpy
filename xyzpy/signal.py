@@ -437,98 +437,131 @@ xr.DataArray.sdiff = xr_sdiff
 
 # --------------------------------------------------------------------------- #
 #                      Unevenly spaced finite difference                      #
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- #
 
-@nan_wrap_const_length
-@njit
-def usdiff(fx, x):
-    """
-    Singh, Ashok K., and B. S. Bhadauria. "Finite difference formulae for
+@lazy_guvectorize([
+    (int_[:], int_[:], double[:]),
+    (double[:], int_[:], double[:]),
+    (int_[:], double[:], double[:]),
+    (double[:], double[:], double[:]),
+], "(n),(n)->(n)", cache=_NUMBA_CACHE_DEFAULT, nopython=True)
+def diff_u(fx, x, out):
+    """Singh, Ashok K., and B. S. Bhadauria. "Finite difference formulae for
     unequal sub-intervals using lagrange’s interpolation formula."
     International Journal of Mathematics and Analysis 3.17 (2009): 815-827.
     """
+    xynm = preprocess_nan_func(x, fx, out)
+    if xynm is None:
+        return
+    x, fx, num_nan, mask = xynm
+    yf = np.empty_like(fx)
+
     n = len(x)
-    dfx = np.empty(n)
 
     # Forward difference for first point
     h1 = x[1] - x[0]
     h2 = x[2] - x[1]
-    dfx[0] = (- fx[0] * (2 * h1 + h2) / (h1 * (h1 + h2)) +
-              fx[1] * (h1 + h2) / (h1 * h2) -
-              fx[2] * h1 / ((h1 + h2) * h2))
+    yf[0] = (- fx[0] * (2 * h1 + h2) / (h1 * (h1 + h2)) +
+             fx[1] * (h1 + h2) / (h1 * h2) -
+             fx[2] * h1 / ((h1 + h2) * h2))
 
     # Central difference for middle points
     for i in range(1, n - 1):
         h1 = x[i] - x[i - 1]
         h2 = x[i + 1] - x[i]
-        dfx[i] = (- fx[i - 1] * h2 / (h1 * (h1 + h2)) -
-                  fx[i] * (h1 - h2) / (h1 * h2) +
-                  fx[i + 1] * h1 / (h2 * (h1 + h2)))
+        yf[i] = (- fx[i - 1] * h2 / (h1 * (h1 + h2)) -
+                 fx[i] * (h1 - h2) / (h1 * h2) +
+                 fx[i + 1] * h1 / (h2 * (h1 + h2)))
 
     # Backwards difference for last point
     h1 = x[n - 2] - x[n - 3]
     h2 = x[n - 1] - x[n - 2]
-    dfx[n - 1] = (fx[n - 3] * h2 / (h1 * (h1 + h2)) -
-                  fx[n - 2] * (h1 + h2) / (h1 * h2) +
-                  fx[n - 1] * (h1 + 2 * h2) / (h2 * (h1 + h2)))
+    yf[n - 1] = (fx[n - 3] * h2 / (h1 * (h1 + h2)) -
+                 fx[n - 2] * (h1 + h2) / (h1 * h2) +
+                 fx[n - 1] * (h1 + 2 * h2) / (h2 * (h1 + h2)))
 
-    return dfx
+    postprocess_nan_func(x, yf, num_nan, mask, out)
 
 
-def xr_usdiff(xobj, dim):
+def _broadcast_diff_u(x, fx, axis=-1):
+    if axis != -1:
+        fx = fx.swapaxes(axis, -1)
+    return diff_u(fx, x)
+
+
+def xr_diff_u(obj, dim):
     """Uneven-third-order finite difference derivative.
     """
-    func = functools.partial(usdiff, x=xobj[dim].values)
-    return xr_1d_apply(func, xobj, dim, new_dim=False, leave_nan=True)
+    kwargs = {'axis': -1}
+    input_core_dims = [(dim,), (dim,)]
+    output_core_dims = [(dim,)]
+    args = (obj[dim], obj)
+    return apply_ufunc(_broadcast_diff_u, *args,
+                       input_core_dims=input_core_dims,
+                       output_core_dims=output_core_dims,
+                       kwargs=kwargs)
 
 
-xr.Dataset.usdiff = xr_usdiff
-xr.DataArray.usdiff = xr_usdiff
-
-
-@nan_wrap_const_length
-@njit
-def usdiff_err(efx, x):
+@lazy_guvectorize([
+    (int_[:], int_[:], double[:]),
+    (double[:], int_[:], double[:]),
+    (int_[:], double[:], double[:]),
+    (double[:], double[:], double[:]),
+], "(n),(n)->(n)", cache=_NUMBA_CACHE_DEFAULT, nopython=True)
+def diff_u_err(efx, x, out):
+    """Propagate uncertainties using uneven finite difference formula.
     """
-    Propagate uncertainties using uneven finite difference formula.
-    """
+    xynm = preprocess_nan_func(x, efx, out)
+    if xynm is None:
+        return
+    x, efx, num_nan, mask = xynm
+    yf = np.empty_like(efx)
+
     n = len(x)
-    edfx = np.empty(n)
+    yf = np.empty_like(efx)
 
     # Forward difference for first point
     h1 = x[1] - x[0]
     h2 = x[2] - x[1]
-    edfx[0] = ((efx[0] * (2 * h1 + h2) / (h1 * (h1 + h2)))**2 +
-               (efx[1] * (h1 + h2) / (h1 * h2))**2 +
-               (efx[2] * h1 / ((h1 + h2) * h2))**2)**0.5
+    yf[0] = ((efx[0] * (2 * h1 + h2) / (h1 * (h1 + h2)))**2 +
+             (efx[1] * (h1 + h2) / (h1 * h2))**2 +
+             (efx[2] * h1 / ((h1 + h2) * h2))**2)**0.5
 
     # Central difference for middle points
     for i in range(1, n - 1):
         h1 = x[i] - x[i - 1]
         h2 = x[i + 1] - x[i]
-        edfx[i] = ((efx[i - 1] * h2 / (h1 * (h1 + h2)))**2 +
-                   (efx[i] * (h1 - h2) / (h1 * h2))**2 +
-                   (efx[i + 1] * h1 / (h2 * (h1 + h2)))**2)**0.5
+        yf[i] = ((efx[i - 1] * h2 / (h1 * (h1 + h2)))**2 +
+                 (efx[i] * (h1 - h2) / (h1 * h2))**2 +
+                 (efx[i + 1] * h1 / (h2 * (h1 + h2)))**2)**0.5
 
     # Backwards difference for last point
     h1 = x[n - 2] - x[n - 3]
     h2 = x[n - 1] - x[n - 2]
-    edfx[n - 1] = ((efx[n - 3] * h2 / (h1 * (h1 + h2)))**2 +
-                   (efx[n - 2] * (h1 + h2) / (h1 * h2))**2 +
-                   (efx[n - 1] * (h1 + 2 * h2) / (h2 * (h1 + h2)))**2)**0.5
+    yf[n - 1] = ((efx[n - 3] * h2 / (h1 * (h1 + h2)))**2 +
+                 (efx[n - 2] * (h1 + h2) / (h1 * h2))**2 +
+                 (efx[n - 1] * (h1 + 2 * h2) / (h2 * (h1 + h2)))**2)**0.5
 
-    return edfx
+    postprocess_nan_func(x, yf, num_nan, mask, out)
 
 
-def xr_usdiff_err(xobj, dim):
+def _broadcast_diff_u_err(x, fx, axis=-1):
+    if axis != -1:
+        fx = fx.swapaxes(axis, -1)
+    return diff_u_err(fx, x)
+
+
+def xr_diff_u_err(obj, dim):
     """Uneven-third-order finite difference derivative.
     """
-    func = functools.partial(usdiff_err, x=xobj[dim].values)
-    return xr_1d_apply(func, xobj, dim, new_dim=False, leave_nan=True)
-
-
-xr.Dataset.usdiff_err = xr_usdiff_err
-xr.DataArray.usdiff_err = xr_usdiff_err
+    kwargs = {'axis': -1}
+    input_core_dims = [(dim,), (dim,)]
+    output_core_dims = [(dim,)]
+    args = (obj[dim], obj)
+    return apply_ufunc(_broadcast_diff_u_err, *args,
+                       input_core_dims=input_core_dims,
+                       output_core_dims=output_core_dims,
+                       kwargs=kwargs)
 
 
 # --------------------------------------------------------------------------- #
