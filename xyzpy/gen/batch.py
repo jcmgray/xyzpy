@@ -329,6 +329,13 @@ class Crop(object):
 
         return tuple(filter(no_result_exists, range(1, self.num_batches + 1)))
 
+    def grow_missing(self):
+        """
+        """
+        missing = self.missing_results()
+        for batch in progbar(missing):
+            grow(batch, hide_progbar=True, crop=self)
+
     def delete_all(self):
         # delete everything
         shutil.rmtree(self.location)

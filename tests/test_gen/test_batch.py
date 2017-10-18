@@ -114,16 +114,12 @@ class TestSowerReaper:
         assert results == expected
 
     def test_field_name_and_overlapping(self):
-        combos1 = [
-            ('a', [10, 20, 30]),
-            ('b', [4, 5, 6, 7]),
-        ]
+        combos1 = [('a', [10, 20, 30]),
+                   ('b', [4, 5, 6, 7])]
         expected1 = combo_runner(foo_add, combos1, constants={'c': True})
 
-        combos2 = [
-            ('a', [40, 50, 60]),
-            ('b', [4, 5, 6, 7]),
-        ]
+        combos2 = [('a', [40, 50, 60]),
+                   ('b', [4, 5, 6, 7])]
         expected2 = combo_runner(foo_add, combos2, constants={'c': True})
 
         with TemporaryDirectory() as tdir:
@@ -144,6 +140,17 @@ class TestSowerReaper:
 
         assert results1 == expected1
         assert results2 == expected2
+
+    def test_crop_grow_missing(self):
+        combos1 = [('a', [10, 20, 30]),
+                   ('b', [4, 5, 6, 7])]
+        expected1 = combo_runner(foo_add, combos1, constants={'c': True})
+        with TemporaryDirectory() as tdir:
+            c1 = Crop(name='run1', fn=foo_add, parent_dir=tdir, batchsize=5)
+            c1.sow_combos(combos1, constants={'c': True})
+            c1.grow_missing()
+            results1 = c1.reap()
+        assert results1 == expected1
 
     def test_combo_reaper_to_ds(self):
         combos = (('a', [1, 2]),

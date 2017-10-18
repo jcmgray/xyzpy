@@ -98,6 +98,10 @@ def progbar(it=None, nb=False, **kwargs):
         **kwargs: dict-like
             additional options to send to tqdm
     """
+    disable = kwargs.pop('disable', False)
+    if disable:
+        return it
+
     defaults = {'ascii': True, 'smoothing': 0.0}
     # Overide defaults with custom kwargs
     settings = {**defaults, **kwargs}
