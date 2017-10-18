@@ -72,6 +72,9 @@ class TestSowerReaper:
         with pytest.raises(XYZError):
             grow(1)
 
+        print(c)
+        repr(c)
+
     def test_batch(self):
 
         combos = [
@@ -100,6 +103,9 @@ class TestSowerReaper:
 
                 if i == 1:
                     assert crop.missing_results() == (2, 3,)
+
+                    with pytest.raises(XYZError):
+                        crop.reap()
 
             assert crop.is_ready_to_reap()
             # reap results
@@ -154,19 +160,10 @@ class TestSowerReaper:
             for i in range(1, 6):
                 grow(i, Crop(parent_dir=tdir, name='foo3_scalar'))
 
+                if i == 3:
+                    with pytest.raises(XYZError):
+                        crop.reap_combos_to_ds(var_names=['bananas'])
+
             ds = crop.reap_combos_to_ds(var_names=['bananas'])
 
         assert ds.sel(a=2, b=30, c=400)['bananas'].data == 432
-
-
-# XXX: test instatiating with harverster/runner
-# XXX: test save and load info
-
-
-class TestFarmingBatches:
-
-    def test_with_runner(self):
-        pass
-
-    def test_with_harvester(self):
-        pass

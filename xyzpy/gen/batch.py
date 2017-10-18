@@ -96,39 +96,39 @@ class Crop(object):
     crop's progress, and experimentally, automatic submission of
     workers to grid engine to complete un-grown cases.
 
-        Parameters
-        ----------
-            fn : callable, optional
-                Target function - Crop `name` will be inferred from this if
-                not given explicitly. If given, `Sower` will also default
-                to saving a version of `fn` to disk for `batch.grow` to use.
-            name : str, optional
-                Custom name for this set of runs - must be given if `fn`
-                is not.
-            parent_dir : str, optional
-                If given, alternative directory to put the ".xyz-{name}/"
-                folder in with all the cases and results.
-            save_fn : bool, optional
-                Whether to save the function to disk for `batch.grow` to use.
-                Will default to True if `fn` is given.
-            batchsize : int, optional
-                How many cases to group into a single batch per worker.
-                By default, batchsize=1. Cannot be specified if `num_batches`
-                is.
-            num_batches : int, optional
-                How many total batches to aim for, cannot be specified if
-                `batchsize` is.
-            runner : xyzpy.Runner, optional
-                A Runner instance, from which the `fn` can be inferred and
-                which can also allow the Crop to reap itself straight to a
-                dataset.
-            harvester : xyzpy.Harvester, optional
-                A Harvester instance, from which the `fn` can be inferred and
-                which can also allow the Crop to reap itself straight to a
-                on-disk dataset.
-            autoload : bool, optional
-                If True, check for the existence of a Crop written to disk
-                with the same location, and if found, load it.
+    Parameters
+    ----------
+    fn : callable, optional
+        Target function - Crop `name` will be inferred from this if
+        not given explicitly. If given, `Sower` will also default
+        to saving a version of `fn` to disk for `batch.grow` to use.
+    name : str, optional
+        Custom name for this set of runs - must be given if `fn`
+        is not.
+    parent_dir : str, optional
+        If given, alternative directory to put the ".xyz-{name}/"
+        folder in with all the cases and results.
+    save_fn : bool, optional
+        Whether to save the function to disk for `batch.grow` to use.
+        Will default to True if `fn` is given.
+    batchsize : int, optional
+        How many cases to group into a single batch per worker.
+        By default, batchsize=1. Cannot be specified if `num_batches`
+        is.
+    num_batches : int, optional
+        How many total batches to aim for, cannot be specified if
+        `batchsize` is.
+    runner : xyzpy.Runner, optional
+        A Runner instance, from which the `fn` can be inferred and
+        which can also allow the Crop to reap itself straight to a
+        dataset.
+    harvester : xyzpy.Harvester, optional
+        A Harvester instance, from which the `fn` can be inferred and
+        which can also allow the Crop to reap itself straight to a
+        on-disk dataset.
+    autoload : bool, optional
+        If True, check for the existence of a Crop written to disk
+        with the same location, and if found, load it.
 
     """
 
@@ -329,6 +329,10 @@ class Crop(object):
 
         return tuple(filter(no_result_exists, range(1, self.num_batches + 1)))
 
+    def delete_all(self):
+        # delete everything
+        shutil.rmtree(self.location)
+
     def __repr__(self):
         # Location and name, underlined
         if not os.path.exists(self.location):
@@ -379,7 +383,7 @@ class Crop(object):
             _combo_runner(fn=sow_fn, combos=combos, constants=constants,
                           hide_progbar=hide_progbar)
 
-    def reap_combos(self, wait=False):
+    def reap_combos(self, wait=False, clean_up=True):
         """Reap already sown and grow results from specified crop.
 
         Parameters
@@ -407,6 +411,9 @@ class Crop(object):
                                     combos=settings['combos'],
                                     constants={})
 
+        if clean_up:
+            self.delete_all()
+
         return results
 
     def reap_combos_to_ds(self,
@@ -416,7 +423,8 @@ class Crop(object):
                           constants=None,
                           attrs=None,
                           parse=True,
-                          wait=False):
+                          wait=False,
+                          clean_up=True):
         """Reap a function over sowed combinations and output to a Dataset.
 
         Parameters
@@ -473,9 +481,12 @@ class Crop(object):
                                     attrs={**attrs, **constants},
                                     parse=parse)
 
+        if clean_up:
+            self.delete_all()
+
         return ds
 
-    def reap_runner(self, runner, wait=False):
+    def reap_runner(self, runner, wait=False, clean_up=True):
         """Reap a Crop over sowed combos and save to a dataset defined by a
         Runner.
         """
@@ -488,21 +499,23 @@ class Crop(object):
             constants=runner._constants,
             attrs=runner._attrs,
             parse=False,
-            wait=wait)
+            wait=wait,
+            clean_up=clean_up)
         runner.last_ds = ds
         return ds
 
-    def reap_harvest(self, harvester, wait=False, sync=True, overwrite=None):
+    def reap_harvest(self, harvester, wait=False, sync=True, overwrite=None,
+                     clean_up=True):
         """
         """
         if harvester is None:
             raise ValueError("Cannot reap and harvest if no Harvester is set.")
 
-        ds = self.reap_runner(harvester.runner, wait=wait)
+        ds = self.reap_runner(harvester.runner, wait=wait, clean_up=clean_up)
         self.harvester.add_ds(ds, sync=sync, overwrite=overwrite)
         return ds
 
-    def reap(self, wait=False, sync=True, overwrite=None):
+    def reap(self, wait=False, sync=True, overwrite=None, clean_up=True):
         """Reap sown and grown combos from disk. Return a dataset if a runner
         or harvester is set, otherwise, the raw nested tuple.
 
@@ -511,18 +524,29 @@ class Crop(object):
         wait : bool, optional
             Whether to wait for results to appear. If false (default) all
             results need to be in place before the reap.
+        sync : bool, optional
+            Immediately sync the new dataset with the on-disk full dataset
+            if a harvester is used.
+        overwrite : bool, optional
+            How to compare data when syncing to on-disk dataset.
+            If ``None``, (default) merge as long as no conflicts.
+            ``True``: overwrite with the new data. ``False``, discard any
+            new conflicting data.
+        clean_up : bool, optional
+            Whether to delete all the batch files once the results have been
+            gathered.
 
         Returns
         -------
         nested tuple or xarray.Dataset
         """
         if self.harvester is not None:
-            return self.reap_harvest(self.harvester,
+            return self.reap_harvest(self.harvester, clean_up=clean_up,
                                      wait=wait, sync=sync, overwrite=overwrite)
         elif self.runner is not None:
-            return self.reap_runner(self.runner, wait=wait)
+            return self.reap_runner(self.runner, wait=wait, clean_up=clean_up)
         else:
-            return self.reap_combos(wait=wait)
+            return self.reap_combos(wait=wait, clean_up=clean_up)
 
     #  ----------------------------- properties ----------------------------- #
 
@@ -723,9 +747,6 @@ class Reaper(object):
         # Check everything gone acccording to plan
         if tuple(self.results):
             raise XYZError("Not all results reaped!")
-        # Clean up everything
-        else:
-            shutil.rmtree(self.crop.location)
 
 
 # --------------------------------------------------------------------------- #
