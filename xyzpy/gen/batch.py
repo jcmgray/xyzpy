@@ -694,20 +694,24 @@ class Reaper(object):
         files = (os.path.join(self.crop.location, "results", RSLT_NM.format(i))
                  for i in range(1, num_batches + 1))
 
-        def load(x):
-            return joblib.load(x)
+        def _load(x):
+            res = joblib.load(x)
+            if res is None:
+                raise ValueError("Something not right: result {} contains"
+                                 "no data upon joblib,load".format(x))
+            return res
 
         def wait_to_load(x):
             while not os.path.exists(x):
                 sleep(0.2)
 
             if os.path.isfile(x):
-                return joblib.load(x)
+                return _load(x)
             else:
                 raise ValueError("{} is not a file.".format(x))
 
         self.results = chain.from_iterable(map(
-            wait_to_load if wait else load, files))
+            wait_to_load if wait else _load, files))
 
     def __enter__(self):
         return self

@@ -1156,7 +1156,7 @@ POLY_FNS = {
 }
 
 
-def _broadcast_polyfit(x, y, ix=None, deg=0.5, poly='chebyshev', axis=-1):
+def _broadcast_polyfit(x, y, ix=None, deg=0.5, poly='hermite', axis=-1):
     """Parse arguments and dispatch to the correct function.
     """
     if axis != -1:
