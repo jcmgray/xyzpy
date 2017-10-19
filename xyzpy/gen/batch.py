@@ -562,16 +562,25 @@ class Crop(object):
         else:
             return self.reap_combos(wait=wait, clean_up=clean_up)
 
-    def validate_results(self, delete_bad=True):
+    def check_bad(self, delete_bad=True):
         """Check that the result dumps are not bad -> sometimes length does not
         match the batch. Optionally delete these so that they can be re-grown.
+
+        Parameters
+        ----------
+        delete_bad : bool
+            Delete bad results as they are come across.
+
+        Returns
+        -------
+        bad_ids : tuple
+            The bad batch numbers.
         """
         # XXX: work out why this is needed sometimes on network filesystems.
-
-        all_good = True
-
         result_files = glob(
             os.path.join(self.location, "results", RSLT_NM.format("*")))
+
+        bad_ids = []
 
         for result_file in result_files:
             # load corresponding batch file to check length.
@@ -589,9 +598,9 @@ class Crop(object):
                 if delete_bad:
                     os.remove(result_file)
 
-                all_good = False
+                bad_ids.append(result_num)
 
-        return all_good
+        return tuple(bad_ids)
 
     #  ----------------------------- properties ----------------------------- #
 

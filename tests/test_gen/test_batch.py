@@ -108,7 +108,7 @@ class TestSowerReaper:
                         crop.reap()
 
             assert crop.is_ready_to_reap()
-            assert crop.validate_results()
+            assert not crop.check_bad()
             # reap results
             results = crop.reap()
 
@@ -136,8 +136,8 @@ class TestSowerReaper:
                 grow(i, Crop(parent_dir=tdir, name='run2'))
 
             # reap results
-            assert c1.validate_results()
-            assert c2.validate_results()
+            assert not c1.check_bad()
+            assert not c2.check_bad()
             results1 = c1.reap()
             results2 = c2.reap()
 
