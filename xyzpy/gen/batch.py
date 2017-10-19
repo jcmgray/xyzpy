@@ -828,7 +828,7 @@ crop = grow($SGE_TASK_ID, crop=crop)
 EOF
 """
 
-_QSUB_GROW_MISSING_SCRIPT = """python <<EOF
+_QSUB_GROW_PARTIAL_SCRIPT = """python <<EOF
 from xyzpy.gen.batch import grow, Crop
 crop = Crop(name='{name}')
 batch_ids = {batch_ids}
@@ -838,6 +838,7 @@ EOF
 
 
 def gen_qsub_script(crop,
+                    batch_ids=None,
                     hours=None,
                     minutes=None,
                     seconds=None,
@@ -874,11 +875,21 @@ def gen_qsub_script(crop,
         'run_start': 1,
     }
 
-    if crop.num_results == 0:
+    # grow specific ids
+    if batch_ids is not None:
+        script = _BASE_QSUB_SCRIPT + _QSUB_GROW_PARTIAL_SCRIPT
+        batch_ids = tuple(batch_ids)
+        opts['run_stop'] = len(batch_ids)
+        opts['batch_ids'] = batch_ids
+
+    # grow all ids
+    elif crop.num_results == 0:
         script = _BASE_QSUB_SCRIPT + _QSUB_GROW_ALL_SCRIPT
         opts['run_stop'] = crop.num_batches
+
+    # grow missing ids only
     else:
-        script = _BASE_QSUB_SCRIPT + _QSUB_GROW_MISSING_SCRIPT
+        script = _BASE_QSUB_SCRIPT + _QSUB_GROW_PARTIAL_SCRIPT
         batch_ids = crop.missing_results()
         opts['run_stop'] = len(batch_ids)
         opts['batch_ids'] = batch_ids
@@ -887,6 +898,7 @@ def gen_qsub_script(crop,
 
 
 def qsub_grow(crop,
+              batch_ids=None,
               hours=None,
               minutes=None,
               seconds=None,
@@ -903,6 +915,7 @@ def qsub_grow(crop,
     import subprocess
 
     script = gen_qsub_script(crop,
+                             batch_ids=batch_ids,
                              hours=hours,
                              minutes=minutes,
                              seconds=seconds,
