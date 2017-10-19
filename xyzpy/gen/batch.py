@@ -329,18 +329,6 @@ class Crop(object):
 
         return tuple(filter(no_result_exists, range(1, self.num_batches + 1)))
 
-    def grow(self, nums):
-        """Grow specific batch numbers using this process.
-        """
-        nums = (nums,) if isinstance(nums, int) else tuple(nums)
-        for num in progbar(nums):
-            grow(num, hide_progbar=True, crop=self)
-
-    def grow_missing(self):
-        """Grow any missing results using this process.
-        """
-        self.grow(self.missing_results())
-
     def delete_all(self):
         # delete everything
         shutil.rmtree(self.location)
@@ -394,6 +382,20 @@ class Crop(object):
         with Sower(self, combos) as sow_fn:
             _combo_runner(fn=sow_fn, combos=combos, constants=constants,
                           hide_progbar=hide_progbar)
+
+    def grow(self, batch_ids):
+        """Grow specific batch numbers using this process.
+        """
+        if isinstance(batch_ids, int):
+            batch_ids = (batch_ids,)
+
+        for i in progbar(batch_ids):
+            grow(i, hide_progbar=True, crop=self)
+
+    def grow_missing(self):
+        """Grow any missing results using this process.
+        """
+        self.grow(batch_ids=self.missing_results())
 
     def reap_combos(self, wait=False, clean_up=True):
         """Reap already sown and grow results from specified crop.
@@ -561,18 +563,35 @@ class Crop(object):
             return self.reap_combos(wait=wait, clean_up=clean_up)
 
     def validate_results(self, delete_bad=True):
-        """Check that the result dumps are not bad -> sometimes empty tuples
-        are created. Optionally delete them so that they can be re-grown.
+        """Check that the result dumps are not bad -> sometimes length does not
+        match the batch. Optionally delete these so that they can be re-grown.
         """
+        # XXX: work out why this is needed sometimes on network filesystems.
+
+        all_good = True
+
         result_files = glob(
             os.path.join(self.location, "results", RSLT_NM.format("*")))
+
         for result_file in result_files:
+            # load corresponding batch file to check length.
+            result_num = os.path.split(
+                result_file)[-1].strip("xyz-result-").strip(".jbdmp")
+            batch_file = os.path.join(
+                self.location, "batches", BTCH_NM.format(result_num))
+
+            batch = joblib.load(batch_file)
             result = joblib.load(result_file)
-            if len(result) == 0:
+
+            if len(result) != len(batch):
                 print("result {} is bad".format(result_file) +
                       ("." if not delete_bad else " - deleting it."))
                 if delete_bad:
                     os.remove(result_file)
+
+                all_good = False
+
+        return all_good
 
     #  ----------------------------- properties ----------------------------- #
 
@@ -667,18 +686,18 @@ def grow(batch_number, crop=None, fn=None, check_mpi=True, hide_progbar=False):
 
     Parameters
     ----------
-        batch_number : int
-            Which batch to 'grow' into a set of results.
-        crop : xyzpy.batch.Crop instance
-            Description of where and how to store the cases and results.
-        fn : callable, optional
-            If specified, the function used to generate the results, otherwise
-            the function will be loaded from disk.
-        check_mpi : bool, optional
-            Whether to check if the process is rank 0 and only save results if
-            so - allows mpi functions to be simply used. Defaults to true,
-            this should only be turned off if e.g. a pool of workers is being
-            used to run different ``grow`` instances.
+    batch_number : int
+        Which batch to 'grow' into a set of results.
+    crop : xyzpy.batch.Crop instance
+        Description of where and how to store the cases and results.
+    fn : callable, optional
+        If specified, the function used to generate the results, otherwise
+        the function will be loaded from disk.
+    check_mpi : bool, optional
+        Whether to check if the process is rank 0 and only save results if
+        so - allows mpi functions to be simply used. Defaults to true,
+        this should only be turned off if e.g. a pool of workers is being
+        used to run different ``grow`` instances.
     """
     if crop is None:
         if os.path.relpath('.', '..')[:5] != ".xyz-":
@@ -709,6 +728,11 @@ def grow(batch_number, crop=None, fn=None, check_mpi=True, hide_progbar=False):
         progbar((fn(**kws) for kws in cases),
                 disable=hide_progbar,
                 total=len(cases)))
+
+    if len(results) != len(cases):
+        raise ValueError("Something has gone wrong with processing "
+                         "batch {} ".format(BTCH_NM.format(batch_number)) +
+                         "for the crop at {}.".format(crop.location))
 
     # maybe want to run grow as mpiexec (i.e. `fn` itself in parallel),
     # so only save and delete on rank 0

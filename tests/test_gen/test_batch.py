@@ -108,7 +108,7 @@ class TestSowerReaper:
                         crop.reap()
 
             assert crop.is_ready_to_reap()
-            crop.validate_results()
+            assert crop.validate_results()
             # reap results
             results = crop.reap()
 
