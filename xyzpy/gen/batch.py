@@ -329,12 +329,17 @@ class Crop(object):
 
         return tuple(filter(no_result_exists, range(1, self.num_batches + 1)))
 
+    def grow(self, nums):
+        """Grow specific batch numbers using this process.
+        """
+        nums = (nums,) if isinstance(nums, int) else tuple(nums)
+        for num in progbar(nums):
+            grow(num, hide_progbar=True, crop=self)
+
     def grow_missing(self):
+        """Grow any missing results using this process.
         """
-        """
-        missing = self.missing_results()
-        for batch in progbar(missing):
-            grow(batch, hide_progbar=True, crop=self)
+        self.grow(self.missing_results())
 
     def delete_all(self):
         # delete everything
@@ -565,7 +570,7 @@ class Crop(object):
             result = joblib.load(result_file)
             if len(result) == 0:
                 print("result {} is bad".format(result_file) +
-                      "." if not delete_bad else " - deleting it.")
+                      ("." if not delete_bad else " - deleting it."))
                 if delete_bad:
                     os.remove(result_file)
 

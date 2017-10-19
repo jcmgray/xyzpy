@@ -166,7 +166,7 @@ class TestSowerReaper:
 
             # grow seeds
             for i in range(1, 6):
-                grow(i, Crop(parent_dir=tdir, name='foo3_scalar'))
+                crop.grow(i)
 
                 if i == 3:
                     with pytest.raises(XYZError):
