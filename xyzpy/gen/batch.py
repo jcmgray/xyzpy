@@ -555,6 +555,20 @@ class Crop(object):
         else:
             return self.reap_combos(wait=wait, clean_up=clean_up)
 
+    def validate_results(self, delete_bad=True):
+        """Check that the result dumps are not bad -> sometimes empty tuples
+        are created. Optionally delete them so that they can be re-grown.
+        """
+        result_files = glob(
+            os.path.join(self.location, "results", RSLT_NM.format("*")))
+        for result_file in result_files:
+            result = joblib.load(result_file)
+            if len(result) == 0:
+                print("result {} is bad".format(result_file) +
+                      "." if not delete_bad else " - deleting it.")
+                if delete_bad:
+                    os.remove(result_file)
+
     #  ----------------------------- properties ----------------------------- #
 
     def _get_fn(self):
