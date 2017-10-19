@@ -680,12 +680,16 @@ def grow(batch_number, crop=None, fn=None, check_mpi=True, hide_progbar=False):
     cases = joblib.load(
         os.path.join(crop_location, "batches", BTCH_NM.format(batch_number)))
 
+    if len(cases) == 0:
+        raise ValueError("Something has gone wrong with the loading of "
+                         "batch {} ".format(BTCH_NM.format(batch_number)) +
+                         "for the crop at {}.".format(crop.location))
+
     # process each case
     results = tuple(
         progbar((fn(**kws) for kws in cases),
                 disable=hide_progbar,
-                total=len(cases))
-    )
+                total=len(cases)))
 
     # maybe want to run grow as mpiexec (i.e. `fn` itself in parallel),
     # so only save and delete on rank 0
@@ -727,7 +731,7 @@ class Reaper(object):
 
         def _load(x):
             res = joblib.load(x)
-            if res is None:
+            if (res is None) or len(res) == 0:
                 raise ValueError("Something not right: result {} contains"
                                  "no data upon joblib,load".format(x))
             return res
