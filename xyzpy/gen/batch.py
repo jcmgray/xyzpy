@@ -746,8 +746,8 @@ class Reaper(object):
         def _load(x):
             res = joblib.load(x)
             if (res is None) or len(res) == 0:
-                raise ValueError("Something not right: result {} contains"
-                                 "no data upon joblib,load".format(x))
+                raise ValueError("Something not right: result {} contains "
+                                 "no data upon joblib.load".format(x))
             return res
 
         def wait_to_load(x):
