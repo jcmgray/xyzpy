@@ -733,10 +733,10 @@ def grow(batch_number, crop=None, fn=None, check_mpi=True, hide_progbar=False):
                          "for the crop at {}.".format(crop.location))
 
     # process each case
-    results = tuple(
-        progbar((fn(**kws) for kws in cases),
-                disable=hide_progbar,
-                total=len(cases)))
+    results = []
+    for i in progbar(range(len(cases)), disable=hide_progbar,
+                     desc="Batch: {}".format(batch_number)):
+        results.append(fn(**cases[i]))
 
     if len(results) != len(cases):
         raise ValueError("Something has gone wrong with processing "
@@ -754,9 +754,8 @@ def grow(batch_number, crop=None, fn=None, check_mpi=True, hide_progbar=False):
 
     if rank == 0:
         # save to results
-        joblib.dump(results, os.path.join(crop_location,
-                                          "results",
-                                          RSLT_NM.format(batch_number)))
+        joblib.dump(tuple(results), os.path.join(crop_location, "results",
+                                                 RSLT_NM.format(batch_number)))
 
 
 # --------------------------------------------------------------------------- #
