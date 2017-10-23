@@ -144,14 +144,15 @@ class TestSowerReaper:
         assert results1 == expected1
         assert results2 == expected2
 
-    def test_crop_grow_missing(self):
+    @pytest.mark.parametrize("num_workers", [None, 2])
+    def test_crop_grow_missing(self, num_workers):
         combos1 = [('a', [10, 20, 30]),
                    ('b', [4, 5, 6, 7])]
         expected1 = combo_runner(foo_add, combos1, constants={'c': True})
         with TemporaryDirectory() as tdir:
             c1 = Crop(name='run1', fn=foo_add, parent_dir=tdir, batchsize=5)
             c1.sow_combos(combos1, constants={'c': True})
-            c1.grow_missing()
+            c1.grow_missing(num_workers=num_workers)
             results1 = c1.reap()
         assert results1 == expected1
 

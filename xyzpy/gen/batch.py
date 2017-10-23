@@ -383,19 +383,20 @@ class Crop(object):
             _combo_runner(fn=sow_fn, combos=combos, constants=constants,
                           hide_progbar=hide_progbar)
 
-    def grow(self, batch_ids):
+    def grow(self, batch_ids, **combo_runner_opts):
         """Grow specific batch numbers using this process.
         """
         if isinstance(batch_ids, int):
             batch_ids = (batch_ids,)
 
-        for i in progbar(batch_ids):
-            grow(i, hide_progbar=True, crop=self)
+        _combo_runner(grow, combos=(('batch_number', batch_ids),),
+                      constants={'hide_progbar': True, 'crop': self},
+                      **combo_runner_opts)
 
-    def grow_missing(self):
+    def grow_missing(self, **combo_runner_opts):
         """Grow any missing results using this process.
         """
-        self.grow(batch_ids=self.missing_results())
+        self.grow(batch_ids=self.missing_results(), **combo_runner_opts)
 
     def reap_combos(self, wait=False, clean_up=True):
         """Reap already sown and grow results from specified crop.
