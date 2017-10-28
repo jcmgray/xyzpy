@@ -733,17 +733,6 @@ def grow(batch_number, crop=None, fn=None, check_mpi=True, hide_progbar=False):
                          "batch {} ".format(BTCH_NM.format(batch_number)) +
                          "for the crop at {}.".format(crop.location))
 
-    # process each case
-    results = []
-    for i in progbar(range(len(cases)), disable=hide_progbar,
-                     desc="Batch: {}".format(batch_number)):
-        results.append(fn(**cases[i]))
-
-    if len(results) != len(cases):
-        raise ValueError("Something has gone wrong with processing "
-                         "batch {} ".format(BTCH_NM.format(batch_number)) +
-                         "for the crop at {}.".format(crop.location))
-
     # maybe want to run grow as mpiexec (i.e. `fn` itself in parallel),
     # so only save and delete on rank 0
     if check_mpi and 'OMPI_COMM_WORLD_RANK' in os.environ:  # pragma: no cover
@@ -754,9 +743,22 @@ def grow(batch_number, crop=None, fn=None, check_mpi=True, hide_progbar=False):
         rank = 0
 
     if rank == 0:
+        results = []
+        for i in progbar(range(len(cases)), disable=hide_progbar,
+                         desc="Batch: {}".format(batch_number)):
+            results.append(fn(**cases[i]))
+
+        if len(results) != len(cases):
+            raise ValueError("Something has gone wrong with processing "
+                             "batch {} ".format(BTCH_NM.format(batch_number)) +
+                             "for the crop at {}.".format(crop.location))
+
         # save to results
-        joblib.dump(tuple(results), os.path.join(crop_location, "results",
-                                                 RSLT_NM.format(batch_number)))
+        joblib.dump(tuple(results), os.path.join(
+            crop_location, "results", RSLT_NM.format(batch_number)))
+    else:
+        for i in range(len(cases)):
+            fn(**cases[i])
 
 
 # --------------------------------------------------------------------------- #
