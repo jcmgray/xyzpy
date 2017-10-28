@@ -824,20 +824,20 @@ _BASE_QSUB_SCRIPT = """#!/bin/bash -l
 #$ -N {name}
 mkdir -p {output_directory}
 #$ -wd {output_directory}
-#$ -pe smp {num_threads}
+#$ -pe {pe} {num_procs}
 #$ -t {run_start}-{run_stop}
 cd {working_directory}
 export OMP_NUM_THREADS={num_threads}
 """
 
-_QSUB_GROW_ALL_SCRIPT = """python <<EOF
+_QSUB_GROW_ALL_SCRIPT = """{launcher} <<EOF
 from xyzpy.gen.batch import grow, Crop
 crop = Crop(name='{name}')
 crop = grow($SGE_TASK_ID, crop=crop)
 EOF
 """
 
-_QSUB_GROW_PARTIAL_SCRIPT = """python <<EOF
+_QSUB_GROW_PARTIAL_SCRIPT = """{launcher} <<EOF
 from xyzpy.gen.batch import grow, Crop
 crop = Crop(name='{name}')
 batch_ids = {batch_ids}
@@ -846,15 +846,17 @@ EOF
 """
 
 
-def gen_qsub_script(crop,
-                    batch_ids=None,
+def gen_qsub_script(crop, batch_ids=None, *,
                     hours=None,
                     minutes=None,
                     seconds=None,
                     gigabytes=2,
+                    num_procs=1,
+                    launcher='python',
+                    mpi=False,
                     temp_gigabytes=1,
                     output_directory=None,
-                    num_threads=1):
+                    ):
     """
     """
     if hours is minutes is seconds is None:
@@ -876,12 +878,15 @@ def gen_qsub_script(crop,
         'minutes': minutes,
         'seconds': seconds,
         'gigabytes': gigabytes,
-        'temp_gigabytes': temp_gigabytes,
         'name': crop.name,
+        'num_procs': num_procs,
+        'num_threads': 1 if mpi else num_procs,
+        'run_start': 1,
+        'launcher': launcher,
+        'pe': 'mpi' if mpi else 'smp',
+        'temp_gigabytes': temp_gigabytes,
         'output_directory': output_directory,
         'working_directory': crop.parent_dir,
-        'num_threads': num_threads,
-        'run_start': 1,
     }
 
     # grow specific ids
@@ -906,15 +911,17 @@ def gen_qsub_script(crop,
     return script.format(**opts)
 
 
-def qsub_grow(crop,
-              batch_ids=None,
+def qsub_grow(crop, batch_ids=None, *,
               hours=None,
               minutes=None,
               seconds=None,
               gigabytes=2,
+              num_procs=1,
+              launcher='python',
+              mpi=False,
               temp_gigabytes=1,
               output_directory=None,
-              num_threads=1):
+              ):
     """Automagically submit SGE jobs to grow all missing results.
     """
     if crop.is_ready_to_reap():
@@ -931,7 +938,9 @@ def qsub_grow(crop,
                              gigabytes=gigabytes,
                              temp_gigabytes=temp_gigabytes,
                              output_directory=output_directory,
-                             num_threads=num_threads)
+                             num_procs=num_procs,
+                             launcher=launcher,
+                             mpi=mpi)
 
     script_file = os.path.join(crop.location, "__qsub_script__.sh")
 
