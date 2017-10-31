@@ -690,7 +690,8 @@ class Sower(object):
             self.save_batch()
 
 
-def grow(batch_number, crop=None, fn=None, check_mpi=True, hide_progbar=False):
+def grow(batch_number, crop=None, fn=None, check_mpi=True, hide_progbar=False,
+         debugging=False):
     """Automatically process a batch of cases into results. Should be run in an
     ".xyz-{fn_name}" folder.
 
@@ -709,6 +710,11 @@ def grow(batch_number, crop=None, fn=None, check_mpi=True, hide_progbar=False):
         this should only be turned off if e.g. a pool of workers is being
         used to run different ``grow`` instances.
     """
+    if debugging:
+        import logging
+        logger = logging.getLogger()
+        logger.setLevel(logging.DEBUG)
+
     if crop is None:
         if os.path.relpath('.', '..')[:5] != ".xyz-":
             raise XYZError("`grow` should be run in a "
@@ -830,20 +836,17 @@ mkdir -p {output_directory}
 #$ -t {run_start}-{run_stop}
 cd {working_directory}
 export OMP_NUM_THREADS={num_threads}
-"""
-
-_QSUB_GROW_ALL_SCRIPT = """{launcher} <<EOF
+{launcher} <<EOF
 from xyzpy.gen.batch import grow, Crop
 crop = Crop(name='{name}')
-crop = grow($SGE_TASK_ID, crop=crop)
+"""
+
+_QSUB_GROW_ALL_SCRIPT = """grow($SGE_TASK_ID, crop=crop, debugging={debugging})
 EOF
 """
 
-_QSUB_GROW_PARTIAL_SCRIPT = """{launcher} <<EOF
-from xyzpy.gen.batch import grow, Crop
-crop = Crop(name='{name}')
-batch_ids = {batch_ids}
-crop = grow(batch_ids[$SGE_TASK_ID - 1], crop=crop)
+_QSUB_GROW_PARTIAL_SCRIPT = """batch_ids = {batch_ids}
+grow(batch_ids[$SGE_TASK_ID - 1], crop=crop, debugging={debugging})
 EOF
 """
 
@@ -858,6 +861,7 @@ def gen_qsub_script(crop, batch_ids=None, *,
                     mpi=False,
                     temp_gigabytes=1,
                     output_directory=None,
+                    debugging=False,
                     ):
     """
     """
@@ -889,23 +893,26 @@ def gen_qsub_script(crop, batch_ids=None, *,
         'temp_gigabytes': temp_gigabytes,
         'output_directory': output_directory,
         'working_directory': crop.parent_dir,
+        'debugging': debugging,
     }
+
+    script = _BASE_QSUB_SCRIPT
 
     # grow specific ids
     if batch_ids is not None:
-        script = _BASE_QSUB_SCRIPT + _QSUB_GROW_PARTIAL_SCRIPT
+        script += _QSUB_GROW_PARTIAL_SCRIPT
         batch_ids = tuple(batch_ids)
         opts['run_stop'] = len(batch_ids)
         opts['batch_ids'] = batch_ids
 
     # grow all ids
     elif crop.num_results == 0:
-        script = _BASE_QSUB_SCRIPT + _QSUB_GROW_ALL_SCRIPT
+        script += _QSUB_GROW_ALL_SCRIPT
         opts['run_stop'] = crop.num_batches
 
     # grow missing ids only
     else:
-        script = _BASE_QSUB_SCRIPT + _QSUB_GROW_PARTIAL_SCRIPT
+        script += _QSUB_GROW_PARTIAL_SCRIPT
         batch_ids = crop.missing_results()
         opts['run_stop'] = len(batch_ids)
         opts['batch_ids'] = batch_ids
@@ -923,6 +930,7 @@ def qsub_grow(crop, batch_ids=None, *,
               mpi=False,
               temp_gigabytes=1,
               output_directory=None,
+              debugging=False,
               ):
     """Automagically submit SGE jobs to grow all missing results.
     """
@@ -942,7 +950,8 @@ def qsub_grow(crop, batch_ids=None, *,
                              output_directory=output_directory,
                              num_procs=num_procs,
                              launcher=launcher,
-                             mpi=mpi)
+                             mpi=mpi,
+                             debugging=debugging)
 
     script_file = os.path.join(crop.location, "__qsub_script__.sh")
 
