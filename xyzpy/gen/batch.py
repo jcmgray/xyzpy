@@ -836,18 +836,22 @@ mkdir -p {output_directory}
 #$ -t {run_start}-{run_stop}
 cd {working_directory}
 export OMP_NUM_THREADS={num_threads}
-{launcher} <<EOF
+tmpfile=$(mktemp .xyzpy-qsub.XXXXXXXX)
+cat <<EOF > $tmpfile
 from xyzpy.gen.batch import grow, Crop
 crop = Crop(name='{name}')
 """
 
 _QSUB_GROW_ALL_SCRIPT = """grow($SGE_TASK_ID, crop=crop, debugging={debugging})
-EOF
 """
 
 _QSUB_GROW_PARTIAL_SCRIPT = """batch_ids = {batch_ids}
 grow(batch_ids[$SGE_TASK_ID - 1], crop=crop, debugging={debugging})
-EOF
+"""
+
+_BASE_QSUB_SCRIPT_END = """EOF
+{launcher} $tmpfile
+rm $tmpfile
 """
 
 
@@ -916,6 +920,8 @@ def gen_qsub_script(crop, batch_ids=None, *,
         batch_ids = crop.missing_results()
         opts['run_stop'] = len(batch_ids)
         opts['batch_ids'] = batch_ids
+
+    script += _BASE_QSUB_SCRIPT_END
 
     return script.format(**opts)
 
