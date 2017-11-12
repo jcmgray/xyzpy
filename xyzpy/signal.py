@@ -104,7 +104,7 @@ def preprocess_interp1d_nan_func(x, y, out):
 
 
 def postprocess_interp1d_nan_func(x, x_even, yf_even, num_nan, mask, out):
-    """Pre-process data for a 1d function that doesn't accept nan-values and
+    """Post-process data for a 1d function that doesn't accept nan-values and
     needs evenly spaced data.
     """
     # re-interpolate to original spacing
@@ -474,8 +474,7 @@ def _gufunc_interp(x, y, order, out=None):  # pragma: no cover
     x, y, num_nan, mask = xynm
 
     # interpolating function
-    ifn = interpolate.interp1d(x, y, kind=_INTERP_INT2STR[order[0]],
-                               fill_value='extrapolate')
+    ifn = interpolate.interp1d(x, y, kind=_INTERP_INT2STR[order[0]])
     yf = ifn(x)
     postprocess_nan_func(yf, num_nan, mask, out)
 
@@ -493,8 +492,7 @@ def _gufunc_interp_upscale(x, y, ix, order, out=None):  # pragma: no cover
     x, y, _, _ = xynm
 
     # interpolating function
-    ifn = interpolate.interp1d(x, y, kind=_INTERP_INT2STR[order[0]],
-                               fill_value='extrapolate')
+    ifn = interpolate.interp1d(x, y, kind=_INTERP_INT2STR[order[0]])
 
     # no need to nan_func post process and upscaling into exact right size
     out[:] = ifn(ix)
@@ -556,7 +554,7 @@ def _gufunc_pchip(x, y, out=None):  # pragma: no cover
     x, y, num_nan, mask = xynm
 
     # interpolating function
-    ifn = interpolate.PchipInterpolator(x, y)
+    ifn = interpolate.PchipInterpolator(x, y, extrapolate=False)
     yf = ifn(x)
     postprocess_nan_func(yf, num_nan, mask, out)
 
@@ -574,7 +572,7 @@ def _gufunc_pchip_upscale(x, y, ix, out=None):  # pragma: no cover
     x, y, num_nan, mask = xynm
 
     # interpolating function
-    ifn = interpolate.PchipInterpolator(x, y)
+    ifn = interpolate.PchipInterpolator(x, y, extrapolate=False)
     out[:] = ifn(ix)
 
 
