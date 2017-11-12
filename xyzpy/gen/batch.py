@@ -336,7 +336,7 @@ class Crop(object):
     def __repr__(self):
         # Location and name, underlined
         if not os.path.exists(self.location):
-            return self.location + "\n * Not yet sown or already reaped *"
+            return self.location + "\n * Not yet sown or already reaped * \n"
 
         loc_len = len(self.location)
         name_len = len(self.name)
@@ -865,8 +865,7 @@ def gen_qsub_script(crop, batch_ids=None, *,
                     mpi=False,
                     temp_gigabytes=1,
                     output_directory=None,
-                    debugging=False,
-                    ):
+                    debugging=False):
     """
     """
     if hours is minutes is seconds is None:
@@ -936,8 +935,7 @@ def qsub_grow(crop, batch_ids=None, *,
               mpi=False,
               temp_gigabytes=1,
               output_directory=None,
-              debugging=False,
-              ):
+              debugging=False):
     """Automagically submit SGE jobs to grow all missing results.
     """
     if crop.is_ready_to_reap():
