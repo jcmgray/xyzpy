@@ -112,6 +112,15 @@ _PLOTTER_DEFAULTS = {
 _PLOTTER_OPTS = list(_PLOTTER_DEFAULTS.keys())
 
 
+def check_excess_dims(ds, var, valid_dims):
+    excess_dims = {d for d, sz in ds[var].sizes .items()
+                   if (sz > 1) and (d not in valid_dims)}
+    if excess_dims:
+        raise ValueError("Dataset has too many non-singlet dimensions "
+                         "- try selection values for the following: "
+                         "{}.".format(excess_dims))
+
+
 class Plotter(object):
     """
     """
@@ -188,10 +197,13 @@ class Plotter(object):
 
         # Multiple sets of data parametized by z_coo
         if self.z_coo is not None:
+            check_excess_dims(self._ds, self.y_coo, (self.x_coo, self.z_coo))
             self._z_vals = self._ds[self.z_coo].values
 
         # Multiple data variables to plot -- just named in list
         elif isinstance(self.y_coo, (tuple, list)):
+            for var in self.y_coo:
+                check_excess_dims(self._ds, var, (self.x_coo,))
             self._multi_var = True
             self._z_vals = self.y_coo
 
@@ -202,6 +214,7 @@ class Plotter(object):
 
         # Single data variable to plot
         else:
+            check_excess_dims(self._ds, self.y_coo, (self.x_coo,))
             self._z_vals = (None,)
 
     def prepare_z_labels(self):
