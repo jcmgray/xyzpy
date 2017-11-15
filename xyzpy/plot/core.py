@@ -113,8 +113,11 @@ _PLOTTER_OPTS = list(_PLOTTER_DEFAULTS.keys())
 
 
 def check_excess_dims(ds, var, valid_dims):
+    expanded_valid_dims = list(itertools.chain.from_iterable(
+        ds[d].dims for d in valid_dims))
+
     excess_dims = {d for d, sz in ds[var].sizes .items()
-                   if (sz > 1) and (d not in valid_dims)}
+                   if (sz > 1) and (d not in expanded_valid_dims)}
     if excess_dims:
         raise ValueError("Dataset has too many non-singlet dimensions "
                          "- try selection values for the following: "
