@@ -146,6 +146,12 @@ def sort_dims(ds):
         ds[var] = ds[var].transpose(*var_dims)
 
 
+def post_fix(ds, postfix):
+    """Add ``postfix`` to the name of every data variable in ``ds``.
+    """
+    return ds.rename({old: old + '_' + postfix for old in ds.data_vars})
+
+
 def check_runs(obj, dim='run', var=None, sel=()):
     """Print out information about the range and any missing values for an
     integer dimension.

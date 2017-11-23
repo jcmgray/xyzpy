@@ -787,7 +787,7 @@ def xr_idxmax(obj, dim):
     allna = obj.isnull().all(dim)
     return apply_ufunc(gufunc_idxmax, obj.fillna(-np.inf), obj[dim],
                        input_core_dims=input_core_dims, kwargs=kwargs,
-                       dask_array='allowed').where(~allna)
+                       dask='allowed').where(~allna)
 
 
 xr.DataArray.idxmax = xr_idxmax
@@ -811,7 +811,7 @@ def xr_idxmin(obj, dim):
     allna = obj.isnull().all(dim)
     return apply_ufunc(gufunc_idxmin, obj.fillna(np.inf), obj[dim],
                        input_core_dims=input_core_dims, kwargs=kwargs,
-                       dask_array='allowed').where(~allna)
+                       dask='allowed').where(~allna)
 
 
 xr.DataArray.idxmin = xr_idxmin

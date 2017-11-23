@@ -40,6 +40,7 @@ from .manage import (
     check_runs,
     auto_xyz_ds,
     merge_sync_conflict_datasets,
+    post_fix,
 )
 from .signal import (
     xr_diff_fornberg,
@@ -173,6 +174,10 @@ class XYZPY(object):
     @functools.wraps(trimna)
     def trimna(self):
         return trimna(self._obj)
+
+    @functools.wraps(post_fix)
+    def post_fix(self, postfix):
+        return post_fix(self._obj, postfix)
 
     @functools.wraps(xr_diff_fornberg)
     def diff_fornberg(self, dim, ix=100, order=1, mode='points', window=5):
