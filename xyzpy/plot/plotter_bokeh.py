@@ -164,6 +164,14 @@ class PlotterBokeh(Plotter):
                     list(zip(data['x'], data['x'])), 'y_err_xs')
                 self._sources[i].add(list(zip(y_err_p, y_err_m)), 'y_err_ys')
 
+            # check if should set x_err as well
+            if self.x_err:
+                x_err_p = data['x'] + data['xe']
+                x_err_m = data['x'] - data['xe']
+                self._sources[i].add(
+                    list(zip(data['y'], data['y'])), 'x_err_ys')
+                self._sources[i].add(list(zip(x_err_p, x_err_m)), 'x_err_xs')
+
     def plot_lines(self):
         """Plot the data and a corresponding legend.
         """
@@ -201,10 +209,41 @@ class PlotterBokeh(Plotter):
             # Check if errors specified as well
             if self.y_err:
                 err = self._plot.multi_line(
-                    xs='y_err_xs', ys='y_err_ys', source=src, color=col)
+                    xs='y_err_xs', ys='y_err_ys', source=src, color=col,
+                    line_width=self.errorbar_linewidth)
+                legend_pics.append(err)
+            if self.x_err:
+                err = self._plot.multi_line(
+                    xs='x_err_xs', ys='x_err_ys', source=src, color=col,
+                    line_width=self.errorbar_linewidth)
                 legend_pics.append(err)
 
             # Add the names and styles of drawn lines for the legend
+            if self._use_legend:
+                self._lgnd_items.append((zlabel, legend_pics))
+
+    def plot_scatter(self):
+        if self._use_legend:
+            self._lgnd_items = []
+
+        for src in self._sources:
+            col = next(self._cols)
+            marker = next(self._mrkrs)
+            zlabel = next(self._zlbls)
+            legend_pics = []
+
+            m = getattr(self._plot, marker)(
+                'x', 'y',
+                source=src,
+                name=zlabel,
+                color=col,
+                fill_alpha=0.5,
+                line_width=0.5,
+                size=self._markersize,
+            )
+            legend_pics.append(m)
+
+            # Add the names and styles of drawn markers for the legend
             if self._use_legend:
                 self._lgnd_items.append((zlabel, legend_pics))
 
@@ -245,14 +284,14 @@ class PlotterBokeh(Plotter):
         return self
 
 
-def ilineplot(ds, x, y, z=None, return_fig=False,
-              interactive=False, **kwargs):
-    """
+def ilineplot(ds, x, y, z=None, *, interactive=False,
+              return_fig=False, **kwargs):
+    """Interactive ``xarray``-object multi-line plot using ``bokeh``.
     """
     p = PlotterBokeh(ds, x, y, z, return_fig=return_fig, **kwargs)
     # Core preparation
-    p.prepare_z_vals()
     p.prepare_axes_labels()
+    p.prepare_z_vals()
     p.prepare_z_labels()
     p.calc_use_legend_or_colorbar()
     p.prepare_xy_vals_lineplot()
@@ -275,6 +314,37 @@ def ilineplot(ds, x, y, z=None, return_fig=False,
     return p.show(interactive=interactive)
 
 
+def iscatter(ds, x, y, z=None, *, interactive=False,
+             return_fig=False, **kwargs):
+    """Interactive ``xarray``-object multi-scatter plot using ``bokeh``.
+    """
+    p = PlotterBokeh(ds, x, y, z, markers=True, lines=False,
+                     return_fig=return_fig, **kwargs)
+    # Core preparation
+    p.prepare_axes_labels()
+    p.prepare_z_vals()
+    p.prepare_z_labels()
+    p.calc_use_legend_or_colorbar()
+    p.prepare_xy_vals_lineplot()
+    p.prepare_line_colors()
+    p.prepare_markers()
+    p.prepare_line_styles()
+    p.prepare_zorders()
+    p.calc_plot_range()
+    # Bokeh preparation
+    p.prepare_plot_and_set_axes_scale()
+    p.set_axes_labels()
+    p.set_axes_range()
+    p.set_spans()
+    p.set_gridlines()
+    p.set_tick_marks()
+    p.set_sources()
+    p.plot_scatter()
+    p.plot_legend()
+    p.set_tools()
+    return p.show(interactive=interactive)
+
+
 # --------------------------------------------------------------------------- #
 #                    Miscellenous bokeh plotting functions                    #
 # --------------------------------------------------------------------------- #
@@ -284,3 +354,10 @@ def auto_ilineplot(x, y_z, **ilineplot_opts):
     treating as multiple lines, then send to ilineplot. """
     ds = auto_xyz_ds(x, y_z)
     return ilineplot(ds, 'x', 'y', 'z', **ilineplot_opts)
+
+
+def auto_iscatter(x, y_z, **ilineplot_opts):
+    """ Take some x-coordinates and an array, convert them to a Dataset
+    treating as multiple lines, then send to ilineplot. """
+    ds = auto_xyz_ds(x, y_z)
+    return iscatter(ds, 'x', 'y', 'z', **ilineplot_opts)

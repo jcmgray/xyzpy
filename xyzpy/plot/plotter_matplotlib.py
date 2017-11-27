@@ -18,8 +18,8 @@ class PlotterMatplotlib(Plotter):
     """
     """
 
-    def __init__(self, ds, x, y, z=None, y_err=None, **kwargs):
-        super().__init__(ds, x, y, z=z, y_err=y_err,
+    def __init__(self, ds, x, y, z=None, y_err=None, x_err=None, **kwargs):
+        super().__init__(ds, x, y, z=z, y_err=y_err, x_err=x_err,
                          **kwargs, backend='MATPLOTLIB')
 
     def prepare_plot(self):
@@ -206,12 +206,15 @@ class PlotterMatplotlib(Plotter):
                 'rasterized': self.rasterize,
             }
 
-            if 'ye' in data:
-                self._axes.errorbar(data['x'], data['y'], yerr=data['ye'],
+            if ('ye' in data) or ('xe' in data):
+                self._axes.errorbar(data['x'], data['y'],
+                                    yerr=data.get('ye', None),
+                                    xerr=data.get('xe', None),
                                     ecolor=col,
                                     capsize=self.errorbar_capsize,
                                     capthick=self.errorbar_capthick,
-                                    elinewidth=0.5, **line_opts)
+                                    elinewidth=self.errorbar_linewidth,
+                                    **line_opts)
             else:
                 # add line to axes, with options cycled through
                 self._axes.plot(data['x'], data['y'], **line_opts)
@@ -394,8 +397,8 @@ class LinePlot(PlotterMatplotlib):
     """
     """
 
-    def __init__(self, ds, x, y, z=None, y_err=None, **kwargs):
-        super().__init__(ds, x, y, z=z, y_err=y_err, **kwargs)
+    def __init__(self, ds, x, y, z=None, y_err=None, x_err=None, **kwargs):
+        super().__init__(ds, x, y, z=z, y_err=y_err, x_err=x_err, **kwargs)
 
     def __call__(self):
         # Core preparation
@@ -424,10 +427,10 @@ class LinePlot(PlotterMatplotlib):
         return self.show()
 
 
-def lineplot(ds, x, y, z=None, y_err=None, **kwargs):
+def lineplot(ds, x, y, z=None, y_err=None, x_err=None, **kwargs):
     """
     """
-    return LinePlot(ds, x, y, z, **kwargs)()
+    return LinePlot(ds, x, y, z, y_err=y_err, x_err=x_err, **kwargs)()
 
 
 class AutoLinePlot(LinePlot):
@@ -501,10 +504,10 @@ class Scatter(PlotterMatplotlib):
         return self.show()
 
 
-def scatter(ds, x, y, z=None, y_err=None, **kwargs):
+def scatter(ds, x, y, z=None, y_err=None, x_err=None, **kwargs):
     """
     """
-    return Scatter(ds, x, y, z, **kwargs)()
+    return Scatter(ds, x, y, z, y_err=y_err, x_err=x_err, **kwargs)()
 
 
 # --------------------------------------------------------------------------- #

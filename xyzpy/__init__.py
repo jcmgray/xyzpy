@@ -74,7 +74,9 @@ from .plot.plotter_matplotlib import (
 # Making interactive plots with bokeh
 from .plot.plotter_bokeh import (
     ilineplot,
-    auto_ilineplot
+    auto_ilineplot,
+    iscatter,
+    auto_iscatter,
 )
 
 __all__ = [
@@ -111,6 +113,8 @@ __all__ = [
     "heatmap",
     "ilineplot",
     "auto_ilineplot",
+    "iscatter",
+    "auto_iscatter",
     "visualize_matrix",
     "unzip",
     "progbar",
@@ -168,6 +172,10 @@ class XYZPY(object):
     @functools.wraps(ilineplot)
     def ilineplot(self, *args, **kwargs):
         return ilineplot(self._obj, *args, **kwargs)
+
+    @functools.wraps(iscatter)
+    def iscatter(self, *args, **kwargs):
+        return iscatter(self._obj, *args, **kwargs)
 
     # ----------------------------- Processing ------------------------------ #
 

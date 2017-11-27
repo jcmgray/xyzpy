@@ -84,6 +84,7 @@ _PLOTTER_DEFAULTS = {
     'line_widths': None,
     'errorbar_capthick': 1,
     'errorbar_capsize': 0,
+    'errorbar_linewidth': 0.7,
     'zorders': None,
     'padding': None,
     'vlines': None,
@@ -128,7 +129,7 @@ class Plotter(object):
     """
     """
 
-    def __init__(self, ds, x, y, z=None, y_err=None, **kwargs):
+    def __init__(self, ds, x, y, z=None, y_err=None, x_err=None, **kwargs):
         """
         """
         if isinstance(ds, xr.DataArray):
@@ -140,6 +141,7 @@ class Plotter(object):
         self.y_coo = y
         self.z_coo = z
         self.y_err = y_err
+        self.x_err = x_err
 
         # Figure options
         settings = {**_PLOTTER_DEFAULTS, **kwargs}
@@ -261,7 +263,7 @@ class Plotter(object):
                     x = self._ds[self.x_coo].values.flatten()
                     y = self._ds[z].values.flatten()
 
-                    if self.y_err is not None:
+                    if self.y_err is not None or self.x_err is not None:
                         raise ValueError('Multi-var errors not implemented.')
 
                 # z-coordinate to iterate over
@@ -273,6 +275,9 @@ class Plotter(object):
                     if self.y_err is not None:
                         ye = sub_ds[self.y_err].values.flatten()
 
+                    if self.x_err is not None:
+                        xe = sub_ds[self.x_err].values.flatten()
+
                 # nothing to iterate over
                 else:
                     x = self._ds[self.x_coo].values.flatten()
@@ -281,6 +286,9 @@ class Plotter(object):
                     if self.y_err is not None:
                         ye = self._ds[self.y_err].values.flatten()
 
+                    if self.x_err is not None:
+                        xe = self._ds[self.x_err].values.flatten()
+
                 # Trim out missing data
                 not_null = np.isfinite(x)
                 not_null &= np.isfinite(y)
@@ -288,6 +296,8 @@ class Plotter(object):
                 data = {'x': x[not_null], 'y': y[not_null]}
                 if self.y_err is not None:
                     data['ye'] = ye[not_null]
+                if self.x_err is not None:
+                    data['xe'] = xe[not_null]
 
                 yield data
 
@@ -362,7 +372,11 @@ class Plotter(object):
         self.calc_color_norm()
         try:
             rvals = [self._color_norm(z) for z in self._ds[self.z_coo].values]
-        except (TypeError, NotImplementedError, AttributeError, KeyError):
+        except (TypeError,
+                ValueError,
+                NotImplementedError,
+                AttributeError,
+                KeyError):
             # no relative coloring possible e.g. for strings
             rvals = np.linspace(0, 1, self._ds[self.z_coo].size)
 
