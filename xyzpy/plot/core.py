@@ -258,7 +258,7 @@ class Plotter(object):
         if self.colorbar and (self.legend is None):
             self.legend = False if (self.c_coo is None) else auto_legend
         if self.legend and (self.colorbar is None):
-            self.colorbar = False
+            self.colorbar = False if (self.c_coo is None) else True
 
         if self.legend is None and self.colorbar is None:
             self._use_legend = auto_legend

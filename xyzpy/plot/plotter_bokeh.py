@@ -282,7 +282,8 @@ class PlotterBokeh(Plotter):
             from bokeh.models import ColorBar, LogTicker, BasicTicker
             ticker = LogTicker if self.colormap_log else BasicTicker
             color_bar = ColorBar(color_mapper=self.mappable, location=(0, 0),
-                                 ticker=ticker(), title=self._ctitle)
+                                 ticker=ticker(desired_num_ticks=6),
+                                 title=self._ctitle)
             self._plot.add_layout(color_bar, 'right')
 
     def set_tools(self):
