@@ -227,7 +227,10 @@ class PlotterMatplotlib(Plotter):
         self._legend_labels = []
 
         for data in self._gen_xy():
-            col = next(self._cols)
+            if 'c' in data:
+                col = data['c']
+            else:
+                col = next(self._cols)
 
             scatter_opts = {
                 'c': col,
@@ -238,6 +241,9 @@ class PlotterMatplotlib(Plotter):
                 'zorder': next(self._zordrs),
                 'rasterized': self.rasterize,
             }
+
+            if 'c' in data:
+                scatter_opts['cmap'] = self.cmap
 
             self._legend_handles.append(
                 self._axes.scatter(data['x'], data['y'], **scatter_opts))
@@ -345,7 +351,6 @@ class PlotterMatplotlib(Plotter):
         """Add a colorbar to the data.
         """
         if self._use_colorbar:
-            self.set_mappable()
             # Whether the colorbar should clip at either end
             extendmin = (self.vmin is not None) and (self.vmin > self._zmin)
             extendmax = (self.vmax is not None) and (self.vmax < self._zmax)
@@ -367,9 +372,8 @@ class PlotterMatplotlib(Plotter):
             self._cbar.ax.tick_params(labelsize=self.fontsize_zlabels)
 
             self._cbar.ax.set_title(
-                self.z_coo if self.ztitle is None else self.ztitle,
-                color=self.colorbar_color if self.colorbar_color else None,
-                fontsize=self.fontsize_ztitle)
+                self._ctitle, fontsize=self.fontsize_ztitle,
+                color=self.colorbar_color if self.colorbar_color else None)
 
             if self.colorbar_color:
                 self._cbar.ax.yaxis.set_tick_params(
@@ -407,7 +411,7 @@ class LinePlot(PlotterMatplotlib):
         self.prepare_z_labels()
         self.calc_use_legend_or_colorbar()
         self.prepare_xy_vals_lineplot()
-        self.prepare_line_colors()
+        self.prepare_colors()
         self.prepare_markers()
         self.prepare_line_styles()
         self.prepare_zorders()
@@ -467,24 +471,14 @@ class Scatter(PlotterMatplotlib):
                 kwargs[k] = default
         super().__init__(ds, x, y, z, **kwargs)
 
-    # def calc_use_legend_or_colorbar(self):  # overloaded
-    #     # single data set - colormap on z values
-    #     if self.z_coo is not None and self.colorbar:
-    #         self._use_colorbar = True
-    #         self._use_legend = False
-    #     # multiple data sets - colormap on which set
-    #     elif self._multi_var and self.colorbar:
-    #         self._use_colorbar = True
-    #         self._use_legend = True
-
     def __call__(self):
         # Core preparation
         self.prepare_axes_labels()
         self.prepare_z_vals()
         self.prepare_z_labels()
         self.calc_use_legend_or_colorbar()
-        self.prepare_xy_vals_lineplot()
-        self.prepare_line_colors()
+        self.prepare_xy_vals_lineplot(mode='scatter')
+        self.prepare_colors()
         self.prepare_markers()
         self.prepare_line_styles()
         self.prepare_zorders()
@@ -546,7 +540,7 @@ class Histogram(PlotterMatplotlib):
         self.prepare_z_labels()
         self.calc_use_legend_or_colorbar()
         self.prepare_x_vals_histogram()
-        self.prepare_line_colors()
+        self.prepare_colors()
         self.prepare_line_styles()
         self.prepare_zorders()
         self.calc_plot_range()

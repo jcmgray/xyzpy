@@ -30,6 +30,7 @@ _PLOTTER_DEFAULTS = {
     'colormap_reverse': False,
     # Colorbar options
     'colorbar': None,
+    'ctitle': None,
     'vmin': None,
     'vmax': None,
     'colorbar_relative_position': None,
@@ -129,7 +130,8 @@ class Plotter(object):
     """
     """
 
-    def __init__(self, ds, x, y, z=None, y_err=None, x_err=None, **kwargs):
+    def __init__(self, ds, x, y, z=None, y_err=None, x_err=None,
+                 c=None, **kwargs):
         """
         """
         if isinstance(ds, xr.DataArray):
@@ -140,6 +142,7 @@ class Plotter(object):
         self.x_coo = x
         self.y_coo = y
         self.z_coo = z
+        self.c_coo = c
         self.y_err = y_err
         self.x_err = x_err
 
@@ -158,8 +161,12 @@ class Plotter(object):
             raise ValueError("Option(s) {} not valid.\n Did you mean: {}?"
                              .format(wrong_opts, right_opts))
 
+        if self.colors and self.c_coo:
+            raise ValueError("Cannot specify explicit colors if ``c`` used.")
+
         # Internal
         self._data_range_calculated = False
+        self._c_cols = []
 
     # ----------------------------- properties ------------------------------ #
 
@@ -193,6 +200,11 @@ class Plotter(object):
                 self._ytitle = None
         else:
             self._ytitle = self.ytitle
+
+        if self.c_coo is None:
+            self._ctitle = self.z_coo if self.ztitle is None else self.ztitle
+        else:
+            self._ctitle = self.c_coo if self.ctitle is None else self.ctitle
 
     def prepare_z_vals(self):
         """Work out what the 'z-coordinate', if any, should be.
@@ -240,64 +252,98 @@ class Plotter(object):
     def calc_use_legend_or_colorbar(self):
         """Work out whether to use a legend.
         """
-        if self.colorbar and self.legend is None:
-            self.legend = False
-        if self.legend and self.colorbar is None:
+        auto_legend = (1 < len(self._z_vals) <= 10)
+
+        # cspecified, lspecified, many points, colors, colors, c_coo
+        if self.colorbar and (self.legend is None):
+            self.legend = False if (self.c_coo is None) else auto_legend
+        if self.legend and (self.colorbar is None):
             self.colorbar = False
 
         if self.legend is None and self.colorbar is None:
-            self._use_legend = (1 < len(self._z_vals) <= 10)
-            self._use_colorbar = (not self._use_legend) and self.colors is True
+            self._use_legend = auto_legend
+            self._use_colorbar = (((not self._use_legend) and
+                                   self.colors is True) or
+                                  self.c_coo is not None)
         else:
             self._use_legend = self.legend
             self._use_colorbar = self.colorbar
 
-    def prepare_xy_vals_lineplot(self):
+    def prepare_xy_vals_lineplot(self, mode='line'):
         """Select and flatten the data appropriately to iterate over.
         """
 
         def gen_xy():
-            for z in self._z_vals:
+            for i, z in enumerate(self._z_vals):
+                data = {}
+
                 # multiple data variables rather than z coordinate
                 if self._multi_var:
-                    x = self._ds[self.x_coo].values.flatten()
-                    y = self._ds[z].values.flatten()
+                    data['x'] = self._ds[self.x_coo].values.flatten()
+                    data['y'] = self._ds[z].values.flatten()
 
-                    if self.y_err is not None or self.x_err is not None:
-                        raise ValueError('Multi-var errors not implemented.')
+                    if (self.y_err is not None) or \
+                       (self.x_err is not None) or \
+                       (self.c_coo is not None):
+                        raise ValueError('Multi-var errors/c not implemented.')
 
                 # z-coordinate to iterate over
                 elif z is not None:
-                    sub_ds = self._ds.loc[{self.z_coo: z}]
-                    x = sub_ds[self.x_coo].values.flatten()
-                    y = sub_ds[self.y_coo].values.flatten()
+                    try:
+                        # try positional indexing first, as much faster
+                        sub_ds = self._ds[{self.z_coo: i}]
+                    except ValueError:
+                        # but won't work e.g. on non-dimensions
+                        sub_ds = self._ds.loc[{self.z_coo: z}]
+
+                    data['x'] = sub_ds[self.x_coo].values.flatten()
+                    data['y'] = sub_ds[self.y_coo].values.flatten()
+
+                    if self.c_coo is not None:
+                        if mode == 'line':
+                            self._c_cols.append(np.asscalar(
+                                sub_ds[self.c_coo].values.flatten()))
+                        elif mode == 'scatter':
+                            data['c'] = sub_ds[self.c_coo].values.flatten()
 
                     if self.y_err is not None:
-                        ye = sub_ds[self.y_err].values.flatten()
+                        data['ye'] = sub_ds[self.y_err].values.flatten()
 
                     if self.x_err is not None:
-                        xe = sub_ds[self.x_err].values.flatten()
+                        data['xe'] = sub_ds[self.x_err].values.flatten()
 
                 # nothing to iterate over
                 else:
-                    x = self._ds[self.x_coo].values.flatten()
-                    y = self._ds[self.y_coo].values.flatten()
+                    data['x'] = self._ds[self.x_coo].values.flatten()
+                    data['y'] = self._ds[self.y_coo].values.flatten()
+
+                    if self.c_coo is not None:
+                        if mode == 'line':
+                            self._c_cols.append(np.asscalar(
+                                self._ds[self.c_coo].values.flatten()))
+                        elif mode == 'scatter':
+                            data['c'] = self._ds[self.c_coo].values.flatten()
 
                     if self.y_err is not None:
-                        ye = self._ds[self.y_err].values.flatten()
+                        data['ye'] = self._ds[self.y_err].values.flatten()
 
                     if self.x_err is not None:
-                        xe = self._ds[self.x_err].values.flatten()
+                        data['xe'] = self._ds[self.x_err].values.flatten()
 
                 # Trim out missing data
-                not_null = np.isfinite(x)
-                not_null &= np.isfinite(y)
+                not_null = np.isfinite(data['x'])
+                not_null &= np.isfinite(data['y'])
 
-                data = {'x': x[not_null], 'y': y[not_null]}
-                if self.y_err is not None:
-                    data['ye'] = ye[not_null]
-                if self.x_err is not None:
-                    data['xe'] = xe[not_null]
+                # TODO: if scatter, broadcast *then* ravel x, y, c?
+
+                data['x'] = data['x'][not_null]
+                data['y'] = data['y'][not_null]
+                if 'c' in data:
+                    data['c'] = data['c'][not_null]
+                if 'ye' in data:
+                    data['ye'] = data['ye'][not_null]
+                if 'xe' in data:
+                    data['xe'] = data['xe'][not_null]
 
                 yield data
 
@@ -344,13 +390,15 @@ class Plotter(object):
 
         self.cmap = xyz_colormaps(self.colormap, reverse=self.colormap_reverse)
 
+        coo = self.z_coo if self.c_coo is None else self.c_coo
+
         try:
             self._zmin = self.zlims[0]
             if self._zmin is None:
-                self._zmin = self._ds[self.z_coo].values.min()
+                self._zmin = self._ds[coo].values.min()
             self._zmax = self.zlims[1]
             if self._zmax is None:
-                self._zmax = self._ds[self.z_coo].values.max()
+                self._zmax = self._ds[coo].values.max()
 
         except (TypeError, NotImplementedError, AttributeError, KeyError):
             # no relative coloring possible e.g. for strings
@@ -365,31 +413,38 @@ class Plotter(object):
             mpl.colors, "LogNorm" if self.colormap_log else "Normalize")(
                 vmin=self.vmin, vmax=self.vmax)
 
+        if self._use_colorbar:
+            self.set_mappable()
+
     def calc_line_colors(self):
         """Helper function for calculating what the colormapped color of each
         line should be.
         """
         self.calc_color_norm()
-        try:
-            rvals = [self._color_norm(z) for z in self._ds[self.z_coo].values]
-        except (TypeError,
-                ValueError,
-                NotImplementedError,
-                AttributeError,
-                KeyError):
-            # no relative coloring possible e.g. for strings
-            rvals = np.linspace(0, 1, self._ds[self.z_coo].size)
 
-        # Map relative value to mpl color, reversing if required
-        self._cols = [self.cmap(rval) for rval in rvals]
+        # set from 'adjacent' variable
+        if self.c_coo is not None:
+            rvals = (self._color_norm(z) for z in self._c_cols)
+        # set from coordinate
+        else:
+            try:
+                rvals = (self._color_norm(z)
+                         for z in self._ds[self.z_coo].values)
+            except (TypeError, ValueError, NotImplementedError,
+                    AttributeError, KeyError):
+                # no relative coloring possible e.g. for strings
+                rvals = np.linspace(0, 1, self._ds[self.z_coo].size)
+
+        # Map relative value to mpl color
+        self._cols = (self.cmap(rval) for rval in rvals)
         # Convert colors to correct format
         self._cols = iter(convert_colors(self._cols, outformat=self.backend))
 
-    def prepare_line_colors(self):
+    def prepare_colors(self):
         """Prepare the colors for the lines, based on the z-coordinate.
         """
         # Automatic colors
-        if self.colors is True:
+        if (self.colors is True) or (self.c_coo is not None):
             self.calc_line_colors()
         # Manually specified colors
         elif self.colors:

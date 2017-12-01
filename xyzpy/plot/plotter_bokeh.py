@@ -156,8 +156,12 @@ class PlotterBokeh(Plotter):
             self._sources[i].add(data['y'], 'y')
             self._sources[i].add([zlabel] * len(data['x']), 'z_coo')
 
+            # check for color for scatter plot
+            if 'c' in data:
+                self._sources[i].add(data['c'], 'c')
+
             # check if should set y_err as well
-            if self.y_err:
+            if 'ye' in data:
                 y_err_p = data['y'] + data['ye']
                 y_err_m = data['y'] - data['ye']
                 self._sources[i].add(
@@ -165,7 +169,7 @@ class PlotterBokeh(Plotter):
                 self._sources[i].add(list(zip(y_err_p, y_err_m)), 'y_err_ys')
 
             # check if should set x_err as well
-            if self.x_err:
+            if 'xe' in data:
                 x_err_p = data['x'] + data['xe']
                 x_err_m = data['x'] - data['xe']
                 self._sources[i].add(
@@ -227,7 +231,10 @@ class PlotterBokeh(Plotter):
             self._lgnd_items = []
 
         for src in self._sources:
-            col = next(self._cols)
+            if 'c' in src.column_names:
+                col = {'field': 'c', 'transform': self.mappable}
+            else:
+                col = next(self._cols)
             marker = next(self._mrkrs)
             zlabel = next(self._zlbls)
             legend_pics = []
@@ -259,6 +266,24 @@ class PlotterBokeh(Plotter):
 
             # Don't repeatedly redraw legend
             self._use_legend = False
+
+    def set_mappable(self):
+        from bokeh.models import LogColorMapper, LinearColorMapper
+        import matplotlib as plt
+        mapper_fn = (LogColorMapper if self.colormap_log else
+                     LinearColorMapper)
+        bokehpalette = [plt.colors.rgb2hex(m)
+                        for m in self.cmap(range(256))]
+        self.mappable = mapper_fn(palette=bokehpalette,
+                                  low=self._zmin, high=self._zmax)
+
+    def plot_colorbar(self):
+        if self._use_colorbar:
+            from bokeh.models import ColorBar, LogTicker, BasicTicker
+            ticker = LogTicker if self.colormap_log else BasicTicker
+            color_bar = ColorBar(color_mapper=self.mappable, location=(0, 0),
+                                 ticker=ticker(), title=self._ctitle)
+            self._plot.add_layout(color_bar, 'right')
 
     def set_tools(self):
         """Set which tools appear for the plot.
@@ -295,7 +320,7 @@ def ilineplot(ds, x, y, z=None, *, interactive=False,
     p.prepare_z_labels()
     p.calc_use_legend_or_colorbar()
     p.prepare_xy_vals_lineplot()
-    p.prepare_line_colors()
+    p.prepare_colors()
     p.prepare_markers()
     p.prepare_line_styles()
     p.prepare_zorders()
@@ -310,6 +335,7 @@ def ilineplot(ds, x, y, z=None, *, interactive=False,
     p.set_sources()
     p.plot_lines()
     p.plot_legend()
+    p.plot_colorbar()
     p.set_tools()
     return p.show(interactive=interactive)
 
@@ -325,8 +351,8 @@ def iscatter(ds, x, y, z=None, *, interactive=False,
     p.prepare_z_vals()
     p.prepare_z_labels()
     p.calc_use_legend_or_colorbar()
-    p.prepare_xy_vals_lineplot()
-    p.prepare_line_colors()
+    p.prepare_xy_vals_lineplot(mode='scatter')
+    p.prepare_colors()
     p.prepare_markers()
     p.prepare_line_styles()
     p.prepare_zorders()
@@ -341,6 +367,7 @@ def iscatter(ds, x, y, z=None, *, interactive=False,
     p.set_sources()
     p.plot_scatter()
     p.plot_legend()
+    p.plot_colorbar()
     p.set_tools()
     return p.show(interactive=interactive)
 
