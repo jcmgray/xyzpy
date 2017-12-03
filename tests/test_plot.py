@@ -43,6 +43,24 @@ def dataset_heatmap():
     return ds.where(ds.y < 35)
 
 
+@fixture
+def dataset_scatter():
+    x = np.random.randn(100, 100)
+    y = np.random.randn(100, 100)
+    z = np.random.randn(100)
+
+    a = np.linspace(0, 3, 100)
+    b = np.linspace(0, 3, 100)
+
+    ds = xr.Dataset(
+        coords={'a': a,
+                'b': b},
+        data_vars={'x': (('a', 'b'), x),
+                   'y': (('a', 'b'), y),
+                   'z': ('b', z)})
+    return ds.where(ds.z > 0.5)
+
+
 # --------------------------------------------------------------------------- #
 # TEST COLORS                                                                 #
 # --------------------------------------------------------------------------- #
@@ -146,3 +164,9 @@ class TestCommonInterface:
 class TestHeatmap:
     def test_simple(self, dataset_heatmap):
         dataset_heatmap.xyz.heatmap('x', 'y', 'c', return_fig=True)
+
+
+class TestScatter:
+
+    def test_normal(self, dataset_scatter):
+        dataset_scatter.xyz.scatter('x', 'y')

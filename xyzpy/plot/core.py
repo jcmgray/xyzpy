@@ -114,16 +114,22 @@ _PLOTTER_DEFAULTS = {
 _PLOTTER_OPTS = list(_PLOTTER_DEFAULTS.keys())
 
 
-def check_excess_dims(ds, var, valid_dims):
-    expanded_valid_dims = list(itertools.chain.from_iterable(
-        ds[d].dims for d in valid_dims))
+def check_excess_dims(ds, var, valid_dims, mode='lineplot'):
 
-    excess_dims = {d for d, sz in ds[var].sizes .items()
-                   if (sz > 1) and (d not in expanded_valid_dims)}
-    if excess_dims:
-        raise ValueError("Dataset has too many non-singlet dimensions "
-                         "- try selection values for the following: "
-                         "{}.".format(excess_dims))
+    if mode == 'lineplot':
+        expanded_valid_dims = list(itertools.chain.from_iterable(
+            ds[d].dims for d in valid_dims))
+
+        excess_dims = {d for d, sz in ds[var].sizes .items()
+                       if (sz > 1) and (d not in expanded_valid_dims)}
+        if excess_dims:
+            raise ValueError("Dataset has too many non-singlet dimensions "
+                             "- try selection values for the following: "
+                             "{}.".format(excess_dims))
+
+    else:
+        # TODO: for now, no checking if not lineplot
+        pass
 
 
 class Plotter(object):
@@ -206,7 +212,7 @@ class Plotter(object):
         else:
             self._ctitle = self.c_coo if self.ctitle is None else self.ctitle
 
-    def prepare_z_vals(self):
+    def prepare_z_vals(self, mode='lineplot'):
         """Work out what the 'z-coordinate', if any, should be.
         """
         # TODO: process multi-var errors at same time
@@ -214,13 +220,14 @@ class Plotter(object):
 
         # Multiple sets of data parametized by z_coo
         if self.z_coo is not None:
-            check_excess_dims(self._ds, self.y_coo, (self.x_coo, self.z_coo))
+            check_excess_dims(self._ds, self.y_coo, (self.x_coo, self.z_coo),
+                              mode=mode)
             self._z_vals = self._ds[self.z_coo].values
 
         # Multiple data variables to plot -- just named in list
         elif isinstance(self.y_coo, (tuple, list)):
             for var in self.y_coo:
-                check_excess_dims(self._ds, var, (self.x_coo,))
+                check_excess_dims(self._ds, var, (self.x_coo,), mode=mode)
             self._multi_var = True
             self._z_vals = self.y_coo
 
@@ -231,7 +238,7 @@ class Plotter(object):
 
         # Single data variable to plot
         else:
-            check_excess_dims(self._ds, self.y_coo, (self.x_coo,))
+            check_excess_dims(self._ds, self.y_coo, (self.x_coo,), mode=mode)
             self._z_vals = (None,)
 
     def prepare_z_labels(self):
@@ -252,16 +259,17 @@ class Plotter(object):
     def calc_use_legend_or_colorbar(self):
         """Work out whether to use a legend.
         """
-        auto_legend = (1 < len(self._z_vals) <= 10)
+        def auto_legend():
+            return (1 < len(self._z_vals) <= 10)
 
         # cspecified, lspecified, many points, colors, colors, c_coo
         if self.colorbar and (self.legend is None):
-            self.legend = False if (self.c_coo is None) else auto_legend
+            self.legend = False if (self.c_coo is None) else auto_legend()
         if self.legend and (self.colorbar is None):
             self.colorbar = False if (self.c_coo is None) else True
 
         if self.legend is None and self.colorbar is None:
-            self._use_legend = auto_legend
+            self._use_legend = auto_legend()
             self._use_colorbar = (((not self._use_legend) and
                                    self.colors is True) or
                                   self.c_coo is not None)
@@ -269,18 +277,19 @@ class Plotter(object):
             self._use_legend = self.legend
             self._use_colorbar = self.colorbar
 
-    def prepare_xy_vals_lineplot(self, mode='line'):
+    def prepare_xy_vals_lineplot(self, mode='lineplot'):
         """Select and flatten the data appropriately to iterate over.
         """
 
         def gen_xy():
             for i, z in enumerate(self._z_vals):
+                das = {}
                 data = {}
 
                 # multiple data variables rather than z coordinate
                 if self._multi_var:
-                    data['x'] = self._ds[self.x_coo].values.flatten()
-                    data['y'] = self._ds[z].values.flatten()
+                    das['x'] = self._ds[self.x_coo]
+                    das['y'] = self._ds[z]
 
                     if (self.y_err is not None) or \
                        (self.x_err is not None) or \
@@ -296,39 +305,42 @@ class Plotter(object):
                         # but won't work e.g. on non-dimensions
                         sub_ds = self._ds.loc[{self.z_coo: z}]
 
-                    data['x'] = sub_ds[self.x_coo].values.flatten()
-                    data['y'] = sub_ds[self.y_coo].values.flatten()
+                    das['x'] = sub_ds[self.x_coo]
+                    das['y'] = sub_ds[self.y_coo]
 
                     if self.c_coo is not None:
-                        if mode == 'line':
+                        if mode == 'lineplot':
                             self._c_cols.append(np.asscalar(
                                 sub_ds[self.c_coo].values.flatten()))
                         elif mode == 'scatter':
-                            data['c'] = sub_ds[self.c_coo].values.flatten()
+                            das['c'] = sub_ds[self.c_coo]
 
                     if self.y_err is not None:
-                        data['ye'] = sub_ds[self.y_err].values.flatten()
+                        das['ye'] = sub_ds[self.y_err]
 
                     if self.x_err is not None:
-                        data['xe'] = sub_ds[self.x_err].values.flatten()
+                        das['xe'] = sub_ds[self.x_err]
 
                 # nothing to iterate over
                 else:
-                    data['x'] = self._ds[self.x_coo].values.flatten()
-                    data['y'] = self._ds[self.y_coo].values.flatten()
+                    das['x'] = self._ds[self.x_coo]
+                    das['y'] = self._ds[self.y_coo]
 
                     if self.c_coo is not None:
-                        if mode == 'line':
+                        if mode == 'lineplot':
                             self._c_cols.append(np.asscalar(
                                 self._ds[self.c_coo].values.flatten()))
                         elif mode == 'scatter':
-                            data['c'] = self._ds[self.c_coo].values.flatten()
+                            das['c'] = self._ds[self.c_coo]
 
                     if self.y_err is not None:
-                        data['ye'] = self._ds[self.y_err].values.flatten()
+                        das['ye'] = self._ds[self.y_err]
 
                     if self.x_err is not None:
-                        data['xe'] = self._ds[self.x_err].values.flatten()
+                        das['xe'] = self._ds[self.x_err]
+
+                for k, da in zip(das, xr.broadcast(*das.values())):
+                    data[k] = da.values.flatten()
 
                 # Trim out missing data
                 not_null = np.isfinite(data['x'])
@@ -427,11 +439,10 @@ class Plotter(object):
             rvals = (self._color_norm(z) for z in self._c_cols)
         # set from coordinate
         else:
-            try:
+            if np.isreal(self._ds[self.z_coo].values[0]):
                 rvals = (self._color_norm(z)
                          for z in self._ds[self.z_coo].values)
-            except (TypeError, ValueError, NotImplementedError,
-                    AttributeError, KeyError):
+            else:
                 # no relative coloring possible e.g. for strings
                 rvals = np.linspace(0, 1, self._ds[self.z_coo].size)
 

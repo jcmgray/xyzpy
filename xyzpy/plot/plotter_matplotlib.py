@@ -187,117 +187,6 @@ class PlotterMatplotlib(Plotter):
             return cl, cb
         return cl, cb, cw, ch
 
-    def plot_lines(self):
-        """
-        """
-        for data in self._gen_xy():
-            col = next(self._cols)
-
-            line_opts = {
-                'c': col,
-                'lw': next(self._lws),
-                'marker': next(self._mrkrs),
-                'markersize': self._markersize,
-                'markeredgecolor': col[:3] + (self.marker_alpha * col[3],),
-                'markerfacecolor': col[:3] + (self.marker_alpha * col[3] / 2,),
-                'label': next(self._zlbls) if self._use_legend else None,
-                'zorder': next(self._zordrs),
-                'linestyle': next(self._lines),
-                'rasterized': self.rasterize,
-            }
-
-            if ('ye' in data) or ('xe' in data):
-                self._axes.errorbar(data['x'], data['y'],
-                                    yerr=data.get('ye', None),
-                                    xerr=data.get('xe', None),
-                                    ecolor=col,
-                                    capsize=self.errorbar_capsize,
-                                    capthick=self.errorbar_capthick,
-                                    elinewidth=self.errorbar_linewidth,
-                                    **line_opts)
-            else:
-                # add line to axes, with options cycled through
-                self._axes.plot(data['x'], data['y'], **line_opts)
-
-    def plot_scatter(self):
-        """
-        """
-
-        self._legend_handles = []
-        self._legend_labels = []
-
-        for data in self._gen_xy():
-            if 'c' in data:
-                col = data['c']
-            else:
-                col = next(self._cols)
-
-            scatter_opts = {
-                'c': col,
-                'marker': next(self._mrkrs),
-                's': self._markersize,
-                'alpha': self.marker_alpha,
-                'label': next(self._zlbls) if self._use_legend else None,
-                'zorder': next(self._zordrs),
-                'rasterized': self.rasterize,
-            }
-
-            if 'c' in data:
-                scatter_opts['cmap'] = self.cmap
-
-            self._legend_handles.append(
-                self._axes.scatter(data['x'], data['y'], **scatter_opts))
-            self._legend_labels.append(
-                scatter_opts['label'])
-
-    def plot_histogram(self):
-        from matplotlib.patches import Rectangle, Polygon
-
-        def gen_ind_plots():
-            for data in self._gen_xy():
-                col = next(self._cols)
-
-                edgecolor = col[:3] + (self.marker_alpha * col[3],)
-                facecolor = col[:3] + (self.marker_alpha * col[3] / 4,)
-                linewidth = next(self._lws)
-                zorder = next(self._zordrs)
-                label = next(self._zlbls) if self._use_legend else None
-
-                handle = Rectangle((0, 0), 1, 1, color=facecolor, ec=edgecolor)
-
-                yield (data['x'], edgecolor, facecolor, linewidth, zorder,
-                       label, handle)
-
-        xs, ecs, fcs, lws, zds, lbs, hnds = zip(*gen_ind_plots())
-
-        histogram_opts = {
-            'label': lbs if self._use_legend else None,
-            'bins': self.bins,
-            'normed': True,
-            'histtype': 'stepfilled',
-            'fill': True,
-            'stacked': self.stacked,
-            'rasterized': self.rasterize,
-        }
-
-        _, _, patches = self._axes.hist(xs, **histogram_opts)
-
-        # Need to set varying colors, linewidths etc seperately
-        for patch, ec, fc, lw, zd in zip(patches, ecs, fcs, lws, zds):
-
-            # patch is not iterable if only one set of data created
-            if isinstance(patch, Polygon):
-                patch = (patch,)
-
-            for sub_patch in patch:
-                sub_patch.set_edgecolor(ec)
-                sub_patch.set_facecolor(fc)
-                sub_patch.set_linewidth(lw)
-                sub_patch.set_zorder(zd)
-
-        # store handles for legend
-        self._legend_handles, self._legend_labels = hnds, lbs
-
     def plot_legend(self):
         """Add a legend
         """
@@ -404,6 +293,38 @@ class LinePlot(PlotterMatplotlib):
     def __init__(self, ds, x, y, z=None, y_err=None, x_err=None, **kwargs):
         super().__init__(ds, x, y, z=z, y_err=y_err, x_err=x_err, **kwargs)
 
+    def plot_lines(self):
+        """
+        """
+        for data in self._gen_xy():
+            col = next(self._cols)
+
+            line_opts = {
+                'c': col,
+                'lw': next(self._lws),
+                'marker': next(self._mrkrs),
+                'markersize': self._markersize,
+                'markeredgecolor': col[:3] + (self.marker_alpha * col[3],),
+                'markerfacecolor': col[:3] + (self.marker_alpha * col[3] / 2,),
+                'label': next(self._zlbls) if self._use_legend else None,
+                'zorder': next(self._zordrs),
+                'linestyle': next(self._lines),
+                'rasterized': self.rasterize,
+            }
+
+            if ('ye' in data) or ('xe' in data):
+                self._axes.errorbar(data['x'], data['y'],
+                                    yerr=data.get('ye', None),
+                                    xerr=data.get('xe', None),
+                                    ecolor=col,
+                                    capsize=self.errorbar_capsize,
+                                    capthick=self.errorbar_capthick,
+                                    elinewidth=self.errorbar_linewidth,
+                                    **line_opts)
+            else:
+                # add line to axes, with options cycled through
+                self._axes.plot(data['x'], data['y'], **line_opts)
+
     def __call__(self):
         # Core preparation
         self.prepare_axes_labels()
@@ -471,10 +392,40 @@ class Scatter(PlotterMatplotlib):
                 kwargs[k] = default
         super().__init__(ds, x, y, z, **kwargs)
 
+    def plot_scatter(self):
+        """
+        """
+        self._legend_handles = []
+        self._legend_labels = []
+
+        for data in self._gen_xy():
+            if 'c' in data:
+                col = data['c']
+            else:
+                col = next(self._cols)
+
+            scatter_opts = {
+                'c': col,
+                'marker': next(self._mrkrs),
+                's': self._markersize,
+                'alpha': self.marker_alpha,
+                'label': next(self._zlbls) if self._use_legend else None,
+                'zorder': next(self._zordrs),
+                'rasterized': self.rasterize,
+            }
+
+            if 'c' in data:
+                scatter_opts['cmap'] = self.cmap
+
+            self._legend_handles.append(
+                self._axes.scatter(data['x'], data['y'], **scatter_opts))
+            self._legend_labels.append(
+                scatter_opts['label'])
+
     def __call__(self):
         # Core preparation
         self.prepare_axes_labels()
-        self.prepare_z_vals()
+        self.prepare_z_vals(mode='scatter')
         self.prepare_z_labels()
         self.calc_use_legend_or_colorbar()
         self.prepare_xy_vals_lineplot(mode='scatter')
@@ -502,6 +453,22 @@ def scatter(ds, x, y, z=None, y_err=None, x_err=None, **kwargs):
     """
     """
     return Scatter(ds, x, y, z, y_err=y_err, x_err=x_err, **kwargs)()
+
+
+class AutoScatter(Scatter):
+    """
+    """
+
+    def __init__(self, x, y_z, **scatter_opts):
+        ds = auto_xyz_ds(x, y_z)
+        ds = auto_xyz_ds(x, y_z)
+        super().__init__(ds, 'x', 'y', z='z', **scatter_opts)
+
+
+def auto_scatter(x, y_z, **scatter_opts):
+    """
+    """
+    return AutoScatter(x, y_z, **scatter_opts)
 
 
 # --------------------------------------------------------------------------- #
@@ -533,10 +500,58 @@ class Histogram(PlotterMatplotlib):
 
         super().__init__(ds, x, None, z=z, **kwargs)
 
+    def plot_histogram(self):
+        from matplotlib.patches import Rectangle, Polygon
+
+        def gen_ind_plots():
+            for data in self._gen_xy():
+                col = next(self._cols)
+
+                edgecolor = col[:3] + (self.marker_alpha * col[3],)
+                facecolor = col[:3] + (self.marker_alpha * col[3] / 4,)
+                linewidth = next(self._lws)
+                zorder = next(self._zordrs)
+                label = next(self._zlbls) if self._use_legend else None
+
+                handle = Rectangle((0, 0), 1, 1, color=facecolor, ec=edgecolor)
+
+                yield (data['x'], edgecolor, facecolor, linewidth, zorder,
+                       label, handle)
+
+        xs, ecs, fcs, lws, zds, lbs, hnds = zip(*gen_ind_plots())
+
+        histogram_opts = {
+            'label': lbs if self._use_legend else None,
+            'bins': self.bins,
+            'normed': True,
+            'histtype': 'stepfilled',
+            'fill': True,
+            'stacked': self.stacked,
+            'rasterized': self.rasterize,
+        }
+
+        _, _, patches = self._axes.hist(xs, **histogram_opts)
+
+        # Need to set varying colors, linewidths etc seperately
+        for patch, ec, fc, lw, zd in zip(patches, ecs, fcs, lws, zds):
+
+            # patch is not iterable if only one set of data created
+            if isinstance(patch, Polygon):
+                patch = (patch,)
+
+            for sub_patch in patch:
+                sub_patch.set_edgecolor(ec)
+                sub_patch.set_facecolor(fc)
+                sub_patch.set_linewidth(lw)
+                sub_patch.set_zorder(zd)
+
+        # store handles for legend
+        self._legend_handles, self._legend_labels = hnds, lbs
+
     def __call__(self):
         # Core preparation
         self.prepare_axes_labels()
-        self.prepare_z_vals()
+        self.prepare_z_vals(mode='histogram')
         self.prepare_z_labels()
         self.calc_use_legend_or_colorbar()
         self.prepare_x_vals_histogram()
