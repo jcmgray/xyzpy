@@ -2,7 +2,6 @@
 """
 # TODO: marker alpha
 
-
 import functools
 import itertools
 from ..manage import auto_xyz_ds
@@ -236,6 +235,8 @@ class PlotterBokeh(Plotter):
 
 
 class ILinePlot(PlotterBokeh):
+    """Interactive dataset multi-line plot.
+    """
 
     def __init__(self, ds, x, y, z=None, y_err=None, x_err=None, **kwargs):
         super().__init__(ds, x, y, z=z, y_err=y_err, x_err=x_err, **kwargs)
@@ -318,14 +319,13 @@ class ILinePlot(PlotterBokeh):
 
 
 def ilineplot(ds, x, y, z=None, y_err=None, x_err=None, **kwargs):
-    """
+    """Interactive dataset multi-line plot - functional form.
     """
     return ILinePlot(ds, x, y, z, y_err=y_err, x_err=x_err, **kwargs)()
 
 
 class AutoILinePlot(ILinePlot):
-    """The non-dataset input version of ILineplot - automatically converts
-    two arrays to a dataset with names 'x', 'y', 'z'.
+    """Interactive raw data multi-line plot.
     """
 
     def __init__(self, x, y_z, **lineplot_opts):
@@ -334,7 +334,7 @@ class AutoILinePlot(ILinePlot):
 
 
 def auto_ilineplot(x, y_z, **lineplot_opts):
-    """Function-version of AutoLinePlot
+    """Interactive raw data multi-line plot - functional form.
     """
     return AutoILinePlot(x, y_z, **lineplot_opts)()
 
@@ -342,7 +342,7 @@ def auto_ilineplot(x, y_z, **lineplot_opts):
 # --------------------------------------------------------------------------- #
 
 class IScatter(PlotterBokeh):
-    """
+    """Interactive dataset scatter plot - functional form.
     """
 
     def __init__(self, ds, x, y, z=None, **kwargs):
@@ -410,7 +410,7 @@ def iscatter(ds, x, y, z=None, y_err=None, x_err=None, **kwargs):
 
 
 class AutoIScatter(IScatter):
-    """
+    """Interactive raw-data scatter plot.
     """
 
     def __init__(self, x, y_z, **iscatter_opts):
@@ -419,7 +419,7 @@ class AutoIScatter(IScatter):
 
 
 def auto_iscatter(x, y_z, **iscatter_opts):
-    """
+    """Interactive raw-data scatter plot - functional form.
     """
     return AutoIScatter(x, y_z, **iscatter_opts)
 

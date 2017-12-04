@@ -1,6 +1,6 @@
 """
 Functions for plotting datasets nicely.
-"""                                  #
+"""
 # TODO: custom xtick labels                                                   #
 # TODO: annotations, arbitrary text                                           #
 # TODO: docs                                                                  #
@@ -460,7 +460,6 @@ class AutoScatter(Scatter):
     """
 
     def __init__(self, x, y_z, **scatter_opts):
-        ds = auto_xyz_ds(x, y_z)
         ds = auto_xyz_ds(x, y_z)
         super().__init__(ds, 'x', 'y', z='z', **scatter_opts)
 
