@@ -348,7 +348,7 @@ class TestIdxMinMax:
 
         if somena:
             ds['z'].loc[{'x': 0.5}] = np.nan
-            assert ds.isnull().any()
+            assert ds['z'].isnull().any()
 
         if allna:
             ds['z'].loc[{'ymax': -2}] = np.nan

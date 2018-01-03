@@ -171,7 +171,7 @@ def _cases_to_ds(results, fn_args, cases, var_names, add_to_ds=None,
     """
     results = _parse_case_results(results, var_names)
 
-    if add_to_ds:
+    if add_to_ds is not None:
         ds = add_to_ds
     else:
         # Find minimal covering set of coordinates for fn_args
