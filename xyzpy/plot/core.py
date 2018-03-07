@@ -132,12 +132,12 @@ def check_excess_dims(ds, var, valid_dims, mode='lineplot'):
         pass
 
 
-class Plotter(object):
+class Plotter:
     """
     """
 
-    def __init__(self, ds, x, y, z=None, y_err=None, x_err=None,
-                 c=None, **kwargs):
+    def __init__(self, ds, x, y, z=None, c=None, y_err=None, x_err=None,
+                 **kwargs):
         """
         """
         if isinstance(ds, xr.DataArray):
@@ -212,22 +212,28 @@ class Plotter(object):
         else:
             self._ctitle = self.c_coo if self.ctitle is None else self.ctitle
 
-    def prepare_z_vals(self, mode='lineplot'):
+    def prepare_z_vals(self, mode='lineplot', grid=False):
         """Work out what the 'z-coordinate', if any, should be.
+
+        Parameters
+        ----------
+        mode : {'lineplot', 'scatter', 'histogram'}
         """
         # TODO: process multi-var errors at same time
         self._multi_var = False
 
         # Multiple sets of data parametized by z_coo
         if self.z_coo is not None:
-            check_excess_dims(self._ds, self.y_coo, (self.x_coo, self.z_coo),
-                              mode=mode)
+            if not grid:
+                check_excess_dims(self._ds, self.y_coo,
+                                  (self.x_coo, self.z_coo), mode=mode)
             self._z_vals = self._ds[self.z_coo].values
 
         # Multiple data variables to plot -- just named in list
         elif isinstance(self.y_coo, (tuple, list)):
             for var in self.y_coo:
-                check_excess_dims(self._ds, var, (self.x_coo,), mode=mode)
+                if grid:
+                    check_excess_dims(self._ds, var, (self.x_coo,), mode=mode)
             self._multi_var = True
             self._z_vals = self.y_coo
 
@@ -238,7 +244,9 @@ class Plotter(object):
 
         # Single data variable to plot
         else:
-            check_excess_dims(self._ds, self.y_coo, (self.x_coo,), mode=mode)
+            if not grid:
+                check_excess_dims(self._ds, self.y_coo,
+                                  (self.x_coo,), mode=mode)
             self._z_vals = (None,)
 
     def prepare_z_labels(self):
@@ -384,11 +392,20 @@ class Plotter(object):
 
         self._gen_xy = gen_x
 
-    def prepare_heatmap_data(self):
+    def prepare_heatmap_data(self, grid=False):
         """Prepare the data to go into a heatmap.
         """
+        # Can only show one dataset
+        self._multi_var = False
+
         self._heatmap_x = self._ds[self.x_coo].values.flatten()
         self._heatmap_y = self._ds[self.y_coo].values.flatten()
+
+        if grid:
+            self._zmin = self._ds[self.z_coo].min()
+            self._zmax = self._ds[self.z_coo].max()
+            return
+
         self._heatmap_var = ma.masked_invalid(
             self._ds[self.z_coo]
                 .squeeze()
@@ -517,18 +534,28 @@ class Plotter(object):
         """
         if not self._data_range_calculated or force:
             # x data range
-            self._data_xmin = float(self._ds[self.x_coo].min())
-            self._data_xmax = float(self._ds[self.x_coo].max())
+            if self.x_coo is None:
+                self._data_xmin, self._data_xmax = None, None
+            elif isinstance(self.x_coo, str):
+                self._data_xmin = float(self._ds[self.x_coo].min())
+                self._data_xmax = float(self._ds[self.x_coo].max())
+            else:
+                self._data_xmin = float(min(self._ds[x].min()
+                                            for x in self.x_coo))
+                self._data_xmax = float(max(self._ds[x].max()
+                                            for x in self.x_coo))
 
             # y data range
-            if self._multi_var:
-                self._data_ymin = float(min(self._ds[var].min()
-                                            for var in self.y_coo))
-                self._data_ymax = float(max(self._ds[var].max()
-                                            for var in self.y_coo))
-            else:
+            if self.y_coo is None:
+                self._data_ymin, self._data_ymax = None, None
+            elif isinstance(self.y_coo, str):
                 self._data_ymin = float(self._ds[self.y_coo].min())
                 self._data_ymax = float(self._ds[self.y_coo].max())
+            else:
+                self._data_ymin = float(min(self._ds[y].min()
+                                            for y in self.y_coo))
+                self._data_ymax = float(max(self._ds[y].max()
+                                            for y in self.y_coo))
 
             self._data_range_calculated = True
 
@@ -545,8 +572,11 @@ class Plotter(object):
                 self.calc_data_range()
                 xmin, xmax = self._data_xmin, self._data_xmax
 
+            if xmin is None and xmax is None:
+                self._xlims = None
+
             # increase plot range if padding specified
-            if self.padding is not None:
+            elif self.padding is not None:
                 xrnge = xmax - xmin
                 self._xlims = (xmin - self.padding * xrnge,
                                xmax + self.padding * xrnge)
@@ -563,8 +593,11 @@ class Plotter(object):
                 self.calc_data_range()
                 ymin, ymax = self._data_ymin, self._data_ymax
 
+            if ymin is None and ymax is None:
+                self._ylims = None
+
             # increase plot range if padding specified
-            if self.padding is not None:
+            elif self.padding is not None:
                 yrnge = ymax - ymin
                 self._ylims = (ymin - self.padding * yrnge,
                                ymax + self.padding * yrnge)

@@ -34,13 +34,49 @@ def dataset_heatmap():
     y = np.linspace(20, 40, 21)
     xx, yy = np.meshgrid(x, y)
     c = np.cos(((xx**2 + yy**2)**0.5) / 2)
-    s = np.cos(((xx**2 + yy**2)**0.5) / 2)
+    s = np.sin(((xx**2 + yy**2)**0.5) / 2)
     ds = xr.Dataset(
         coords={'x': x,
                 'y': y},
         data_vars={'c': (('y', 'x'), c),
                    's': (('y', 'x'), s)})
     return ds.where(ds.y < 35)
+
+
+@fixture
+def dataset_4d():
+    x = np.linspace(10, 20, 11)
+    y = np.linspace(20, 40, 21)
+    phi = np.linspace(-0.1, 0.1, 3)
+    xx, yy, phis = np.meshgrid(x, y, phi)
+    c = np.cos(((xx**2 + yy**2)**0.5) / 2 + phis)
+    s = np.sin(((xx**2 + yy**2)**0.5) / 2 + phis)
+    ds = xr.Dataset(
+        coords={'x': x,
+                'y': y,
+                'phi': phi},
+        data_vars={'c': (('y', 'x', 'phi'), c),
+                   's': (('y', 'x', 'phi'), s)})
+    return ds
+
+
+@fixture
+def dataset_5d():
+    x = np.linspace(10, 20, 11)
+    y = np.linspace(20, 40, 21)
+    phi = np.linspace(-0.5, 0.5, 3)
+    A = [1, 2]
+    xx, yy, phis, AA = np.meshgrid(x, y, phi, A)
+    c = AA * np.cos(((xx**2 + yy**2)**0.5) / 2 + phis)
+    s = AA * np.sin(((xx**2 + yy**2)**0.5) / 2 + phis)
+    ds = xr.Dataset(
+        coords={'x': x,
+                'y': y,
+                'phi': phi,
+                'A': A},
+        data_vars={'c': (('y', 'x', 'phi', 'A'), c),
+                   's': (('y', 'x', 'phi', 'A'), s)})
+    return ds
 
 
 @fixture
@@ -152,21 +188,59 @@ class TestCommonInterface:
                 vlines=vlines,
                 hlines=hlines)
 
-    def test_multi_var(self, plot_fn):
-        # TODO: works
-        # TODO: colors
-        # TODO: labels
-        # TODO: ytitle
-        # TODO: padding, and lims
-        pass
+
+class TestLinePlot:
+
+    def test_multi_plot_4d(self, dataset_4d):
+        dataset_4d.xyz.lineplot('x', 'c', 'y', row='phi')
+        dataset_4d.xyz.lineplot('x', 'c', 'y', col='phi')
+
+    @mark.parametrize("colors", [False, True])
+    def test_multi_plot_5d(self, dataset_5d, colors):
+        kws = {'colors': colors}
+        dataset_5d.xyz.lineplot('x', 'c', 'y', row='phi', col='A', **kws)
+        dataset_5d.xyz.lineplot('x', 'c', 'y', col='phi', row='A', **kws)
 
 
 class TestHeatmap:
     def test_simple(self, dataset_heatmap):
         dataset_heatmap.xyz.heatmap('x', 'y', 'c', return_fig=True)
 
+    def test_multi_plot_4d(self, dataset_4d):
+        dataset_4d.xyz.heatmap('x', 'y', 'c', row='phi')
+        dataset_4d.xyz.heatmap('x', 'y', 'c', col='phi')
+
+    def test_multi_plot_5d(self, dataset_5d):
+        dataset_5d.xyz.heatmap('x', 'y', 'c', row='phi', col='A')
+        dataset_5d.xyz.heatmap('x', 'y', 'c', col='phi', row='A')
+
 
 class TestScatter:
 
     def test_normal(self, dataset_scatter):
         dataset_scatter.xyz.scatter('x', 'y')
+
+    def test_multi_plot_4d(self, dataset_4d):
+        dataset_4d.xyz.scatter('x', 'y', c='c', row='phi')
+        dataset_4d.xyz.scatter('x', 'y', c='c', col='phi')
+
+    def test_multi_plot_5d(self, dataset_5d):
+        dataset_5d.xyz.scatter('x', 'y', c='c', row='phi', col='A')
+        dataset_5d.xyz.scatter('x', 'y', c='c', col='phi', row='A')
+
+
+class TestHistogram:
+
+    def test_normal(self, dataset_3d):
+        dataset_3d.xyz.histogram('y', z='z')
+
+    def test_multi_hist(self, dataset_heatmap):
+        dataset_heatmap.xyz.histogram(('c', 's'))
+
+    def test_multi_plot_4d(self, dataset_4d):
+        dataset_4d.xyz.histogram(('c', 's'), row='phi')
+        dataset_4d.xyz.histogram(('c', 's'), col='phi')
+
+    def test_multi_plot_5d(self, dataset_5d):
+        dataset_5d.xyz.histogram(('c', 's'), row='phi', col='A')
+        dataset_5d.xyz.histogram(('c', 's'), col='phi', row='A')

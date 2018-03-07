@@ -5,10 +5,10 @@ Functions for plotting datasets nicely.
 # TODO: annotations, arbitrary text                                           #
 # TODO: docs                                                                  #
 
-
+import functools
 import numpy as np
 from ..manage import auto_xyz_ds
-from .core import Plotter
+from .core import Plotter, _PLOTTER_DEFAULTS
 from .color import xyz_colormaps
 
 
@@ -187,11 +187,10 @@ class PlotterMatplotlib(Plotter):
             return cl, cb
         return cl, cb, cw, ch
 
-    def plot_legend(self):
+    def plot_legend(self, grid=False):
         """Add a legend
         """
         if self._use_legend:
-
             if hasattr(self, '_legend_handles'):
                 handles, labels = self._legend_handles, self._legend_labels
             else:
@@ -209,20 +208,22 @@ class PlotterMatplotlib(Plotter):
             if should_auto_scale_legend_markers:
                 self.legend_marker_scale = 3 / self._markersize
 
-            lgnd = self._axes.legend(
-                handles, labels,
-                title=(self.z_coo if self.ztitle is None else self.ztitle),
-                loc=self.legend_loc,
-                fontsize=self.fontsize_zlabels,
-                frameon=self.legend_frame,
-                numpoints=1,
-                scatterpoints=1,
-                handlelength=self.legend_handlelength,
-                markerscale=self.legend_marker_scale,
-                labelspacing=self.legend_label_spacing,
-                columnspacing=self.legend_column_spacing,
-                bbox_to_anchor=self.legend_bbox,
-                ncol=self.legend_ncol)
+            opts = {
+                'title': (self.z_coo if self.ztitle is None else self.ztitle),
+                'loc': self.legend_loc,
+                'fontsize': self.fontsize_zlabels,
+                'frameon': self.legend_frame,
+                'numpoints': 1,
+                'scatterpoints': 1,
+                'handlelength': self.legend_handlelength,
+                'markerscale': self.legend_marker_scale,
+                'labelspacing': self.legend_label_spacing,
+                'columnspacing': self.legend_column_spacing,
+                'bbox_to_anchor': self.legend_bbox,
+                'ncol': self.legend_ncol
+            }
+
+            lgnd = self._axes.legend(handles, labels, **opts)
             lgnd.get_title().set_fontsize(self.fontsize_ztitle)
 
             if self.legend_marker_alpha is not None:
@@ -236,9 +237,10 @@ class PlotterMatplotlib(Plotter):
         self.mappable = ScalarMappable(cmap=self.cmap, norm=self._color_norm)
         self.mappable.set_array([])
 
-    def plot_colorbar(self):
+    def plot_colorbar(self, grid=False):
         """Add a colorbar to the data.
         """
+
         if self._use_colorbar:
             # Whether the colorbar should clip at either end
             extendmin = (self.vmin is not None) and (self.vmin > self._zmin)
@@ -248,12 +250,15 @@ class PlotterMatplotlib(Plotter):
                       'max' if extendmax else
                       'neither')
 
-            opts = {'extend': extend,
-                    'ticks': self.zticks}
+            opts = {'extend': extend, 'ticks': self.zticks}
 
             if self.colorbar_relative_position:
                 opts['cax'] = self._fig.add_axes(
                     self._cax_rel2abs_rect(self.colorbar_relative_position))
+
+            if grid:
+                opts['ax'] = self._fig.axes
+                opts['anchor'] = (0.5, 0.5)
 
             self._cbar = self._fig.colorbar(
                 self.mappable, **opts, **self.colorbar_opts)
@@ -286,11 +291,134 @@ class PlotterMatplotlib(Plotter):
 
 # --------------------------------------------------------------------------- #
 
+def calc_row_col_datasets(ds, row=None, col=None):
+    """
+    """
+    if row is not None:
+        rs = ds[row].values
+        nr = len(rs)
+
+    if col is not None:
+        cs = ds[col].values
+        nc = len(cs)
+
+    if row is None:
+        return [[ds.loc[{col: c}] for c in cs]], 1, nc
+
+    if col is None:
+        return [[ds.loc[{row: r}]] for r in rs], nr, 1
+
+    return [[ds.loc[{row: r, col: c}] for c in cs] for r in rs], nr, nc
+
+
+def multi_plot(fn):
+    """Decorate a plotting function to plot a grid of values.
+    """
+
+    @functools.wraps(fn)
+    def multi_plotter(ds, *args, row=None, col=None,
+                      hspace=None, wspace=None, **kwargs):
+
+        if (row is None) and (col is None):
+            return fn(ds, *args, **kwargs)
+
+        import matplotlib.pyplot as plt
+        from matplotlib.gridspec import GridSpec
+
+        # Set some global parameters
+        p = fn(ds, *args, **kwargs, call=False)
+        p.prepare_data_multi_grid()
+
+        kwargs['vmin'] = kwargs.pop('vmin', p.vmin)
+        kwargs['vmax'] = kwargs.pop('vmax', p.vmax)
+
+        # split the dataset into its respective rows and columns
+        ds_r_c, nrows, ncols = calc_row_col_datasets(ds, row=row, col=col)
+
+        figsize = kwargs.pop('figsize', _PLOTTER_DEFAULTS['figsize'])
+        return_fig = kwargs.pop('return_fig', _PLOTTER_DEFAULTS['return_fig'])
+
+        # generate a figure for all the plots to use
+        fig, ax = plt.subplots(figsize=figsize, dpi=100)
+        ax.set_axis_off()
+        # and a gridspec to position them
+        gs = GridSpec(nrows=nrows, ncols=ncols, hspace=hspace, wspace=wspace)
+
+        # range through rows and do subplots
+        for i, ds_r in enumerate(ds_r_c):
+            skws = {'legend': False, 'colorbar': False}
+
+            # if not last row
+            if i != nrows - 1:
+                skws['xticklabels_hide'] = True
+                skws['xtitle'] = ''
+
+            # range through columns
+            for j, sub_ds in enumerate(ds_r):
+
+                if hspace == 0 and wspace == 0:
+                    ticks_where = []
+                    if j == 0:
+                        ticks_where.append('left')
+                    if i == 0:
+                        ticks_where.append('top')
+                    if j == ncols - 1:
+                        ticks_where.append('right')
+                    if i == nrows - 1:
+                        ticks_where.append('bottom')
+                    skws['ticks_where'] = ticks_where
+
+                # if not first column
+                if j != 0:
+                    skws['yticklabels_hide'] = True
+                    skws['ytitle'] = ''
+
+                # label each column
+                if (i == 0) and (col is not None):
+                    skws['title'] = "{} = {}".format(col, ds[col].values[j])
+                    fx = 'fontsize_xtitle'
+                    skws['fontsize_title'] = kwargs.get(fx,
+                                                        _PLOTTER_DEFAULTS[fx])
+
+                # label each row
+                if (j == ncols - 1) and (row is not None):
+                    skws['ytitle_right'] = True
+                    skws['ytitle'] = "{} = {}".format(row, ds[row].values[i])
+
+                fn(sub_ds, *args, add_to_fig=fig,
+                   subplot=gs[i, j], **{**kwargs, **skws})
+
+        # make sure all have the same plot ranges
+        ymins, ymaxs = zip(*(ax.get_ylim() for ax in fig.axes[1:]))
+        ymin, ymax = min(ymins), max(ymaxs)
+        for ax in fig.axes:
+            ax.set_ylim(ymin, ymax)
+
+        # make sure all have the same plot ranges
+        xmins, xmaxs = zip(*(ax.get_xlim() for ax in fig.axes[1:]))
+        xmin, xmax = min(xmins), max(xmaxs)
+        for ax in fig.axes:
+            ax.set_xlim(xmin, xmax)
+
+        p._fig = fig
+        p._axes = ax
+        p.plot_legend(grid=True)
+        p.plot_colorbar(grid=True)
+
+        if return_fig:
+            plt.close(fig)
+            return fig
+
+    return multi_plotter
+
+
+# --------------------------------------------------------------------------- #
+
 class LinePlot(PlotterMatplotlib):
     """
     """
 
-    def __init__(self, ds, x, y, z=None, y_err=None, x_err=None, **kwargs):
+    def __init__(self, ds, x, y, z=None, *, y_err=None, x_err=None, **kwargs):
         super().__init__(ds, x, y, z=z, y_err=y_err, x_err=x_err, **kwargs)
 
     def plot_lines(self):
@@ -325,6 +453,12 @@ class LinePlot(PlotterMatplotlib):
                 # add line to axes, with options cycled through
                 self._axes.plot(data['x'], data['y'], **line_opts)
 
+    def prepare_data_multi_grid(self):
+        self.prepare_axes_labels()
+        self.prepare_z_vals(grid=True)
+        self.calc_use_legend_or_colorbar()
+        self.calc_color_norm()
+
     def __call__(self):
         # Core preparation
         self.prepare_axes_labels()
@@ -352,10 +486,13 @@ class LinePlot(PlotterMatplotlib):
         return self.show()
 
 
+@multi_plot
 def lineplot(ds, x, y, z=None, y_err=None, x_err=None, **kwargs):
     """
     """
-    return LinePlot(ds, x, y, z, y_err=y_err, x_err=x_err, **kwargs)()
+    call = kwargs.pop('call', True)
+    P = LinePlot(ds, x, y, z, y_err=y_err, x_err=x_err, **kwargs)
+    return P if not call else P()
 
 
 class AutoLinePlot(LinePlot):
@@ -422,6 +559,12 @@ class Scatter(PlotterMatplotlib):
             self._legend_labels.append(
                 scatter_opts['label'])
 
+    def prepare_data_multi_grid(self):
+        self.prepare_axes_labels()
+        self.prepare_z_vals(mode='scatter', grid=True)
+        self.calc_use_legend_or_colorbar()
+        self.calc_color_norm()
+
     def __call__(self):
         # Core preparation
         self.prepare_axes_labels()
@@ -449,10 +592,13 @@ class Scatter(PlotterMatplotlib):
         return self.show()
 
 
+@multi_plot
 def scatter(ds, x, y, z=None, y_err=None, x_err=None, **kwargs):
     """
     """
-    return Scatter(ds, x, y, z, y_err=y_err, x_err=x_err, **kwargs)()
+    call = kwargs.pop('call', True)
+    P = Scatter(ds, x, y, z, y_err=y_err, x_err=x_err, **kwargs)
+    return P if not call else P()
 
 
 class AutoScatter(Scatter):
@@ -547,6 +693,12 @@ class Histogram(PlotterMatplotlib):
         # store handles for legend
         self._legend_handles, self._legend_labels = hnds, lbs
 
+    def prepare_data_multi_grid(self):
+        self.prepare_axes_labels()
+        self.prepare_z_vals(mode='histogram', grid=True)
+        self.calc_use_legend_or_colorbar()
+        self.calc_color_norm()
+
     def __call__(self):
         # Core preparation
         self.prepare_axes_labels()
@@ -573,10 +725,22 @@ class Histogram(PlotterMatplotlib):
         return self.show()
 
 
+@multi_plot
 def histogram(ds, x, z=None, **kwargs):
+    """Dataset histogram.
+
+    Parameters
+    ----------
+    ds : xarray.Dataset
+        The dataset to plot.
+    x : str, sequence of str
+        The variable(s) to plot the probability density of.
+    z : str, optional
+        If given, range over this coordinate a plot a histogram for each.
     """
-    """
-    return Histogram(ds, x, z=z, **kwargs)()
+    call = kwargs.pop('call', True)
+    P = Histogram(ds, x, z=z, **kwargs)
+    return P if not call else P()
 
 
 # --------------------------------------------------------------------------- #
@@ -614,8 +778,13 @@ class HeatMap(PlotterMatplotlib):
             cmap=xyz_colormaps(self.colormap),
             rasterized=self.rasterize)
 
-    def __call__(self):
+    def prepare_data_multi_grid(self):
+        self.prepare_axes_labels()
+        self.prepare_heatmap_data(grid=True)
+        self.calc_use_legend_or_colorbar()
+        self.calc_color_norm()
 
+    def __call__(self):
         # Core preparation
         self.prepare_axes_labels()
         self.prepare_heatmap_data()
@@ -635,10 +804,13 @@ class HeatMap(PlotterMatplotlib):
         return self.show()
 
 
+@multi_plot
 def heatmap(ds, x, y, z, **kwargs):
     """
     """
-    return HeatMap(ds, x, y, z, **kwargs)()
+    call = kwargs.pop('call', True)
+    P = HeatMap(ds, x, y, z, **kwargs)
+    return P if not call else P()
 
 
 # --------------- Miscellenous matplotlib plotting functions ---------------- #
