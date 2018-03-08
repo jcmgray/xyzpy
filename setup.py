@@ -15,7 +15,7 @@ setup(
         'distributed>=1.15.2',
         'joblib>=0.10',
         'tqdm>=4.7.6',
-        'matplotlib>=2.0.0',
+        'matplotlib>=2.2.0',
         'bokeh>=0.12.3',
     ],
     classifiers=[

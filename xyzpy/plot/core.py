@@ -43,7 +43,7 @@ _PLOTTER_DEFAULTS = {
     'zlims': (None, None),
     'zticks': None,
     'legend': None,
-    'legend_loc': 0,
+    'legend_loc': 'best',
     'legend_ncol': 1,
     'legend_bbox': None,
     'legend_marker_scale': None,
@@ -456,12 +456,11 @@ class Plotter:
             rvals = (self._color_norm(z) for z in self._c_cols)
         # set from coordinate
         else:
-            if np.isreal(self._ds[self.z_coo].values[0]):
-                rvals = (self._color_norm(z)
-                         for z in self._ds[self.z_coo].values)
+            if np.isreal(self._z_vals[0]):
+                rvals = (self._color_norm(z) for z in self._z_vals)
             else:
                 # no relative coloring possible e.g. for strings
-                rvals = np.linspace(0, 1, self._ds[self.z_coo].size)
+                rvals = np.linspace(0, 1, len(self._z_vals))
 
         # Map relative value to mpl color
         self._cols = (self.cmap(rval) for rval in rvals)

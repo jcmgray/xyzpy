@@ -94,4 +94,4 @@ def get_default_sequential_cm(engine='MATPLOTLIB'):
         from bokeh.palettes import Category10_9
         return itertools.cycle(Category10_9)
     else:
-        return itertools.cycle(rgb + (1.,) for rgb in cm.Vega10.colors)
+        return itertools.cycle(rgb + (1.,) for rgb in cm.tab10.colors)

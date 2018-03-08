@@ -187,14 +187,15 @@ class PlotterMatplotlib(Plotter):
             return cl, cb
         return cl, cb, cw, ch
 
-    def plot_legend(self, grid=False):
+    def plot_legend(self, grid=False, labels_handles=None):
         """Add a legend
         """
         if self._use_legend:
-            if hasattr(self, '_legend_handles'):
-                handles, labels = self._legend_handles, self._legend_labels
+
+            if labels_handles:
+                labels, handles = zip(*labels_handles.items())
             else:
-                handles, labels = self._axes.get_legend_handles_labels()
+                handles, labels = self._legend_handles, self._legend_labels
 
             if self.legend_reverse:
                 handles, labels = handles[::-1], labels[::-1]
@@ -223,7 +224,19 @@ class PlotterMatplotlib(Plotter):
                 'ncol': self.legend_ncol
             }
 
-            lgnd = self._axes.legend(handles, labels, **opts)
+            if grid:
+                bb = opts['bbox_to_anchor']
+                if bb is None:
+                    opts['bbox_to_anchor'] = (1, 0.5, 0, 0)
+                    opts['loc'] = 'center left'
+                else:
+                    loc = opts['loc']
+                    # will get warning for 'best'
+                    opts['loc'] = 'center' if loc in ('best', 0) else loc
+                lgnd = self._fig.legend(handles, labels, **opts)
+            else:
+                lgnd = self._axes.legend(handles, labels, **opts)
+
             lgnd.get_title().set_fontsize(self.fontsize_ztitle)
 
             if self.legend_marker_alpha is not None:
@@ -316,8 +329,8 @@ def multi_plot(fn):
     """
 
     @functools.wraps(fn)
-    def multi_plotter(ds, *args, row=None, col=None,
-                      hspace=None, wspace=None, **kwargs):
+    def multi_plotter(ds, *args, row=None, col=None, hspace=None, wspace=None,
+                      tight_layout=True, **kwargs):
 
         if (row is None) and (col is None):
             return fn(ds, *args, **kwargs)
@@ -339,10 +352,13 @@ def multi_plot(fn):
         return_fig = kwargs.pop('return_fig', _PLOTTER_DEFAULTS['return_fig'])
 
         # generate a figure for all the plots to use
-        fig, ax = plt.subplots(figsize=figsize, dpi=100)
-        ax.set_axis_off()
+        p._fig = plt.figure(figsize=figsize, dpi=100, constrained_layout=True)
         # and a gridspec to position them
-        gs = GridSpec(nrows=nrows, ncols=ncols, hspace=hspace, wspace=wspace)
+        gs = GridSpec(nrows=nrows, ncols=ncols, figure=p._fig,
+                      hspace=hspace, wspace=wspace)
+
+        # want to collect all entires for legend
+        labels_handles = {}
 
         # range through rows and do subplots
         for i, ds_r in enumerate(ds_r_c):
@@ -377,37 +393,47 @@ def multi_plot(fn):
                 if (i == 0) and (col is not None):
                     skws['title'] = "{} = {}".format(col, ds[col].values[j])
                     fx = 'fontsize_xtitle'
-                    skws['fontsize_title'] = kwargs.get(fx,
-                                                        _PLOTTER_DEFAULTS[fx])
+                    skws['fontsize_title'] = kwargs.get(
+                        fx, _PLOTTER_DEFAULTS[fx])
 
                 # label each row
                 if (j == ncols - 1) and (row is not None):
                     skws['ytitle_right'] = True
                     skws['ytitle'] = "{} = {}".format(row, ds[row].values[i])
 
-                fn(sub_ds, *args, add_to_fig=fig,
-                   subplot=gs[i, j], **{**kwargs, **skws})
+                sP = fn(sub_ds, *args, add_to_fig=p._fig, call='both',
+                        subplot=gs[i, j], **{**kwargs, **skws})
+
+                try:
+                    labels_handles.update(dict(zip(sP._legend_labels,
+                                                   sP._legend_handles)))
+                except AttributeError:
+                    pass
 
         # make sure all have the same plot ranges
-        ymins, ymaxs = zip(*(ax.get_ylim() for ax in fig.axes[1:]))
-        ymin, ymax = min(ymins), max(ymaxs)
-        for ax in fig.axes:
-            ax.set_ylim(ymin, ymax)
-
-        # make sure all have the same plot ranges
-        xmins, xmaxs = zip(*(ax.get_xlim() for ax in fig.axes[1:]))
+        xmins, xmaxs = zip(*(gax.get_xlim() for gax in p._fig.axes))
+        ymins, ymaxs = zip(*(gax.get_ylim() for gax in p._fig.axes))
         xmin, xmax = min(xmins), max(xmaxs)
-        for ax in fig.axes:
-            ax.set_xlim(xmin, xmax)
+        ymin, ymax = min(ymins), max(ymaxs)
+        for gax in p._fig.axes:
+            gax.set_xlim(xmin, xmax)
+            gax.set_ylim(ymin, ymax)
 
-        p._fig = fig
-        p._axes = ax
-        p.plot_legend(grid=True)
+        # add global legend or colorbar
+        p.plot_legend(grid=True, labels_handles=labels_handles)
+
+        # # adjust plots so that legend etc looks tight
+        # if tight_layout:
+        #     import warnings
+        #     with warnings.catch_warnings():
+        #         warnings.simplefilter("ignore", UserWarning)
+        #         p._fig.constrained_layout()
+
         p.plot_colorbar(grid=True)
 
         if return_fig:
-            plt.close(fig)
-            return fig
+            plt.close(p._fig)
+            return p._fig
 
     return multi_plotter
 
@@ -434,7 +460,7 @@ class LinePlot(PlotterMatplotlib):
                 'markersize': self._markersize,
                 'markeredgecolor': col[:3] + (self.marker_alpha * col[3],),
                 'markerfacecolor': col[:3] + (self.marker_alpha * col[3] / 2,),
-                'label': next(self._zlbls) if self._use_legend else None,
+                'label': next(self._zlbls),
                 'zorder': next(self._zordrs),
                 'linestyle': next(self._lines),
                 'rasterized': self.rasterize,
@@ -452,6 +478,9 @@ class LinePlot(PlotterMatplotlib):
             else:
                 # add line to axes, with options cycled through
                 self._axes.plot(data['x'], data['y'], **line_opts)
+
+            self._legend_handles, self._legend_labels = \
+                self._axes.get_legend_handles_labels()
 
     def prepare_data_multi_grid(self):
         self.prepare_axes_labels()
@@ -492,7 +521,14 @@ def lineplot(ds, x, y, z=None, y_err=None, x_err=None, **kwargs):
     """
     call = kwargs.pop('call', True)
     P = LinePlot(ds, x, y, z, y_err=y_err, x_err=x_err, **kwargs)
-    return P if not call else P()
+
+    if call == 'both':
+        P()
+        return P
+    elif call:
+        return P()
+    else:
+        return P
 
 
 class AutoLinePlot(LinePlot):
@@ -546,7 +582,7 @@ class Scatter(PlotterMatplotlib):
                 'marker': next(self._mrkrs),
                 's': self._markersize,
                 'alpha': self.marker_alpha,
-                'label': next(self._zlbls) if self._use_legend else None,
+                'label': next(self._zlbls),
                 'zorder': next(self._zordrs),
                 'rasterized': self.rasterize,
             }
@@ -598,7 +634,14 @@ def scatter(ds, x, y, z=None, y_err=None, x_err=None, **kwargs):
     """
     call = kwargs.pop('call', True)
     P = Scatter(ds, x, y, z, y_err=y_err, x_err=x_err, **kwargs)
-    return P if not call else P()
+
+    if call == 'both':
+        P()
+        return P
+    elif call:
+        return P()
+    else:
+        return P
 
 
 class AutoScatter(Scatter):
@@ -656,7 +699,7 @@ class Histogram(PlotterMatplotlib):
                 facecolor = col[:3] + (self.marker_alpha * col[3] / 4,)
                 linewidth = next(self._lws)
                 zorder = next(self._zordrs)
-                label = next(self._zlbls) if self._use_legend else None
+                label = next(self._zlbls)
 
                 handle = Rectangle((0, 0), 1, 1, color=facecolor, ec=edgecolor)
 
@@ -666,9 +709,9 @@ class Histogram(PlotterMatplotlib):
         xs, ecs, fcs, lws, zds, lbs, hnds = zip(*gen_ind_plots())
 
         histogram_opts = {
-            'label': lbs if self._use_legend else None,
+            'label': lbs,
             'bins': self.bins,
-            'normed': True,
+            'density': True,
             'histtype': 'stepfilled',
             'fill': True,
             'stacked': self.stacked,
@@ -740,7 +783,14 @@ def histogram(ds, x, z=None, **kwargs):
     """
     call = kwargs.pop('call', True)
     P = Histogram(ds, x, z=z, **kwargs)
-    return P if not call else P()
+
+    if call == 'both':
+        P()
+        return P
+    elif call:
+        return P()
+    else:
+        return P
 
 
 # --------------------------------------------------------------------------- #
@@ -810,7 +860,14 @@ def heatmap(ds, x, y, z, **kwargs):
     """
     call = kwargs.pop('call', True)
     P = HeatMap(ds, x, y, z, **kwargs)
-    return P if not call else P()
+
+    if call == 'both':
+        P()
+        return P
+    elif call:
+        return P()
+    else:
+        return P
 
 
 # --------------- Miscellenous matplotlib plotting functions ---------------- #
