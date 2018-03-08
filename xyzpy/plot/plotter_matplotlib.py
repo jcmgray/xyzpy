@@ -352,7 +352,9 @@ def multi_plot(fn):
         return_fig = kwargs.pop('return_fig', _PLOTTER_DEFAULTS['return_fig'])
 
         # generate a figure for all the plots to use
-        p._fig = plt.figure(figsize=figsize, dpi=100, constrained_layout=True)
+        p._fig = plt.figure(figsize=figsize, dpi=100,
+                            constrained_layout=tight_layout)
+        p._fig.set_constrained_layout_pads(hspace=hspace, wspace=wspace)
         # and a gridspec to position them
         gs = GridSpec(nrows=nrows, ncols=ncols, figure=p._fig,
                       hspace=hspace, wspace=wspace)
