@@ -1,0 +1,24 @@
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - python=3.6
+  - numpy
+  - numba
+  - scipy
+  - xarray
+  - dask
+  - distributed
+  - zict
+  - joblib
+  - netcdf4
+  - hdf4
+  - h5py
+  - h5netcdf
+  - tqdm
+  - matplotlib
+  - bokeh
+  - cytoolz
+  - cloudpickle
+  - sphinx
+  - sphinx_bootstrap_theme

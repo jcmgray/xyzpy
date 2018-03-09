@@ -2,15 +2,15 @@ channels:
   - defaults
   - conda-forge
 dependencies:
-  - python=3.5
+  - python=3.6
   - numpy
   - numba
   - scipy
   - xarray
-  - dask >= 0.13.0
-  - distributed >=1.15.1
-  - zict >= 0.1.1
-  - joblib >= 0.10.2
+  - dask
+  - distributed
+  - zict
+  - joblib
   - netcdf4
   - hdf4
   - h5py

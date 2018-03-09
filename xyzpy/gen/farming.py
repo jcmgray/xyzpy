@@ -36,6 +36,38 @@ from ..manage import load_ds, save_ds
 class Runner(object):
     """Container class with all the information needed to systematically
     run a function over many parameters and capture the output in a dataset.
+
+    Parameters
+    ----------
+    fn : callable
+        Function that produces a single instance of a result.
+    var_names : str, sequence of str, or None
+        The ordered name(s) of the ouput variable(s) of `fn`. Set this
+        explicitly to None if `fn` outputs already labelled data as a
+        :class:`~xarray.Dataset` or :class:`~xarray.DataArray`.
+    fn_args : str, or sequence of str, optional
+        The ordered name(s) of the input arguments(s) of `fn`. This is only
+        needed if the cases or combos supplied are not dict-like.
+    var_dims : dict-like, optional
+        Mapping of output variables to their named internal dimensions, can be
+        the names of ``constants``.
+    var_coords : dict-like, optional
+        Mapping of output variables named internal dimensions to the actual
+        values they take.
+    constants : dict-like, optional
+        Constants arguments to be supplied to `fn`. These can be used as
+        'var_dims', and will be saved as coords if so, otherwise as attributes.
+    resources : dict-like, optional
+        Like `constants` but not saved to the the dataset, e.g. if very big.
+    attrs : dict-like, optional
+        Any other miscelleous information to be saved with the dataset.
+    **default_runner_settings
+        These keyword arguments will be supplied as defaults to any runner.
+
+    Members
+    -------
+    last_ds : xarray.Dataset
+        The last dataset generated with this Runner.
     """
 
     def __init__(self, fn, var_names,
@@ -46,37 +78,6 @@ class Runner(object):
                  resources=None,
                  attrs=None,
                  **default_runner_settings):
-        """
-        Parameters
-        ----------
-            fn : callable
-                Function that produces a single instance of a result.
-            var_names : str, sequence of str, or None
-                The ordered name(s) of the ouput variable(s) of `fn`. Set this
-                explicitly to None if `fn` outputs already labelled data as a
-                Dataset or DataArray.
-            fn_args : str, or sequence of str, optional
-                The ordered name(s) of the input arguments(s) of `fn`. This is
-                only needed if the cases or combos supplied are not dict-like.
-            var_dims : dict-like, optional
-                Mapping of output variables to their named internal dimensions.
-            var_coords : dict-like, optional
-                Mapping of output variables named internal dimensions to the
-                actual values they take.
-            constants : dict-like, optional
-                Constants arguments to be supplied to `fn`. These can be used
-                as 'var_dims', and will be saved as coords if so, otherwise
-                as attributes.
-            resources : dict-like, optional
-                Like `constants` but not saved to the the dataset, e.g. if
-                very big.
-            attrs : dict-like, optional
-                Any other miscelleous information to be saved with the
-                dataset.
-            **default_runner_settings
-                These keyword arguments will be supplied as defaults to any
-                runner.
-        """
         self.fn = fn
         self._var_names = _parse_var_names(var_names)
         self._fn_args = (_parse_fn_args(fn_args) if fn_args is not None else
@@ -172,14 +173,14 @@ class Runner(object):
 
         Parameters
         ----------
-            combos : tuple of form ((str, seq), *)
-                The values of each function argument with which to evaluate
-                all combinations.
-            constants : dict (optional)
-                Extra constant arguments for this run, repeated arguments will
-                take precedence over stored constants but for this run only.
-            **runner_settings :
-                Keyword arguments supplied to `combo_runner`
+        combos : tuple of form ((str, seq), *)
+            The values of each function argument with which to evaluate all
+            combinations.
+        constants : dict (optional)
+            Extra constant arguments for this run, repeated arguments will
+            take precedence over stored constants but for this run only.
+        runner_settings
+            Keyword arguments supplied to ``combo_runner``.
         """
         combos = _parse_combos(combos)
         self.last_ds = combo_runner_to_ds(
@@ -253,18 +254,18 @@ class Harvester(object):
 
     Parameters
     ----------
-    runner : Runner instance
+    runner : Runner
         Performs the runs and describes the results.
-    data_name : str
+    data_name : str, optional
         Base file path to save data to.
-    chunks : bool, optional
-        If not None, passed passed to xarray so that the full dataset is
-        loaded and merged into with on-disk dask arrays.
+    chunks : int or dict, optional
+        If not None, passed to xarray so that the full dataset is loaded and
+        merged into with on-disk dask arrays.
     engine : str, optional
         Engine to use to save and load datasets.
     full_ds : xarray.Dataset, optional
-        Initialize the Harvester with this dataset as the intitial
-        full dataset.
+        Initialize the Harvester with this dataset as the intitial full
+        dataset.
 
     Members
     -------
@@ -302,9 +303,9 @@ class Harvester(object):
 
         Parameters
         ----------
-        chunks : bool, optional
-            If not None, passed passed to xarray so that the full dataset is
-            loaded and merged into with on-disk dask arrays.
+        chunks : int or dict, optional
+            If not None, passed to xarray so that the full dataset is loaded
+            and merged into with on-disk dask arrays.
         engine : str, optional
             Engine to use to save and load datasets.
         """
@@ -375,14 +376,17 @@ class Harvester(object):
             If True (default), load and save the disk dataset before
             and after merging in the new data.
         overwrite : {None, False, True}, optional
+            How to combine data from the new run into the current full_ds:
+
                 * ``None`` (default): attempt the merge and only raise if
-                data conflicts.
+                  data conflicts.
                 * ``True``: overwrite conflicting current data with
-                that from the new dataset.
-                *``False``: drop any conflicting data from the new dataset.
-        chunks : bool, optional
-            If not None, passed passed to xarray so that the full dataset is
-            loaded and merged into with on-disk dask arrays.
+                  that from the new dataset.
+                * ``False``: drop any conflicting data from the new dataset.
+
+        chunks : int or dict, optional
+            If not None, passed to xarray so that the full dataset is loaded
+            and merged into with on-disk dask arrays.
         engine : str, optional
             Engine to use to save and load datasets.
         """
