@@ -12,7 +12,6 @@ from xyzpy.gen.case_runner import (
 )
 from xyzpy.gen.combo_runner import combo_runner_to_ds
 from . import (
-    _GET_MODES,
     foo3_scalar,
     foo3_float_bool,
     foo2_array,
@@ -49,13 +48,11 @@ class TestCaseRunner:
                          constants={'b': 10, 'c': 100})
         assert xs == (111, 112, 113)
 
-    @pytest.mark.parametrize("scheduler", _GET_MODES)
-    def test_parallel(self, scheduler):
+    def test_parallel(self):
         cases = ((1, 10, 100),
                  (2, 20, 200),
                  (3, 30, 300))
-        xs = case_runner(foo3_scalar, ('a', 'b', 'c'), cases, num_workers=2,
-                         scheduler=scheduler)
+        xs = case_runner(foo3_scalar, ('a', 'b', 'c'), cases, num_workers=1)
         assert xs == (111, 222, 333)
 
     def test_split(self):

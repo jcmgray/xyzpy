@@ -12,12 +12,17 @@ _DEFAULT_FN_CACHE_PATH = '__xyz_cache__'
 
 
 def cache_to_disk(fn=None, *, cachedir=_DEFAULT_FN_CACHE_PATH, **kwargs):
+    """Cache this function to disk, using joblib.
+    """
     import joblib
     mem = joblib.Memory(cachedir=cachedir, verbose=0, **kwargs)
 
-    if fn:  # bare decorator
+    # bare decorator
+    if fn:
         return mem.cache(fn)
-    else:  # called with kwargs
+
+    # decorator called with kwargs
+    else:
         def cache_to_disk_decorator(fn):
             return mem.cache(fn)
         return cache_to_disk_decorator

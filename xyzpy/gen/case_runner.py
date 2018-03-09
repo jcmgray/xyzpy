@@ -6,7 +6,7 @@ from cytoolz import concat
 import numpy as np
 import xarray as xr
 
-from ..utils import _get_fn_name, progbar  # unzip
+from ..utils import progbar
 from .prepare import (
     _parse_fn_args,
     _parse_cases,
@@ -22,29 +22,32 @@ from .prepare import (
 from .combo_runner import _combo_runner
 
 
+class SingleArgFn:
+
+    def __init__(self, fn):
+        self.fn = fn
+
+    def __call__(self, kws, **kwargs):
+        return self.fn(**kws, **kwargs)
+
+
 def _case_runner(fn, fn_args, cases, constants,
                  split=False,
                  parallel=False,
                  num_workers=None,
-                 scheduler=None,
                  pool=None,
                  hide_progbar=False):
     """Core case runner, i.e. without parsing of arguments.
     """
     # Turn the function into a single arg function to send to combo_runner
-    def single_dict_arg_fn(kws, **kwargs):
-        return fn(**kws, **kwargs)
-
-    fn_name = _get_fn_name(fn)
-    single_dict_arg_fn.__name__ = fn_name
+    sfn = SingleArgFn(fn)
     combos = (('kws', [dict(zip(fn_args, case)) for case in cases]),)
 
-    return _combo_runner(single_dict_arg_fn, combos,
+    return _combo_runner(sfn, combos,
                          constants=constants,
                          split=split,
                          parallel=parallel,
                          num_workers=num_workers,
-                         scheduler=scheduler,
                          pool=pool,
                          hide_progbar=hide_progbar)
 
@@ -53,7 +56,6 @@ def case_runner(fn, fn_args, cases,
                 constants=None,
                 split=False,
                 parallel=False,
-                scheduler=None,
                 pool=None,
                 num_workers=None,
                 hide_progbar=False):
@@ -62,26 +64,24 @@ def case_runner(fn, fn_args, cases,
 
     Parameters
     ----------
-        fn : callable
-            Function with which to evalute cases with
-        fn_args : tuple
-            Names of case arguments that fn takes
-        cases : tuple of tuple
-            List settings that fn_args take
-        constants : dict (optional)
-            List of tuples/dict of *constant* fn argument mappings.
-        split : bool (optional)
-            Whether to split into multiple output arrays or not.
-        parallel : bool (optional)
-            Process combos in parallel, default number of workers picked.
-        scheduler : str or dask.get instance (optional)
-            Specify scheduler to use for the parallel work.
-        pool : executor-like pool (optional)
-            Submit all combos to this pool.
-        num_workers : int (optional)
-            Explicitly choose how many workers to use, None for automatic.
-        hide_progbar : bool (optional)
-            Whether to disable the progress bar.
+    fn : callable
+        Function with which to evalute cases with
+    fn_args : tuple
+        Names of case arguments that fn takes
+    cases : tuple of tuple
+        List settings that fn_args take
+    constants : dict (optional)
+        List of tuples/dict of *constant* fn argument mappings.
+    split : bool (optional)
+        Whether to split into multiple output arrays or not.
+    parallel : bool (optional)
+        Process combos in parallel, default number of workers picked.
+    pool : executor-like pool (optional)
+        Submit all combos to this pool.
+    num_workers : int (optional)
+        Explicitly choose how many workers to use, None for automatic.
+    hide_progbar : bool (optional)
+        Whether to disable the progress bar.
 
     Returns
     -------
@@ -96,7 +96,6 @@ def case_runner(fn, fn_args, cases,
                         constants=constants,
                         split=split,
                         parallel=parallel,
-                        scheduler=scheduler,
                         num_workers=num_workers,
                         pool=pool,
                         hide_progbar=hide_progbar)
@@ -118,19 +117,22 @@ def all_missing_ds(coords, var_names, all_dims, var_types, attrs=None):
 
     Parameters
     ----------
-        coords : dict
-            coordinates of dataset
-        var_names : tuple
-            names of each variable in dataset
-        all_dims : tuple
-            corresponding list of dimensions for each variable
-        var_types : tuple
-            corresponding list of types for each variable
+    coords : dict
+        coordinates of dataset
+    var_names : tuple
+        names of each variable in dataset
+    all_dims : tuple
+        corresponding list of dimensions for each variable
+    var_types : tuple
+        corresponding list of types for each variable
     """
     # Blank dataset with appropirate coordinates
     ds = xr.Dataset(coords=coords, attrs=attrs)
+
     for v_name, v_dims, v_type in zip(var_names, all_dims, var_types):
+
         shape = tuple(ds[d].size for d in v_dims)
+
         if v_type == int or v_type == float:
             # Warn about upcasting int to float?
             nodata = np.tile(np.nan, shape)
@@ -139,6 +141,7 @@ def all_missing_ds(coords, var_names, all_dims, var_types, attrs=None):
         else:
             nodata = np.tile(None, shape).astype(object)
         ds[v_name] = (v_dims, nodata)
+
     return ds
 
 
@@ -150,24 +153,28 @@ def _cases_to_ds(results, fn_args, cases, var_names, add_to_ds=None,
 
     Parameters
     ----------
-        results: list(s) of results of len(cases), e.g. generated by
-            `case_runner`.
-        fn_args: arguments used in function that generated the results
-        cases: list of configurations used to generate results
-        var_names: name(s) of output variables for a single result
-        var_dims: the list of named coordinates for each single result
-            variable, i.e. coordinates not generated by the combo_runner
-        var_coords: dict of values for those coordinates if custom ones are
-            desired.
+    results :
+        List(s) of results of len(cases), e.g. generated by `case_runner`.
+    fn_args :
+        Arguments used in function that generated the results.
+    cases :
+        List of configurations used to generate results.
+    var_names:
+        Name(s) of output variables for a single result.
+    var_dims :
+        The list of named coordinates for each single result variable, i.e.
+        coordinates not generated by the combo_runner.
+    var_coords: dict of values for those coordinates if custom ones are
+        desired.
 
     Returns
     -------
-        ds: Dataset holding all results, with coordinates described by cases
+    ds: Dataset holding all results, with coordinates described by cases
 
     Notes
     -----
-        1. Many data types have to be converted to object in order for the
-            missing values to be represented by NaNs.
+    1. Many data types have to be converted to object in order for the
+        missing values to be represented by NaNs.
     """
     results = _parse_case_results(results, var_names)
 
@@ -190,6 +197,9 @@ def _cases_to_ds(results, fn_args, cases, var_names, add_to_ds=None,
 
     # Go through cases, overwriting nan with results
     for res, cfg in zip(results, cases):
+
+        cfg = [[c] for c in cfg]
+
         for vname, x in zip(var_names, res):
             if not overwrite:
                 if not ds[vname].loc[dict(zip(fn_args, cfg))].isnull().all():
@@ -197,7 +207,7 @@ def _cases_to_ds(results, fn_args, cases, var_names, add_to_ds=None,
             try:
                 len(x)
                 ds[vname].loc[dict(zip(fn_args, cfg))] = np.asarray(x)
-            except TypeError:
+            except (TypeError, ValueError):
                 ds[vname].loc[dict(zip(fn_args, cfg))] = x
 
     return ds
@@ -218,13 +228,13 @@ def case_runner_to_ds(fn, fn_args, cases, var_names,
 
     Parameters
     ----------
-        fn: function to evaluate
-        fn_args: names of function args
-        cases: list of function arg configurations
-        var_names: list of names of single fn output
-        var_dims: list of list of extra dims for each fn output
-        var_coords: dictionary describing custom values of var_dims
-        case_runner_settings: dict to supply to `case_runner`
+    fn: function to evaluate
+    fn_args: names of function args
+    cases: list of function arg configurations
+    var_names: list of names of single fn output
+    var_dims: list of list of extra dims for each fn output
+    var_coords: dictionary describing custom values of var_dims
+    case_runner_settings: dict to supply to `case_runner`
 
     Returns
     -------
@@ -266,17 +276,17 @@ def find_missing_cases(ds, ignore_dims=None, show_progbar=False):
 
     Parameters
     ----------
-        ds : xarray.Dataset
-            Dataset in which to find missing data
-        ignore_dims : set (optional)
-            internal variable dimensions (i.e. to ignore)
-        show_progbar : bool (optional)
-            Show the current progress
+    ds : xarray.Dataset
+        Dataset in which to find missing data
+    ignore_dims : set (optional)
+        internal variable dimensions (i.e. to ignore)
+    show_progbar : bool (optional)
+        Show the current progress
 
     Returns
     -------
-        missing_fn_args, missing_cases :
-            Function arguments and missing cases.
+    missing_fn_args, missing_cases :
+        Function arguments and missing cases.
     """
     # Parse ignore_dims
     ignore_dims = ({ignore_dims} if isinstance(ignore_dims, str) else
@@ -307,17 +317,17 @@ def fill_missing_cases(ds, fn, var_names,
 
     Parameters
     ----------
-        ds : xarray.Dataset
-            Dataset to analyse and fill
-        fn : callable
-            Function to use to fill missing cases
-        var_names : tuple
-            Output variable names of function
-        var_dims : dict
-            Output variabe named dimensions of function
-        var_coords : dict
-            Dictionary of coords for output dims
-        **case_runner_settings: settings sent to `case_runner`
+    ds : xarray.Dataset
+        Dataset to analyse and fill
+    fn : callable
+        Function to use to fill missing cases
+    var_names : tuple
+        Output variable names of function
+    var_dims : dict
+        Output variabe named dimensions of function
+    var_coords : dict
+        Dictionary of coords for output dims
+    **case_runner_settings: settings sent to `case_runner`
 
     Returns
     -------

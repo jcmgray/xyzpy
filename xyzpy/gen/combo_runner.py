@@ -10,20 +10,12 @@
 from concurrent import futures as cf
 import xarray as xr
 import numpy as np
-from dask import compute, delayed
-# from dask.delayed import delayed
 from ..utils import (
     unzip,
     flatten,
-    _get_fn_name,
     prod,
     progbar,
     update_upon_eval,
-)
-from .dask_stuff import (
-    DaskTqdmProgbar,
-    dask_scheduler_get,
-    try_stored_then_result,
 )
 from .prepare import (
     _parse_var_names,
@@ -46,51 +38,43 @@ def default_submitter(pool, fn, *args, **kwds):
     return future
 
 
-def nested_submit(fn, combos, kwds,
-                  delay=False,
-                  pool=None,
-                  submitter=default_submitter):
+def nested_submit(fn, combos, kwds, pool=None, submitter=default_submitter):
     """Recursively submit jobs directly, as delayed objects or to a pool.
 
     Parameters
     ----------
-        fn : callable
-            Function to submit jobs to.
-        combos : tuple mapping individual fn arguments to sequence of values
-            Mapping of each argument and all its possible values.
-        kwds : dict
-            Constant keyword arguments not to iterate over.
-        delay : bool
-            Whether to wrap the function as a dask `delayed` function, and
-            therefore evaluate the whole computation at once, with possible
-            inter-dependencies.
-        pool : Executor pool
-            Pool-executor-like class implementing a submit method.
+    fn : callable
+        Function to submit jobs to.
+    combos : tuple mapping individual fn arguments to sequence of values
+        Mapping of each argument and all its possible values.
+    kwds : dict
+        Constant keyword arguments not to iterate over.
+    pool : Executor pool
+        Pool-executor-like class implementing a submit method.
 
     Returns
     -------
-    results : list
-        Nested lists of results.
+    results : nested tuple
+        Nested tuples of results.
     """
     arg, inputs = combos[0]
+
+    # have reached most nested level?
     if len(combos) == 1:
         if pool:
             return tuple(submitter(pool, fn, **kwds, **{arg: x})
                          for x in inputs)
-        elif delay:
-            return tuple(delayed(fn, pure=True)(**kwds, **{arg: x})
-                         for x in inputs)
         else:
             return tuple(fn(**kwds, **{arg: x}) for x in inputs)
+    # else recurse through current level
     else:
-        return tuple(nested_submit(fn, combos[1:], {**kwds, arg: x},
-                                   delay=delay, pool=pool,
+        return tuple(nested_submit(fn, combos[1:], {**kwds, arg: x}, pool=pool,
                                    submitter=submitter) for x in inputs)
 
 
 def default_getter(pbar=None):
     """Generate the default function to get a result from a future, updating
-    the progress bar `pbar` in the process.
+    the progress bar ``pbar`` in the process.
     """
     if pbar:
         def getter(future):
@@ -113,41 +97,23 @@ def default_getter(pbar=None):
 def nested_get(futures, ndim, getter):
     """Recusively get results from nested futures.
     """
-    return ([getter(fut) for fut in futures] if ndim == 1 else
-            [nested_get(fut, ndim - 1, getter) for fut in futures])
-
-
-def _combo_runner_dask_distributed(fn, combos, constants, n, ndim,
-                                   hide_progbar, client):
-    import distributed
-    with progbar(total=n, disable=hide_progbar) as pbar:
-        futures = nested_submit(fn, combos, constants, pool=client)
-        for f in distributed.as_completed(flatten(futures, ndim)):
-            f._stored_result = f.result()
-            pbar.update()
-        return nested_get(futures, ndim, try_stored_then_result)
+    return (tuple(getter(fut) for fut in futures) if ndim == 1 else
+            tuple(nested_get(fut, ndim - 1, getter) for fut in futures))
 
 
 def _combo_runner_pool(fn, combos, constants, n, ndim, hide_progbar, pool):
+    """Submit and retrieve combos from a generic pool.
+    """
     with progbar(total=n, disable=hide_progbar) as pbar:
         futures = nested_submit(fn, combos, constants, pool=pool)
         getter = default_getter(pbar)
         return nested_get(futures, ndim, getter)
 
 
-def _combo_runner_dask(fn, combos, constants, hide_progbar,
-                       scheduler, num_workers):
-    fn_name = _get_fn_name(fn)
-    with DaskTqdmProgbar(fn_name, disable=hide_progbar):
-        jobs = nested_submit(fn, combos, constants, delay=True)
-        if scheduler and isinstance(scheduler, str):
-            scheduler = dask_scheduler_get(
-                scheduler, num_workers=num_workers)
-        return compute(*jobs, get=scheduler, num_workers=num_workers)
-
-
 def _combo_runner_parallel(fn, combos, constants, n, ndim, hide_progbar,
                            num_workers):
+    """Submit and retrieve combos from a ProcessPoolExecutor.
+    """
     with cf.ProcessPoolExecutor(max_workers=num_workers) as pool:
         with progbar(total=n, disable=hide_progbar) as pbar:
             futures = nested_submit(fn, combos, constants, pool=pool)
@@ -157,37 +123,24 @@ def _combo_runner_parallel(fn, combos, constants, n, ndim, hide_progbar,
 
 
 def _combo_runner_sequential(fn, combos, constants, n, hide_progbar):
+    """Run combos in a sequential manner.
+    """
     with progbar(total=n, disable=hide_progbar) as p:
         # Wrap the function such that the progbar is updated upon each call
         fn = update_upon_eval(fn, p)
         return nested_submit(fn, combos, constants)
 
 
-def _combo_runner(fn, combos, constants,
-                  split=False,
-                  parallel=False,
-                  num_workers=None,
-                  scheduler=None,
-                  pool=None,
-                  hide_progbar=False):
+def _combo_runner(fn, combos, constants, split=False, parallel=False,
+                  num_workers=None, pool=None, hide_progbar=False):
     """Core combo runner, i.e. no parsing of arguments.
     """
     n = prod(len(x) for _, x in combos)
     ndim = len(combos)
 
-    # TODO: distributed tests
     if pool is not None:
-        if hasattr(pool, 'scheduler'):  # assume dask.distributed pool
-            results = _combo_runner_dask_distributed(
-                fn, combos, constants, n, ndim, hide_progbar, pool)
-        else:
-            results = _combo_runner_pool(
-                fn, combos, constants, n, ndim, hide_progbar, pool)
-
-    # Evaluate combos using dask
-    elif parallel == 'dask' or scheduler:
-        results = _combo_runner_dask(
-            fn, combos, constants, hide_progbar, scheduler, num_workers)
+        results = _combo_runner_pool(
+            fn, combos, constants, n, ndim, hide_progbar, pool)
 
     # Else for parallel, by default use a process pool exceutor
     elif parallel or num_workers:
@@ -202,57 +155,43 @@ def _combo_runner(fn, combos, constants,
     return tuple(unzip(results, ndim)) if split else results
 
 
-def combo_runner(fn, combos, *,
-                 constants=None,
-                 split=False,
-                 parallel=False,
-                 scheduler=None,
-                 pool=None,
-                 num_workers=None,
-                 hide_progbar=False):
+def combo_runner(fn, combos, *, constants=None, split=False, parallel=False,
+                 pool=None, num_workers=None, hide_progbar=False):
     """Take a function fn and analyse it over all combinations of named
     variables' values, optionally showing progress and in parallel.
 
     Parameters
     ----------
-        fn : callable
-            Function to analyse.
-        combos : mapping of individual fn arguments to sequence of values
-            All combinations of each argument will be calculated. Each
-            argument range thus gets a dimension in the output array(s).
-        constants : dict (optional)
-            List of tuples/dict of *constant* fn argument mappings.
-        split : bool (optional)
-            Whether to split into multiple output arrays or not.
-        parallel : bool (optional)
-            Process combos in parallel, default number of workers picked.
-        scheduler : str or dask.get instance (optional)
-            Specify scheduler to use for the parallel work.
-        pool : executor-like pool (optional)
-            Submit all combos to this pool.
-        num_workers : int (optional)
-            Explicitly choose how many workers to use, None for automatic.
-        hide_progbar : bool (optional)
-            Whether to disable the progress bar.
+    fn : callable
+        Function to analyse.
+    combos : mapping of individual fn arguments to sequence of values
+        All combinations of each argument will be calculated. Each
+        argument range thus gets a dimension in the output array(s).
+    constants : dict, optional
+        List of tuples/dict of *constant* fn argument mappings.
+    split : bool, optional
+        Whether to split into multiple output arrays or not.
+    parallel : bool, optional
+        Process combos in parallel, default number of workers picked.
+    pool : executor-like pool, optional
+        Submit all combos to this pool.
+    num_workers : int, optional
+        Explicitly choose how many workers to use, None for automatic.
+    hide_progbar : bool, optional
+        Whether to disable the progress bar.
 
     Returns
     -------
-        data:
-            list of result arrays, each with all param combinations in nested
-            tuples.
+    data : nested tuple
+        Nested tuple containing all combinations of running ``fn``.
     """
     # Prepare combos
     combos = _parse_combos(combos)
     constants = _parse_constants(constants)
 
     # Submit to core combo runner
-    return _combo_runner(fn, combos,
-                         constants=constants,
-                         split=split,
-                         parallel=parallel,
-                         scheduler=scheduler,
-                         pool=pool,
-                         num_workers=num_workers,
+    return _combo_runner(fn, combos, constants=constants, split=split,
+                         parallel=parallel, pool=pool, num_workers=num_workers,
                          hide_progbar=hide_progbar)
 
 
@@ -275,27 +214,7 @@ def get_ndim_first(x, ndim):
 
 def _combos_to_ds(results, combos, var_names, var_dims, var_coords,
                   constants=None, attrs=None):
-    """Convert the output of combo_runner into a `xarray.Dataset`
-
-    Parameters
-    ----------
-        results :
-            array(s) of dimension `len(combos)`
-        combos :
-            list of tuples of form ((variable_name, [values]), ...) with
-            which `results` was generated.
-        var_names : list-like of str or 2-tuples.
-            name(s) of output variables for a single result
-        var_dims :
-            the list of named coordinates for each single result
-            variable, i.e. coordinates not generated by the combo_runner
-        var_coords :
-            dict of values for those coordinates if custom ones are
-            desired.
-
-    Returns
-    -------
-        xarray.Dataset
+    """Convert the output of combo_runner into a `xarray.Dataset`.
     """
     fn_args = tuple(x for x, _ in combos)
     results = _parse_combo_results(results, var_names)
@@ -347,34 +266,34 @@ def combo_runner_to_ds(fn, combos, var_names, *,
 
     Parameters
     ----------
-        fn : callable
-            Function to evaluate.
-        combos : mapping
-            Mapping of each individual function argument to sequence of values.
-        var_names : str, sequence of strings, or None
-            Variable name(s) of the output(s) of `fn`, set to None if
-            fn outputs data already labelled in a Dataset or DataArray.
-        var_dims : sequence of either strings or string sequences, optional
-            'Internal' names of dimensions for each variable, the values for
-            each dimension should be contained as a mapping in either
-            `var_coords` (not needed by `fn`) or `constants` (needed by `fn`).
-        var_coords : mapping, optional
-            Mapping of extra coords the output variables may depend on.
-        constants : mapping, optional
-            Arguments to `fn` which are not iterated over, these will be
-            recorded either as attributes or coordinates if they are named
-            in `var_dims`.
-        resources : mapping, optional
-            Like `constants` but they will not be recorded.
-        attrs : mapping, optional
-            Any extra attributes to store.
-        **combo_runner_settings: dict-like, optional
-            Arguments supplied to `combo_runner`.
+    fn : callable
+        Function to evaluate.
+    combos : mapping
+        Mapping of each individual function argument to sequence of values.
+    var_names : str, sequence of strings, or None
+        Variable name(s) of the output(s) of `fn`, set to None if
+        fn outputs data already labelled in a Dataset or DataArray.
+    var_dims : sequence of either strings or string sequences, optional
+        'Internal' names of dimensions for each variable, the values for
+        each dimension should be contained as a mapping in either
+        `var_coords` (not needed by `fn`) or `constants` (needed by `fn`).
+    var_coords : mapping, optional
+        Mapping of extra coords the output variables may depend on.
+    constants : mapping, optional
+        Arguments to `fn` which are not iterated over, these will be
+        recorded either as attributes or coordinates if they are named
+        in `var_dims`.
+    resources : mapping, optional
+        Like `constants` but they will not be recorded.
+    attrs : mapping, optional
+        Any extra attributes to store.
+    combo_runner_settings
+        Arguments supplied to :func:`combo_runner`.
 
     Returns
     -------
-        xarray.Dataset
-            Multidimensional labelled dataset contatining all the results.
+    ds : xarray.Dataset
+        Multidimensional labelled dataset contatining all the results.
     """
     if parse:
         combos = _parse_combos(combos)

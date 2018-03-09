@@ -11,9 +11,7 @@ from xyzpy.gen.combo_runner import (
     combo_runner_to_ds,
 )
 from . import (
-    _GET_MODES,
     foo3_scalar,
-    dfoo3_scalar,
     foo3_float_bool,
     foo2_array,
     foo2_array_bool,
@@ -78,49 +76,43 @@ class TestComboRunner:
         assert_allclose(x, xn)
         assert_allclose(y, yn)
 
-    @pytest.mark.parametrize('scheduler', _GET_MODES)
-    @pytest.mark.parametrize('fn', (foo3_scalar, dfoo3_scalar))
-    def test_parallel_basic(self, scheduler, fn):
+    @pytest.mark.parametrize('parallel', [False, True])
+    @pytest.mark.parametrize('fn', (foo3_scalar,))
+    def test_parallel_basic(self, parallel, fn):
         combos = (('a', [1, 2]),
                   ('b', [10, 20, 30]),
                   ('c', [100, 200, 300, 400]))
         x = combo_runner(fn, combos, num_workers=2,
-                         scheduler=scheduler)
+                         parallel=parallel)
         xn = (np.array([1, 2]).reshape((2, 1, 1)) +
               np.array([10, 20, 30]).reshape((1, 3, 1)) +
               np.array([100, 200, 300, 400]).reshape((1, 1, 4)))
         assert_allclose(x, xn)
 
-    @pytest.mark.parametrize('scheduler', _GET_MODES)
-    def test_parallel_multires(self, scheduler):
+    @pytest.mark.parametrize('parallel', [False, True])
+    def test_parallel_multires(self, parallel):
         combos = (('a', [1, 2]),
                   ('b', [10, 20, 30]),
                   ('c', [100, 200, 300, 400]))
         x = combo_runner(foo3_float_bool, combos, num_workers=2, split=True,
-                         scheduler=scheduler)
+                         parallel=parallel)
         xn = (np.array([1, 2]).reshape((2, 1, 1)) +
               np.array([10, 20, 30]).reshape((1, 3, 1)) +
               np.array([100, 200, 300, 400]).reshape((1, 1, 4)))
         assert_allclose(x[0], xn)
         assert np.all(np.asarray(x[1])[1, ...])
 
-    @pytest.mark.parametrize('scheduler', _GET_MODES)
-    def test_parallel_dict(self, scheduler):
+    @pytest.mark.parametrize('parallel', [False, True])
+    def test_parallel_dict(self, parallel):
         combos = OrderedDict((('a', [1, 2]),
                               ('b', [10, 20, 30]),
                               ('c', [100, 200, 300, 400])))
         x = [*combo_runner(foo3_scalar, combos, num_workers=2,
-                           scheduler=scheduler)]
+                           parallel=parallel)]
         xn = (np.array([1, 2]).reshape((2, 1, 1)) +
               np.array([10, 20, 30]).reshape((1, 3, 1)) +
               np.array([100, 200, 300, 400]).reshape((1, 1, 4)))
         assert_allclose(x, xn)
-
-    def test_invalid_scheduler_raises(self):
-        combos = OrderedDict((('a', [1, 2]),
-                              ('b', [10, 20, 30])))
-        with pytest.raises(ValueError):
-            combo_runner(foo3_scalar, combos, num_workers=2, scheduler='z')
 
 
 class TestCombosToDS:

@@ -1,22 +1,8 @@
-from dask import delayed
-
-_GET_MODES = ['THREADED', 'MULTIPROCESS', 'DISTRIBUTED']
-
 
 # FIXTURES ------------------------------------------------------------------ #
 
+
 def foo3_scalar(a, b, c):
-    assert abs(a) >= 0
-    assert abs(a) < 10
-    assert abs(b) >= 10
-    assert abs(b) < 100
-    assert abs(c) >= 100
-    assert abs(c) < 1000
-    return a + b + c
-
-
-@delayed
-def dfoo3_scalar(a, b, c):
     assert abs(a) >= 0
     assert abs(a) < 10
     assert abs(b) >= 10
