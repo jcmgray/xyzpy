@@ -41,7 +41,11 @@ def _case_runner(fn, fn_args, cases, constants,
     """
     # Turn the function into a single arg function to send to combo_runner
     sfn = SingleArgFn(fn)
-    combos = (('kws', [dict(zip(fn_args, case)) for case in cases]),)
+
+    if isinstance(cases[0], dict):
+        combos = (('kws', cases),)
+    else:
+        combos = (('kws', [dict(zip(fn_args, case)) for case in cases]),)
 
     return _combo_runner(sfn, combos,
                          constants=constants,
@@ -182,6 +186,10 @@ def _cases_to_ds(results, fn_args, cases, var_names, add_to_ds=None,
         ds = add_to_ds
     else:
         # Find minimal covering set of coordinates for fn_args
+        if isinstance(cases[0], dict):
+            fn_args = tuple(cases[0].keys())
+            cases = tuple(tuple(c[a] for a in fn_args) for c in cases)
+
         case_coords = dict(zip(fn_args, find_union_coords(cases)))
 
         # Create new, 'all missing' dataset if required

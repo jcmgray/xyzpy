@@ -188,6 +188,17 @@ class TestCaseRunnerToDS:
         assert ds['sum'].loc[{'a': 1, 'b': 20, 'c': 100}].isnull()
         assert ds['sum'].loc[{'a': 3, 'b': 20, 'c': 300}].isnull()
 
+    def test_single_dict_cases(self):
+        cases = [{'a': 1, 'b': 20, 'c': 300}, {'a': 3, 'b': 20, 'c': 100}]
+        ds = case_runner_to_ds(foo3_scalar, None, cases=cases, var_names='sum')
+        assert_allclose(ds['a'].data, [1, 3])
+        assert_allclose(ds['b'].data, [20])
+        assert_allclose(ds['c'].data, [100, 300])
+        assert ds['sum'].loc[{'a': 1, 'b': 20, 'c': 300}].data == 321
+        assert ds['sum'].loc[{'a': 3, 'b': 20, 'c': 100}].data == 123
+        assert ds['sum'].loc[{'a': 1, 'b': 20, 'c': 100}].isnull()
+        assert ds['sum'].loc[{'a': 3, 'b': 20, 'c': 300}].isnull()
+
     def test_multires(self):
         cases = [(1, 20, 300),
                  (3, 20, 100)]

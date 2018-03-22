@@ -214,10 +214,10 @@ class Runner(object):
 
         Parameters
         ----------
-            cases : tuple of form ((arg1_val, *), *)
-                A list of cases, each
-            **runner_settings :
-                Keyword arguments supplied to `case_runner`
+        cases : tuple of form ((arg1_val, *), *)
+            A list of cases, each
+        **runner_settings :
+            Keyword arguments supplied to `case_runner`
         """
         cases = _parse_cases(cases)
         self.last_ds = case_runner_to_ds(
@@ -469,17 +469,19 @@ class Harvester(object):
 
         Parameters
         ---------
-        cases : list of dict of tuple
+        cases : list of dict or tuple
             The cases to run.
         sync : bool, optional
             If True (default), load and save the disk dataset before
             and after merging in the new data.
         overwrite : {None, False, True}, optional
-                * ``None`` (default): attempt the merge and only raise if
-                data conflicts.
-                * ``True``: overwrite conflicting current data with
-                that from the new dataset.
-                *``False``: drop any conflicting data from the new dataset.
+
+            - ``None`` (default): attempt the merge and only raise if
+              data conflicts.
+            - ``True``: overwrite conflicting current data with
+              that from the new dataset.
+            - ``False``: drop any conflicting data from the new dataset.
+
         chunks : bool, optional
             If not None, passed passed to xarray so that the full dataset is
             loaded and merged into with on-disk dask arrays.

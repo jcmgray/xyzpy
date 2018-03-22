@@ -131,8 +131,15 @@ class TestRunner:
                                  data_vars={'sq': ('x', [1, 4, 9])})
         assert r.last_ds.identical(expected_ds)
 
-    def test_runner_cases(self, fn3_fba_runner):
-        fn3_fba_runner.run_cases([(2, 3), (1, 4)])
+    @pytest.mark.parametrize("dict_cases", [False, True])
+    def test_runner_cases(self, fn3_fba_runner, dict_cases):
+
+        if dict_cases:
+            cases = [{'a': 2, 'b': 3}, {'a': 1, 'b': 4}]
+        else:
+            cases = [(2, 3), (1, 4)]
+
+        fn3_fba_runner.run_cases(cases)
         expected_ds = xr.Dataset(
             coords={'a': [1, 2], 'b': [3, 4], 'time': np.linspace(0, 1.0, 3)},
             data_vars={'sum': (('a', 'b'), [[np.nan, 105],
@@ -234,11 +241,19 @@ class TestHarvester:
             h.harvest_combos((('a', (1,)), ('b', (3,))), overwrite=True)
             assert h.full_ds.equals(fn3_fba_ds)
 
-    def test_harvest_cases_new(self, fn3_fba_runner, fn3_fba_ds):
+    @pytest.mark.parametrize('dict_cases', [False, True])
+    def test_harvest_cases_new(self, fn3_fba_runner, fn3_fba_ds, dict_cases):
+
+        if dict_cases:
+            cases = [{'a': 1, 'b': 3}, {'a': 1, 'b': 4},
+                     {'a': 2, 'b': 3}, {'a': 2, 'b': 4}]
+        else:
+            cases = [(1, 3), (1, 4), (2, 3), (2, 4)]
+
         with tempfile.TemporaryDirectory() as tmpdir:
             fl_pth = os.path.join(tmpdir, 'test.h5')
             h = Harvester(fn3_fba_runner, fl_pth)
-            h.harvest_cases([(1, 3), (1, 4), (2, 3), (2, 4)])
+            h.harvest_cases(cases)
             hds = load_ds(fl_pth)
         assert h.last_ds.identical(fn3_fba_ds)
         assert h.full_ds.identical(fn3_fba_ds)

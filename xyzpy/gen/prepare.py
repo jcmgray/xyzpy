@@ -21,7 +21,11 @@ def dictify(x):
         return dict()
 
 
-_parse_fn_args = _str_2_tuple
+def _parse_fn_args(fn_args):
+    if fn_args is None:
+        return None
+
+    return _str_2_tuple(fn_args)
 
 
 # combo_runner -------------------------------------------------------------- #
@@ -50,9 +54,17 @@ def _parse_combo_results(results, var_names):
 def _parse_cases(cases):
     """
     """
+
+    # cases = {'a': 1, 'b': 2, 'c': 3} --> ({'a': 1, 'b': 2, 'c': 3},)
+    if isinstance(cases, dict):
+        return (cases,)
+
     cases = tuple(cases)
+    # e.g. if fn_args = ('a',) and cases = (1, 10, 100)
+    #     we want cases --> ((1,), (10,), (100,))
     if isinstance(cases[0], str) or not isiterable(cases[0]):
         cases = tuple((c,) for c in cases)
+
     return cases
 
 
