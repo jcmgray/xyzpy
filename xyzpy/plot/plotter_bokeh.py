@@ -5,7 +5,8 @@
 import functools
 import itertools
 from ..manage import auto_xyz_ds
-from .core import Plotter
+from .core import (Plotter, calc_row_col_datasets,
+                   _PLOTTER_DEFAULTS, intercept_call)
 
 
 @functools.lru_cache(1)
@@ -54,8 +55,12 @@ class PlotterBokeh(Plotter):
             # Currently axes scale type must be set at figure creation?
             self._plot = figure(
                 # convert figsize to roughly matplotlib dimensions
-                width=int(self.figsize[0] * 80 + 100),
-                height=int(self.figsize[1] * 80),
+                width=int(self.figsize[0] * 80 +
+                          (100 if self._use_legend else 0) +
+                          (25 if self._ytitle else 0) +
+                          (25 if not self.yticklabels_hide else 0)),
+                height=int(self.figsize[1] * 80 +
+                           (25 if not self.xticklabels_hide else 0)),
                 x_axis_type=('log' if self.xlog else 'linear'),
                 y_axis_type=('log' if self.ylog else 'linear'),
                 title=self.title,
@@ -138,6 +143,11 @@ class PlotterBokeh(Plotter):
             self._plot.xaxis[0].ticker = FixedTicker(ticks=self.xticks)
         if self.yticks:
             self._plot.yaxis[0].ticker = FixedTicker(ticks=self.yticks)
+
+        if self.xticklabels_hide:
+            self._plot.xaxis.major_label_text_font_size = '0pt'
+        if self.yticklabels_hide:
+            self._plot.yaxis.major_label_text_font_size = '0pt'
 
     def set_sources(self):
         """Set the source dictionaries to be used by the plotter functions.
@@ -234,6 +244,108 @@ class PlotterBokeh(Plotter):
         return self
 
 
+def multi_plot(fn):
+    """Decorate a plotting function to plot a grid of values.
+    """
+
+    @functools.wraps(fn)
+    def multi_plotter(ds, *args, row=None, col=None, hspace=None, wspace=None,
+                      tight_layout=True, **kwargs):
+
+        if (row is None) and (col is None):
+            return fn(ds, *args, **kwargs)
+
+        # Set some global parameters
+        p = fn(ds, *args, **kwargs, call=False)
+        p.prepare_data_multi_grid()
+
+        kwargs['xlims'] = p._data_xmin, p._data_xmax
+        kwargs['ylims'] = p._data_ymin, p._data_ymax
+
+        kwargs['vmin'] = kwargs.pop('vmin', p.vmin)
+        kwargs['vmax'] = kwargs.pop('vmax', p.vmax)
+
+        # split the dataset into its respective rows and columns
+        ds_r_c, nrows, ncols = calc_row_col_datasets(ds, row=row, col=col)
+
+        # intercept figsize as meaning *total* size for whole grid
+        figsize = kwargs.pop('figsize', None)
+        if figsize is None:
+            figsize = (2, 2)
+        else:
+            figsize = (figsize[0] / ncols, figsize[1] / nrows)
+        kwargs['figsize'] = figsize
+
+        # intercept return_fig for the full grid
+        return_fig = kwargs.pop('return_fig', False)
+
+        subplots = {}
+
+        # range through rows and do subplots
+        for i, ds_r in enumerate(ds_r_c):
+            skws = {'legend': False, 'colorbar': False}
+
+            # if not last row
+            if i != nrows - 1:
+                skws['xticklabels_hide'] = True
+                skws['xtitle'] = ''
+
+            # range through columns
+            for j, sub_ds in enumerate(ds_r):
+
+                if hspace == 0 and wspace == 0:
+                    ticks_where = []
+                    if j == 0:
+                        ticks_where.append('left')
+                    if i == 0:
+                        ticks_where.append('top')
+                    if j == ncols - 1:
+                        ticks_where.append('right')
+                    if i == nrows - 1:
+                        ticks_where.append('bottom')
+                    skws['ticks_where'] = ticks_where
+
+                # if not first column
+                if j != 0:
+                    skws['yticklabels_hide'] = True
+                    skws['ytitle'] = ''
+
+                # label each column
+                if (i == 0) and (col is not None):
+                    skws['title'] = "{} = {}".format(col, ds[col].values[j])
+                    fx = 'fontsize_xtitle'
+                    skws['fontsize_title'] = kwargs.get(
+                        fx, _PLOTTER_DEFAULTS[fx])
+
+                # label each row
+                if (j == ncols - 1) and (row is not None):
+                    skws['ytitle_right'] = True
+                    skws['ytitle'] = "{} = {}".format(row, ds[row].values[i])
+
+                subplots[i, j] = fn(sub_ds, *args, return_fig=True,
+                                    **{**kwargs, **skws})
+
+                # try:
+                #     labels_handles.update(dict(zip(sP._legend_labels,
+                #                                    sP._legend_handles)))
+                # except AttributeError:
+                #     pass
+
+        from bokeh.layouts import gridplot
+
+        fullplot = gridplot([[subplots[i, j] for j in range(ncols)]
+                             for i in range(nrows)],)
+
+        # add global legend or colorbar
+        # TODO:
+
+        if return_fig:
+            return fullplot
+        bshow(fullplot)
+
+    return multi_plotter
+
+
 class ILinePlot(PlotterBokeh):
     """Interactive dataset multi-line plot.
     """
@@ -291,6 +403,13 @@ class ILinePlot(PlotterBokeh):
             if self._use_legend:
                 self._lgnd_items.append((zlabel, legend_pics))
 
+    def prepare_data_multi_grid(self):
+        self.prepare_axes_labels()
+        self.prepare_z_vals(grid=True)
+        self.calc_use_legend_or_colorbar()
+        self.calc_color_norm()
+        self.calc_data_range()
+
     def __call__(self):
         # Core preparation
         self.prepare_axes_labels()
@@ -318,10 +437,12 @@ class ILinePlot(PlotterBokeh):
         return self.show(interactive=self._interactive)
 
 
+@multi_plot
+@intercept_call
 def ilineplot(ds, x, y, z=None, y_err=None, x_err=None, **kwargs):
     """Interactive dataset multi-line plot - functional form.
     """
-    return ILinePlot(ds, x, y, z, y_err=y_err, x_err=x_err, **kwargs)()
+    return ILinePlot(ds, x, y, z, y_err=y_err, x_err=x_err, **kwargs)
 
 
 class AutoILinePlot(ILinePlot):
@@ -403,10 +524,12 @@ class IScatter(PlotterBokeh):
         return self.show(interactive=self._interactive)
 
 
+@multi_plot
+@intercept_call
 def iscatter(ds, x, y, z=None, y_err=None, x_err=None, **kwargs):
     """Interactive dataset scatter plot - functional form.
     """
-    return IScatter(ds, x, y, z, y_err=y_err, x_err=x_err, **kwargs)()
+    return IScatter(ds, x, y, z, y_err=y_err, x_err=x_err, **kwargs)
 
 
 class AutoIScatter(IScatter):

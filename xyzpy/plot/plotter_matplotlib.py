@@ -8,7 +8,8 @@ Functions for plotting datasets nicely.
 import functools
 import numpy as np
 from ..manage import auto_xyz_ds
-from .core import Plotter, _PLOTTER_DEFAULTS
+from .core import (Plotter, _PLOTTER_DEFAULTS,
+                   calc_row_col_datasets, intercept_call)
 from .color import xyz_colormaps
 
 
@@ -304,25 +305,6 @@ class PlotterMatplotlib(Plotter):
 
 # --------------------------------------------------------------------------- #
 
-def calc_row_col_datasets(ds, row=None, col=None):
-    """
-    """
-    if row is not None:
-        rs = ds[row].values
-        nr = len(rs)
-
-    if col is not None:
-        cs = ds[col].values
-        nc = len(cs)
-
-    if row is None:
-        return [[ds.loc[{col: c}] for c in cs]], 1, nc
-
-    if col is None:
-        return [[ds.loc[{row: r}]] for r in rs], nr, 1
-
-    return [[ds.loc[{row: r, col: c}] for c in cs] for r in rs], nr, nc
-
 
 def multi_plot(fn):
     """Decorate a plotting function to plot a grid of values.
@@ -348,7 +330,7 @@ def multi_plot(fn):
         # split the dataset into its respective rows and columns
         ds_r_c, nrows, ncols = calc_row_col_datasets(ds, row=row, col=col)
 
-        figsize = kwargs.pop('figsize', _PLOTTER_DEFAULTS['figsize'])
+        figsize = kwargs.pop('figsize', (3 * ncols, 3 * nrows))
         return_fig = kwargs.pop('return_fig', _PLOTTER_DEFAULTS['return_fig'])
 
         # generate a figure for all the plots to use
@@ -359,7 +341,7 @@ def multi_plot(fn):
         gs = GridSpec(nrows=nrows, ncols=ncols, figure=p._fig,
                       hspace=hspace, wspace=wspace)
 
-        # want to collect all entires for legend
+        # want to collect all entries for legend
         labels_handles = {}
 
         # range through rows and do subplots

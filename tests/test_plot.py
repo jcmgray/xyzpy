@@ -202,6 +202,19 @@ class TestLinePlot:
         dataset_5d.xyz.lineplot('x', 'c', 'y', col='phi', row='A', **kws)
 
 
+class TestILinePlot:
+
+    def test_multi_plot_4d(self, dataset_4d):
+        dataset_4d.xyz.ilineplot('x', 'c', 'y', row='phi')
+        dataset_4d.xyz.ilineplot('x', 'c', 'y', col='phi')
+
+    @mark.parametrize("colors", [False, True])
+    def test_multi_plot_5d(self, dataset_5d, colors):
+        kws = {'colors': colors}
+        dataset_5d.xyz.ilineplot('x', 'c', 'y', row='phi', col='A', **kws)
+        dataset_5d.xyz.ilineplot('x', 'c', 'y', col='phi', row='A', **kws)
+
+
 class TestHeatmap:
     def test_simple(self, dataset_heatmap):
         dataset_heatmap.xyz.heatmap('x', 'y', 'c', return_fig=True)

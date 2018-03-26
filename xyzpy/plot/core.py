@@ -5,6 +5,7 @@ Helper functions for preparing data to be plotted.
 # TODO: check shape and hint at which dimensions need to be reduced ********* #
 
 import itertools
+import functools
 import numpy as np
 import numpy.ma as ma
 import xarray as xr
@@ -602,3 +603,41 @@ class Plotter:
                                ymax + self.padding * yrnge)
             else:
                 self._ylims = ymin, ymax
+
+
+def calc_row_col_datasets(ds, row=None, col=None):
+    """
+    """
+    if row is not None:
+        rs = ds[row].values
+        nr = len(rs)
+
+    if col is not None:
+        cs = ds[col].values
+        nc = len(cs)
+
+    if row is None:
+        return [[ds.loc[{col: c}] for c in cs]], 1, nc
+
+    if col is None:
+        return [[ds.loc[{row: r}]] for r in rs], nr, 1
+
+    return [[ds.loc[{row: r, col: c}] for c in cs] for r in rs], nr, nc
+
+
+def intercept_call(fn):
+
+    @functools.wraps(fn)
+    def wrapped_fn(*args, **kwargs):
+        call = kwargs.pop('call', True)
+        P = fn(*args, **kwargs)
+
+        if call == 'both':
+            P()
+            return P
+        elif call:
+            return P()
+        else:
+            return P
+
+    return wrapped_fn
