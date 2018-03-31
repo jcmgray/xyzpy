@@ -5,8 +5,13 @@
 import functools
 import itertools
 from ..manage import auto_xyz_ds
-from .core import (Plotter, calc_row_col_datasets,
-                   _PLOTTER_DEFAULTS, intercept_call)
+from .core import (
+    Plotter,
+    calc_row_col_datasets,
+    _PLOTTER_DEFAULTS,
+    intercept_call,
+    prettify,
+)
 
 
 @functools.lru_cache(1)
@@ -63,6 +68,7 @@ class PlotterBokeh(Plotter):
                            (25 if not self.xticklabels_hide else 0)),
                 x_axis_type=('log' if self.xlog else 'linear'),
                 y_axis_type=('log' if self.ylog else 'linear'),
+                y_axis_location=('right' if self.ytitle_right else 'left'),
                 title=self.title,
                 toolbar_location="above",
                 toolbar_sticky=False,
@@ -312,7 +318,8 @@ def multi_plot(fn):
 
                 # label each column
                 if (i == 0) and (col is not None):
-                    skws['title'] = "{} = {}".format(col, ds[col].values[j])
+                    col_val = prettify(ds[col].values[j])
+                    skws['title'] = "{} = {}".format(col, col_val)
                     fx = 'fontsize_xtitle'
                     skws['fontsize_title'] = kwargs.get(
                         fx, _PLOTTER_DEFAULTS[fx])
@@ -320,7 +327,8 @@ def multi_plot(fn):
                 # label each row
                 if (j == ncols - 1) and (row is not None):
                     skws['ytitle_right'] = True
-                    skws['ytitle'] = "{} = {}".format(row, ds[row].values[i])
+                    row_val = prettify(ds[row].values[i])
+                    skws['ytitle'] = "{} = {}".format(row, row_val)
 
                 subplots[i, j] = fn(sub_ds, *args, return_fig=True,
                                     **{**kwargs, **skws})

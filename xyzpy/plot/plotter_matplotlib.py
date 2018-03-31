@@ -8,8 +8,13 @@ Functions for plotting datasets nicely.
 import functools
 import numpy as np
 from ..manage import auto_xyz_ds
-from .core import (Plotter, _PLOTTER_DEFAULTS,
-                   calc_row_col_datasets, intercept_call)
+from .core import (
+    Plotter,
+    _PLOTTER_DEFAULTS,
+    calc_row_col_datasets,
+    intercept_call,
+    prettify,
+)
 from .color import xyz_colormaps
 
 
@@ -375,15 +380,17 @@ def multi_plot(fn):
 
                 # label each column
                 if (i == 0) and (col is not None):
-                    skws['title'] = "{} = {}".format(col, ds[col].values[j])
+                    col_val = prettify(ds[col].values[j])
+                    skws['title'] = "{} = {}".format(col, col_val)
                     fx = 'fontsize_xtitle'
                     skws['fontsize_title'] = kwargs.get(
                         fx, _PLOTTER_DEFAULTS[fx])
 
                 # label each row
                 if (j == ncols - 1) and (row is not None):
+                    row_val = prettify(ds[row].values[i])
                     skws['ytitle_right'] = True
-                    skws['ytitle'] = "{} = {}".format(row, ds[row].values[i])
+                    skws['ytitle'] = "{} = {}".format(row, row_val)
 
                 sP = fn(sub_ds, *args, add_to_fig=p._fig, call='both',
                         subplot=gs[i, j], **{**kwargs, **skws})
@@ -500,19 +507,11 @@ class LinePlot(PlotterMatplotlib):
 
 
 @multi_plot
+@intercept_call
 def lineplot(ds, x, y, z=None, y_err=None, x_err=None, **kwargs):
     """
     """
-    call = kwargs.pop('call', True)
-    P = LinePlot(ds, x, y, z, y_err=y_err, x_err=x_err, **kwargs)
-
-    if call == 'both':
-        P()
-        return P
-    elif call:
-        return P()
-    else:
-        return P
+    return LinePlot(ds, x, y, z, y_err=y_err, x_err=x_err, **kwargs)
 
 
 class AutoLinePlot(LinePlot):
@@ -613,19 +612,11 @@ class Scatter(PlotterMatplotlib):
 
 
 @multi_plot
+@intercept_call
 def scatter(ds, x, y, z=None, y_err=None, x_err=None, **kwargs):
     """
     """
-    call = kwargs.pop('call', True)
-    P = Scatter(ds, x, y, z, y_err=y_err, x_err=x_err, **kwargs)
-
-    if call == 'both':
-        P()
-        return P
-    elif call:
-        return P()
-    else:
-        return P
+    return Scatter(ds, x, y, z, y_err=y_err, x_err=x_err, **kwargs)
 
 
 class AutoScatter(Scatter):
@@ -753,6 +744,7 @@ class Histogram(PlotterMatplotlib):
 
 
 @multi_plot
+@intercept_call
 def histogram(ds, x, z=None, **kwargs):
     """Dataset histogram.
 
@@ -765,16 +757,7 @@ def histogram(ds, x, z=None, **kwargs):
     z : str, optional
         If given, range over this coordinate a plot a histogram for each.
     """
-    call = kwargs.pop('call', True)
-    P = Histogram(ds, x, z=z, **kwargs)
-
-    if call == 'both':
-        P()
-        return P
-    elif call:
-        return P()
-    else:
-        return P
+    return Histogram(ds, x, z=z, **kwargs)
 
 
 # --------------------------------------------------------------------------- #
@@ -839,19 +822,11 @@ class HeatMap(PlotterMatplotlib):
 
 
 @multi_plot
+@intercept_call
 def heatmap(ds, x, y, z, **kwargs):
     """
     """
-    call = kwargs.pop('call', True)
-    P = HeatMap(ds, x, y, z, **kwargs)
-
-    if call == 'both':
-        P()
-        return P
-    elif call:
-        return P()
-    else:
-        return P
+    return HeatMap(ds, x, y, z, **kwargs)
 
 
 # --------------- Miscellenous matplotlib plotting functions ---------------- #

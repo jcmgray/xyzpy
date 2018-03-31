@@ -641,3 +641,10 @@ def intercept_call(fn):
             return P
 
     return wrapped_fn
+
+
+def prettify(x):
+    import numpy as np
+    if np.issubdtype(type(x), np.floating):
+        x = "{0:0.4f}".format(x).rstrip('0')
+    return x
