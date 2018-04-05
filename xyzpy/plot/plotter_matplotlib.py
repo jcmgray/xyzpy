@@ -10,9 +10,13 @@ import numpy as np
 from ..manage import auto_xyz_ds
 from .core import (
     Plotter,
-    _PLOTTER_DEFAULTS,
+    AbstractLinePlot,
+    AbstractScatter,
+    AbstractHistogram,
+    AbstractHeatMap,
+    PLOTTER_DEFAULTS,
     calc_row_col_datasets,
-    intercept_call,
+    intercept_call_arg,
     prettify,
 )
 from .color import xyz_colormaps
@@ -28,7 +32,7 @@ class PlotterMatplotlib(Plotter):
         super().__init__(ds, x, y, z=z, y_err=y_err, x_err=x_err,
                          **kwargs, backend='MATPLOTLIB')
 
-    def prepare_plot(self):
+    def prepare_axes(self):
         """
         """
         import matplotlib as mpl
@@ -307,11 +311,21 @@ class PlotterMatplotlib(Plotter):
             plt.close(self._fig)
             return self._fig
 
+    def prepare_fig(self):
+        """Do all the things that every plot has.
+        """
+        self.prepare_axes()
+        self.set_axes_labels()
+        self.set_axes_scale()
+        self.set_axes_range()
+        self.set_spans()
+        self.set_gridlines()
+        self.set_tick_marks()
 
 # --------------------------------------------------------------------------- #
 
 
-def multi_plot(fn):
+def mpl_multi_plot(fn):
     """Decorate a plotting function to plot a grid of values.
     """
 
@@ -336,7 +350,7 @@ def multi_plot(fn):
         ds_r_c, nrows, ncols = calc_row_col_datasets(ds, row=row, col=col)
 
         figsize = kwargs.pop('figsize', (3 * ncols, 3 * nrows))
-        return_fig = kwargs.pop('return_fig', _PLOTTER_DEFAULTS['return_fig'])
+        return_fig = kwargs.pop('return_fig', PLOTTER_DEFAULTS['return_fig'])
 
         # generate a figure for all the plots to use
         p._fig = plt.figure(figsize=figsize, dpi=100,
@@ -384,7 +398,7 @@ def multi_plot(fn):
                     skws['title'] = "{} = {}".format(col, col_val)
                     fx = 'fontsize_xtitle'
                     skws['fontsize_title'] = kwargs.get(
-                        fx, _PLOTTER_DEFAULTS[fx])
+                        fx, PLOTTER_DEFAULTS[fx])
 
                 # label each row
                 if (j == ncols - 1) and (row is not None):
@@ -412,14 +426,6 @@ def multi_plot(fn):
 
         # add global legend or colorbar
         p.plot_legend(grid=True, labels_handles=labels_handles)
-
-        # # adjust plots so that legend etc looks tight
-        # if tight_layout:
-        #     import warnings
-        #     with warnings.catch_warnings():
-        #         warnings.simplefilter("ignore", UserWarning)
-        #         p._fig.constrained_layout()
-
         p.plot_colorbar(grid=True)
 
         if return_fig:
@@ -431,7 +437,7 @@ def multi_plot(fn):
 
 # --------------------------------------------------------------------------- #
 
-class LinePlot(PlotterMatplotlib):
+class LinePlot(PlotterMatplotlib, AbstractLinePlot):
     """
     """
 
@@ -473,35 +479,10 @@ class LinePlot(PlotterMatplotlib):
             self._legend_handles, self._legend_labels = \
                 self._axes.get_legend_handles_labels()
 
-    def prepare_data_multi_grid(self):
-        """This makes sure a few global values are known and calculated for
-        the full dataset, to be used with ``multi_plot``.
-        """
-        self.prepare_axes_labels()
-        self.prepare_z_vals(grid=True)
-        self.calc_use_legend_or_colorbar()
-        self.calc_color_norm()
-
     def __call__(self):
-        # Core preparation
-        self.prepare_axes_labels()
-        self.prepare_z_vals()
-        self.prepare_z_labels()
-        self.calc_use_legend_or_colorbar()
-        self.prepare_xy_vals_lineplot()
-        self.prepare_colors()
-        self.prepare_markers()
-        self.prepare_line_styles()
-        self.prepare_zorders()
-        self.calc_plot_range()
+        self.prepare_data_single()
         # matplotlib preparation
-        self.prepare_plot()
-        self.set_axes_labels()
-        self.set_axes_scale()
-        self.set_axes_range()
-        self.set_spans()
-        self.set_gridlines()
-        self.set_tick_marks()
+        self.prepare_fig()
         self.plot_lines()
         self.plot_legend()
         self.plot_colorbar()
@@ -509,8 +490,8 @@ class LinePlot(PlotterMatplotlib):
         return self.show()
 
 
-@multi_plot
-@intercept_call
+@mpl_multi_plot
+@intercept_call_arg
 def lineplot(ds, x, y, z=None, y_err=None, x_err=None, **kwargs):
     """
     """
@@ -540,7 +521,7 @@ _SCATTER_ALT_DEFAULTS = (
 )
 
 
-class Scatter(PlotterMatplotlib):
+class Scatter(PlotterMatplotlib, AbstractScatter):
     """
     """
 
@@ -581,38 +562,10 @@ class Scatter(PlotterMatplotlib):
             self._legend_labels.append(
                 scatter_opts['label'])
 
-    def prepare_data_single(self):
-        # Core preparation
-        self.prepare_axes_labels()
-        self.prepare_z_vals(mode='scatter')
-        self.prepare_z_labels()
-        self.calc_use_legend_or_colorbar()
-        self.prepare_xy_vals_lineplot(mode='scatter')
-        self.prepare_colors()
-        self.prepare_markers()
-        self.prepare_line_styles()
-        self.prepare_zorders()
-        self.calc_plot_range()
-
-    def prepare_data_multi_grid(self):
-        """This makes sure a few global values are known and calculated for
-        the full dataset, to be used with ``multi_plot``.
-        """
-        self.prepare_axes_labels()
-        self.prepare_z_vals(mode='scatter', grid=True)
-        self.calc_use_legend_or_colorbar()
-        self.calc_color_norm()
-
     def __call__(self):
         self.prepare_data_single()
         # matplotlib preparation
-        self.prepare_plot()
-        self.set_axes_labels()
-        self.set_axes_scale()
-        self.set_axes_range()
-        self.set_spans()
-        self.set_gridlines()
-        self.set_tick_marks()
+        self.prepare_fig()
         self.plot_scatter()
         self.plot_legend()
         self.plot_colorbar()
@@ -620,8 +573,8 @@ class Scatter(PlotterMatplotlib):
         return self.show()
 
 
-@multi_plot
-@intercept_call
+@mpl_multi_plot
+@intercept_call_arg
 def scatter(ds, x, y, z=None, y_err=None, x_err=None, **kwargs):
     """
     """
@@ -655,7 +608,7 @@ _HISTOGRAM_ALT_DEFAULTS = {
 }
 
 
-class Histogram(PlotterMatplotlib):
+class Histogram(PlotterMatplotlib, AbstractHistogram):
     """
     """
 
@@ -720,34 +673,11 @@ class Histogram(PlotterMatplotlib):
         # store handles for legend
         self._legend_handles, self._legend_labels = hnds, lbs
 
-    def prepare_data_multi_grid(self):
-        """This makes sure a few global values are known and calculated for
-        the full dataset, to be used with ``multi_plot``.
-        """
-        self.prepare_axes_labels()
-        self.prepare_z_vals(mode='histogram', grid=True)
-        self.calc_use_legend_or_colorbar()
-        self.calc_color_norm()
-
     def __call__(self):
         # Core preparation
-        self.prepare_axes_labels()
-        self.prepare_z_vals(mode='histogram')
-        self.prepare_z_labels()
-        self.calc_use_legend_or_colorbar()
-        self.prepare_x_vals_histogram()
-        self.prepare_colors()
-        self.prepare_line_styles()
-        self.prepare_zorders()
-        self.calc_plot_range()
+        self.prepare_data_single()
         # matplotlib preparation
-        self.prepare_plot()
-        self.set_axes_labels()
-        self.set_axes_scale()
-        self.set_axes_range()
-        self.set_spans()
-        self.set_gridlines()
-        self.set_tick_marks()
+        self.prepare_fig()
         self.plot_histogram()
         self.plot_legend()
         self.plot_colorbar()
@@ -755,8 +685,8 @@ class Histogram(PlotterMatplotlib):
         return self.show()
 
 
-@multi_plot
-@intercept_call
+@mpl_multi_plot
+@intercept_call_arg
 def histogram(ds, x, z=None, **kwargs):
     """Dataset histogram.
 
@@ -800,7 +730,7 @@ _HEATMAP_ALT_DEFAULTS = (
 )
 
 
-class HeatMap(PlotterMatplotlib):
+class HeatMap(PlotterMatplotlib, AbstractHeatMap):
     """
     """
 
@@ -823,37 +753,19 @@ class HeatMap(PlotterMatplotlib):
             cmap=xyz_colormaps(self.colormap),
             rasterized=self.rasterize)
 
-    def prepare_data_multi_grid(self):
-        """This makes sure a few global values are known and calculated for
-        the full dataset, to be used with ``multi_plot``.
-        """
-        self.prepare_axes_labels()
-        self.prepare_heatmap_data(grid=True)
-        self.calc_use_legend_or_colorbar()
-        self.calc_color_norm()
-
     def __call__(self):
         # Core preparation
-        self.prepare_axes_labels()
-        self.prepare_heatmap_data()
-        self.calc_plot_range()
-        self.calc_use_legend_or_colorbar()
+        self.prepare_data_single()
         # matplotlib preparation
-        self.prepare_plot()
-        self.set_axes_labels()
-        self.set_axes_scale()
-        self.set_axes_range()
-        self.set_spans()
-        self.set_gridlines()
-        self.set_tick_marks()
+        self.prepare_fig()
         self.plot_heatmap()
         self.plot_colorbar()
         self.set_panel_label()
         return self.show()
 
 
-@multi_plot
-@intercept_call
+@mpl_multi_plot
+@intercept_call_arg
 def heatmap(ds, x, y, z, **kwargs):
     """
     """

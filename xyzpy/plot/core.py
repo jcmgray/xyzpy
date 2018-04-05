@@ -12,7 +12,7 @@ import xarray as xr
 from .color import convert_colors, xyz_colormaps, get_default_sequential_cm
 from .marker import _MARKERS, _SINGLE_LINE_MARKER
 
-_PLOTTER_DEFAULTS = {
+PLOTTER_DEFAULTS = {
     # Figure options
     'backend': 'MATPLOTLIB',
     'figsize': (7, 6),
@@ -114,7 +114,7 @@ _PLOTTER_DEFAULTS = {
     'webgl': False,
 }
 
-_PLOTTER_OPTS = list(_PLOTTER_DEFAULTS.keys())
+_PLOTTER_OPTS = list(PLOTTER_DEFAULTS.keys())
 
 
 def check_excess_dims(ds, var, valid_dims, mode='lineplot'):
@@ -156,7 +156,7 @@ class Plotter:
         self.x_err = x_err
 
         # Figure options
-        settings = {**_PLOTTER_DEFAULTS, **kwargs}
+        settings = {**PLOTTER_DEFAULTS, **kwargs}
         for opt in _PLOTTER_OPTS:
             setattr(self, opt, settings.pop(opt))
 
@@ -173,7 +173,7 @@ class Plotter:
         if self.colors and self.c_coo:
             raise ValueError("Cannot specify explicit colors if ``c`` used.")
 
-        # Internal
+        # Internal state
         self._data_range_calculated = False
         self._c_cols = []
 
@@ -610,6 +610,89 @@ class Plotter:
                 self._ylims = ymin, ymax
 
 
+# Abstract Plotters - contain the core preparation required for each plot type
+
+class AbstractLinePlot:
+
+    def prepare_data_single(self):
+        self.prepare_axes_labels()
+        self.prepare_z_vals(mode='lineplot')
+        self.prepare_z_labels()
+        self.calc_use_legend_or_colorbar()
+        self.prepare_xy_vals_lineplot(mode='lineplot')
+        self.prepare_colors()
+        self.prepare_markers()
+        self.prepare_line_styles()
+        self.prepare_zorders()
+        self.calc_plot_range()
+
+    def prepare_data_multi_grid(self):
+        self.prepare_axes_labels()
+        self.prepare_z_vals(mode='lineplot', grid=True)
+        self.calc_use_legend_or_colorbar()
+        self.calc_color_norm()
+        self.calc_data_range()
+
+
+class AbstractScatter:
+
+    def prepare_data_single(self):
+        self.prepare_axes_labels()
+        self.prepare_z_vals(mode='scatter')
+        self.prepare_z_labels()
+        self.calc_use_legend_or_colorbar()
+        self.prepare_xy_vals_lineplot(mode='scatter')
+        self.prepare_colors()
+        self.prepare_markers()
+        self.prepare_line_styles()
+        self.prepare_zorders()
+        self.calc_plot_range()
+
+    def prepare_data_multi_grid(self):
+        self.prepare_axes_labels()
+        self.prepare_z_vals(mode='scatter', grid=True)
+        self.calc_use_legend_or_colorbar()
+        self.calc_color_norm()
+        self.calc_data_range()
+
+
+class AbstractHistogram:
+
+    def prepare_data_single(self):
+        self.prepare_axes_labels()
+        self.prepare_z_vals(mode='histogram')
+        self.prepare_z_labels()
+        self.calc_use_legend_or_colorbar()
+        self.prepare_x_vals_histogram()
+        self.prepare_colors()
+        self.prepare_line_styles()
+        self.prepare_zorders()
+        self.calc_plot_range()
+
+    def prepare_data_multi_grid(self):
+        self.prepare_axes_labels()
+        self.prepare_z_vals(mode='histogram', grid=True)
+        self.calc_use_legend_or_colorbar()
+        self.calc_color_norm()
+
+
+class AbstractHeatMap:
+
+    def prepare_data_single(self):
+        self.prepare_axes_labels()
+        self.prepare_heatmap_data()
+        self.calc_plot_range()
+        self.calc_use_legend_or_colorbar()
+
+    def prepare_data_multi_grid(self):
+        self.prepare_axes_labels()
+        self.prepare_heatmap_data(grid=True)
+        self.calc_use_legend_or_colorbar()
+        self.calc_color_norm()
+
+
+# Helpers for grid plots
+
 def calc_row_col_datasets(ds, row=None, col=None):
     """
     """
@@ -630,7 +713,7 @@ def calc_row_col_datasets(ds, row=None, col=None):
     return [[ds.loc[{row: r, col: c}] for c in cs] for r in rs], nr, nc
 
 
-def intercept_call(fn):
+def intercept_call_arg(fn):
 
     @functools.wraps(fn)
     def wrapped_fn(*args, **kwargs):

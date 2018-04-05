@@ -215,7 +215,7 @@ def auto_xyz_ds(x, y_z=None):
     """
     # assume non-coordinated - e.g. for auto_histogram
     if y_z is None:
-        dims = ['zywvu'[i] for i in range(x.ndim)]
+        dims = ['yzwvu'[i] for i in range(x.ndim)]
         return xr.Dataset(data_vars={'x': (dims, x)})
 
     # Infer dimensions to coords mapping

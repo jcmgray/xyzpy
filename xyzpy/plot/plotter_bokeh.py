@@ -7,9 +7,11 @@ import itertools
 from ..manage import auto_xyz_ds
 from .core import (
     Plotter,
+    AbstractLinePlot,
+    AbstractScatter,
     calc_row_col_datasets,
-    _PLOTTER_DEFAULTS,
-    intercept_call,
+    PLOTTER_DEFAULTS,
+    intercept_call_arg,
     prettify,
 )
 
@@ -262,13 +264,12 @@ class PlotterBokeh(Plotter):
         return self
 
 
-def multi_plot(fn):
+def bokeh_multi_plot(fn):
     """Decorate a plotting function to plot a grid of values.
     """
 
     @functools.wraps(fn)
-    def multi_plotter(ds, *args, row=None, col=None, hspace=None, wspace=None,
-                      tight_layout=True, **kwargs):
+    def multi_plotter(ds, *args, row=None, col=None, link=False, **kwargs):
 
         if (row is None) and (col is None):
             return fn(ds, *args, **kwargs)
@@ -310,18 +311,6 @@ def multi_plot(fn):
                     skws['xticklabels_hide'] = True
                     skws['xtitle'] = ''
 
-                if hspace == 0 and wspace == 0:
-                    ticks_where = []
-                    if j == 0:
-                        ticks_where.append('left')
-                    if i == 0:
-                        ticks_where.append('top')
-                    if j == ncols - 1:
-                        ticks_where.append('right')
-                    if i == nrows - 1:
-                        ticks_where.append('bottom')
-                    skws['ticks_where'] = ticks_where
-
                 # if not first column
                 if j != 0:
                     skws['yticklabels_hide'] = True
@@ -333,7 +322,7 @@ def multi_plot(fn):
                     skws['title'] = "{} = {}".format(col, col_val)
                     fx = 'fontsize_xtitle'
                     skws['fontsize_title'] = kwargs.get(
-                        fx, _PLOTTER_DEFAULTS[fx])
+                        fx, PLOTTER_DEFAULTS[fx])
 
                 # label each row
                 if (j == ncols - 1) and (row is not None):
@@ -344,36 +333,46 @@ def multi_plot(fn):
                 subplots[i, j] = fn(sub_ds, *args, return_fig=True, call=False,
                                     **{**kwargs, **skws})
 
-        from bokeh.layouts import gridplot, row
+        from bokeh.layouts import gridplot
+
         plts = [[subplots[i, j]() for j in range(ncols)] for i in range(nrows)]
+
+        # link zooming and panning between all plots
+        if link:
+            x_range, y_range = plts[0][0].x_range, plts[0][0].y_range
+            for i in range(nrows):
+                for j in range(ncols):
+                    plts[i][j].x_range = x_range
+                    plts[i][j].y_range = y_range
+
+        # the main grid
+        p._plot = gridplot(plts)
 
         if p._use_legend or p._use_colorbar:
             from bokeh.models import Legend, GlyphRenderer, Range1d, ColorBar
+            from bokeh.layouts import row
 
             # plot dummy using last sub_ds
             skws = {'title': "", 'legend_loc': 'center_left',
                     'legend_where': 'left'}
-
             lgren = fn(sub_ds, *args, return_fig=True, **{**kwargs, **skws})
 
-            # remove all but legend and glyph renderers
+            # remove all but legend, colorbar and glyph renderers
             lgren.renderers = [
                 r for r in lgren.renderers
                 if isinstance(r, (Legend, GlyphRenderer, ColorBar))
             ]
+            lgren.toolbar_location = None
+            lgren.outline_line_color = None
 
-            # sizing it is pretty hacky at the moment
+            # size it - this is pretty hacky at the moment
             lgren.width = 100
             lgren.height = int(80 * figsize[1] * nrows + 100)
             lgren.x_range = Range1d(0, 0)
             lgren.y_range = Range1d(0, 0)
-            lgren.toolbar_location = None
-            lgren.outline_line_color = None
 
-            # put to the right of the gridplot
-            p._plot = row([gridplot(plts), lgren])
-        else:
-            p._plot = gridplot(plts)
+            # append to the right of the gridplot
+            p._plot = row([p._plot, lgren])
 
         if return_fig:
             return p._plot
@@ -382,7 +381,7 @@ def multi_plot(fn):
     return multi_plotter
 
 
-class ILinePlot(PlotterBokeh):
+class ILinePlot(PlotterBokeh, AbstractLinePlot):
     """Interactive dataset multi-line plot.
     """
 
@@ -437,25 +436,8 @@ class ILinePlot(PlotterBokeh):
             # Add the names and styles of drawn lines for the legend
             self._lgnd_items.append((zlabel, legend_pics))
 
-    def prepare_data_multi_grid(self):
-        self.prepare_axes_labels()
-        self.prepare_z_vals(grid=True)
-        self.calc_use_legend_or_colorbar()
-        self.calc_color_norm()
-        self.calc_data_range()
-
     def __call__(self):
-        # Core preparation
-        self.prepare_axes_labels()
-        self.prepare_z_vals()
-        self.prepare_z_labels()
-        self.calc_use_legend_or_colorbar()
-        self.prepare_xy_vals_lineplot()
-        self.prepare_colors()
-        self.prepare_markers()
-        self.prepare_line_styles()
-        self.prepare_zorders()
-        self.calc_plot_range()
+        self.prepare_data_single()
         # Bokeh preparation
         self.prepare_plot_and_set_axes_scale()
         self.set_axes_labels()
@@ -471,8 +453,8 @@ class ILinePlot(PlotterBokeh):
         return self.show(interactive=self._interactive)
 
 
-@multi_plot
-@intercept_call
+@bokeh_multi_plot
+@intercept_call_arg
 def ilineplot(ds, x, y, z=None, y_err=None, x_err=None, **kwargs):
     """Interactive dataset multi-line plot - functional form.
     """
@@ -496,7 +478,7 @@ def auto_ilineplot(x, y_z, **lineplot_opts):
 
 # --------------------------------------------------------------------------- #
 
-class IScatter(PlotterBokeh):
+class IScatter(PlotterBokeh, AbstractScatter):
     """Interactive dataset scatter plot - functional form.
     """
 
@@ -529,29 +511,6 @@ class IScatter(PlotterBokeh):
             # Add the names and styles of drawn markers for the legend
             self._lgnd_items.append((zlabel, legend_pics))
 
-    def prepare_data_single(self):
-        # Core preparation
-        self.prepare_axes_labels()
-        self.prepare_z_vals(mode='scatter')
-        self.prepare_z_labels()
-        self.calc_use_legend_or_colorbar()
-        self.prepare_xy_vals_lineplot(mode='scatter')
-        self.prepare_colors()
-        self.prepare_markers()
-        self.prepare_line_styles()
-        self.prepare_zorders()
-        self.calc_plot_range()
-
-    def prepare_data_multi_grid(self):
-        """This makes sure a few global values are known and calculated for
-        the full dataset, to be used with ``multi_plot``.
-        """
-        self.prepare_axes_labels()
-        self.prepare_z_vals(mode='scatter', grid=True)
-        self.calc_use_legend_or_colorbar()
-        self.calc_color_norm()
-        self.calc_data_range()
-
     def __call__(self):
         self.prepare_data_single()
         # Bokeh preparation
@@ -569,8 +528,8 @@ class IScatter(PlotterBokeh):
         return self.show(interactive=self._interactive)
 
 
-@multi_plot
-@intercept_call
+@bokeh_multi_plot
+@intercept_call_arg
 def iscatter(ds, x, y, z=None, y_err=None, x_err=None, **kwargs):
     """Interactive dataset scatter plot - functional form.
     """
