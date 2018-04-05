@@ -474,6 +474,9 @@ class LinePlot(PlotterMatplotlib):
                 self._axes.get_legend_handles_labels()
 
     def prepare_data_multi_grid(self):
+        """This makes sure a few global values are known and calculated for
+        the full dataset, to be used with ``multi_plot``.
+        """
         self.prepare_axes_labels()
         self.prepare_z_vals(grid=True)
         self.calc_use_legend_or_colorbar()
@@ -578,13 +581,7 @@ class Scatter(PlotterMatplotlib):
             self._legend_labels.append(
                 scatter_opts['label'])
 
-    def prepare_data_multi_grid(self):
-        self.prepare_axes_labels()
-        self.prepare_z_vals(mode='scatter', grid=True)
-        self.calc_use_legend_or_colorbar()
-        self.calc_color_norm()
-
-    def __call__(self):
+    def prepare_data_single(self):
         # Core preparation
         self.prepare_axes_labels()
         self.prepare_z_vals(mode='scatter')
@@ -596,6 +593,18 @@ class Scatter(PlotterMatplotlib):
         self.prepare_line_styles()
         self.prepare_zorders()
         self.calc_plot_range()
+
+    def prepare_data_multi_grid(self):
+        """This makes sure a few global values are known and calculated for
+        the full dataset, to be used with ``multi_plot``.
+        """
+        self.prepare_axes_labels()
+        self.prepare_z_vals(mode='scatter', grid=True)
+        self.calc_use_legend_or_colorbar()
+        self.calc_color_norm()
+
+    def __call__(self):
+        self.prepare_data_single()
         # matplotlib preparation
         self.prepare_plot()
         self.set_axes_labels()
@@ -712,6 +721,9 @@ class Histogram(PlotterMatplotlib):
         self._legend_handles, self._legend_labels = hnds, lbs
 
     def prepare_data_multi_grid(self):
+        """This makes sure a few global values are known and calculated for
+        the full dataset, to be used with ``multi_plot``.
+        """
         self.prepare_axes_labels()
         self.prepare_z_vals(mode='histogram', grid=True)
         self.calc_use_legend_or_colorbar()
@@ -812,6 +824,9 @@ class HeatMap(PlotterMatplotlib):
             rasterized=self.rasterize)
 
     def prepare_data_multi_grid(self):
+        """This makes sure a few global values are known and calculated for
+        the full dataset, to be used with ``multi_plot``.
+        """
         self.prepare_axes_labels()
         self.prepare_heatmap_data(grid=True)
         self.calc_use_legend_or_colorbar()

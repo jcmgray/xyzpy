@@ -501,7 +501,7 @@ class IScatter(PlotterBokeh):
     """
 
     def __init__(self, ds, x, y, z=None, **kwargs):
-        super().__init__(ds, x, y, z, **kwargs)
+        super().__init__(ds, x, y, z, **kwargs, markers=True)
 
     def plot_scatter(self):
         self._lgnd_items = []
@@ -529,7 +529,7 @@ class IScatter(PlotterBokeh):
             # Add the names and styles of drawn markers for the legend
             self._lgnd_items.append((zlabel, legend_pics))
 
-    def __call__(self):
+    def prepare_data_single(self):
         # Core preparation
         self.prepare_axes_labels()
         self.prepare_z_vals(mode='scatter')
@@ -541,6 +541,19 @@ class IScatter(PlotterBokeh):
         self.prepare_line_styles()
         self.prepare_zorders()
         self.calc_plot_range()
+
+    def prepare_data_multi_grid(self):
+        """This makes sure a few global values are known and calculated for
+        the full dataset, to be used with ``multi_plot``.
+        """
+        self.prepare_axes_labels()
+        self.prepare_z_vals(mode='scatter', grid=True)
+        self.calc_use_legend_or_colorbar()
+        self.calc_color_norm()
+        self.calc_data_range()
+
+    def __call__(self):
+        self.prepare_data_single()
         # Bokeh preparation
         self.prepare_plot_and_set_axes_scale()
         self.set_axes_labels()
