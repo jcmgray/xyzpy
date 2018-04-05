@@ -65,6 +65,7 @@ class PlotterBokeh(Plotter):
                           (25 if self._ytitle else 0) +
                           (25 if not self.yticklabels_hide else 0)),
                 height=int(self.figsize[1] * 80 +
+                           (25 if self.title else 0) +
                            (25 if not self.xticklabels_hide else 0)),
                 x_axis_type=('log' if self.xlog else 'linear'),
                 y_axis_type=('log' if self.ylog else 'linear'),
@@ -194,15 +195,23 @@ class PlotterBokeh(Plotter):
                     list(zip(data['y'], data['y'])), 'x_err_ys')
                 self._sources[i].add(list(zip(x_err_p, x_err_m)), 'x_err_xs')
 
-    def plot_legend(self):
+    def plot_legend(self, legend_items=None):
         """Add a legend to the plot.
         """
         if self._use_legend:
             from bokeh.models import Legend
-            lg = Legend(items=self._lgnd_items)
-            lg.location = 'top_right'
+
+            loc = {'best': 'top_left'}.get(self.legend_loc, self.legend_loc)
+            where = {None: 'right'}.get(self.legend_where, self.legend_where)
+
+            # might be manually specified, e.g. from multiplot
+            if legend_items is None:
+                legend_items = self._lgnd_items
+
+            lg = Legend(items=legend_items)
+            lg.location = loc
             lg.click_policy = 'hide'
-            self._plot.add_layout(lg, 'right')
+            self._plot.add_layout(lg, where)
 
             # Don't repeatedly redraw legend
             self._use_legend = False
@@ -219,12 +228,15 @@ class PlotterBokeh(Plotter):
 
     def plot_colorbar(self):
         if self._use_colorbar:
+
+            where = {None: 'right'}.get(self.legend_where, self.legend_where)
+
             from bokeh.models import ColorBar, LogTicker, BasicTicker
             ticker = LogTicker if self.colormap_log else BasicTicker
             color_bar = ColorBar(color_mapper=self.mappable, location=(0, 0),
                                  ticker=ticker(desired_num_ticks=6),
                                  title=self._ctitle)
-            self._plot.add_layout(color_bar, 'right')
+            self._plot.add_layout(color_bar, where)
 
     def set_tools(self):
         """Set which tools appear for the plot.
@@ -265,8 +277,8 @@ def multi_plot(fn):
         p = fn(ds, *args, **kwargs, call=False)
         p.prepare_data_multi_grid()
 
-        kwargs['xlims'] = p._data_xmin, p._data_xmax
-        kwargs['ylims'] = p._data_ymin, p._data_ymax
+        kwargs['xlims'] = kwargs.get('xlims', [p._data_xmin, p._data_xmax])
+        kwargs['ylims'] = kwargs.get('ylims', [p._data_ymin, p._data_ymax])
 
         kwargs['vmin'] = kwargs.pop('vmin', p.vmin)
         kwargs['vmax'] = kwargs.pop('vmax', p.vmax)
@@ -277,27 +289,26 @@ def multi_plot(fn):
         # intercept figsize as meaning *total* size for whole grid
         figsize = kwargs.pop('figsize', None)
         if figsize is None:
-            figsize = (2, 2)
+            figsize = (2 * (4 / ncols)**0.5, 2 * (3 / nrows)**0.5)
         else:
             figsize = (figsize[0] / ncols, figsize[1] / nrows)
         kwargs['figsize'] = figsize
 
-        # intercept return_fig for the full grid
+        # intercept return_fig for the full grid and other options
         return_fig = kwargs.pop('return_fig', False)
 
         subplots = {}
 
         # range through rows and do subplots
         for i, ds_r in enumerate(ds_r_c):
-            skws = {'legend': False, 'colorbar': False}
-
-            # if not last row
-            if i != nrows - 1:
-                skws['xticklabels_hide'] = True
-                skws['xtitle'] = ''
-
             # range through columns
             for j, sub_ds in enumerate(ds_r):
+                skws = {'legend': False, 'colorbar': False}
+
+                # if not last row
+                if i != nrows - 1:
+                    skws['xticklabels_hide'] = True
+                    skws['xtitle'] = ''
 
                 if hspace == 0 and wspace == 0:
                     ticks_where = []
@@ -330,26 +341,43 @@ def multi_plot(fn):
                     row_val = prettify(ds[row].values[i])
                     skws['ytitle'] = "{} = {}".format(row, row_val)
 
-                subplots[i, j] = fn(sub_ds, *args, return_fig=True,
+                subplots[i, j] = fn(sub_ds, *args, return_fig=True, call=False,
                                     **{**kwargs, **skws})
 
-                # try:
-                #     labels_handles.update(dict(zip(sP._legend_labels,
-                #                                    sP._legend_handles)))
-                # except AttributeError:
-                #     pass
+        from bokeh.layouts import gridplot, row
+        plts = [[subplots[i, j]() for j in range(ncols)] for i in range(nrows)]
 
-        from bokeh.layouts import gridplot
+        if p._use_legend or p._use_colorbar:
+            from bokeh.models import Legend, GlyphRenderer, Range1d, ColorBar
 
-        fullplot = gridplot([[subplots[i, j] for j in range(ncols)]
-                             for i in range(nrows)],)
+            # plot dummy using last sub_ds
+            skws = {'title': "", 'legend_loc': 'center_left',
+                    'legend_where': 'left'}
 
-        # add global legend or colorbar
-        # TODO:
+            lgren = fn(sub_ds, *args, return_fig=True, **{**kwargs, **skws})
+
+            # remove all but legend and glyph renderers
+            lgren.renderers = [
+                r for r in lgren.renderers
+                if isinstance(r, (Legend, GlyphRenderer, ColorBar))
+            ]
+
+            # sizing it is pretty hacky at the moment
+            lgren.width = 100
+            lgren.height = int(80 * figsize[1] * nrows + 100)
+            lgren.x_range = Range1d(0, 0)
+            lgren.y_range = Range1d(0, 0)
+            lgren.toolbar_location = None
+            lgren.outline_line_color = None
+
+            # put to the right of the gridplot
+            p._plot = row([gridplot(plts), lgren])
+        else:
+            p._plot = gridplot(plts)
 
         if return_fig:
-            return fullplot
-        bshow(fullplot)
+            return p._plot
+        bshow(p._plot)
 
     return multi_plotter
 
@@ -364,8 +392,7 @@ class ILinePlot(PlotterBokeh):
     def plot_lines(self):
         """Plot the data and a corresponding legend.
         """
-        if self._use_legend:
-            self._lgnd_items = []
+        self._lgnd_items = []
 
         for src in self._sources:
             col = next(self._cols)
@@ -408,8 +435,7 @@ class ILinePlot(PlotterBokeh):
                 legend_pics.append(err)
 
             # Add the names and styles of drawn lines for the legend
-            if self._use_legend:
-                self._lgnd_items.append((zlabel, legend_pics))
+            self._lgnd_items.append((zlabel, legend_pics))
 
     def prepare_data_multi_grid(self):
         self.prepare_axes_labels()
@@ -478,8 +504,7 @@ class IScatter(PlotterBokeh):
         super().__init__(ds, x, y, z, **kwargs)
 
     def plot_scatter(self):
-        if self._use_legend:
-            self._lgnd_items = []
+        self._lgnd_items = []
 
         for src in self._sources:
             if 'c' in src.column_names:
@@ -502,8 +527,7 @@ class IScatter(PlotterBokeh):
             legend_pics.append(m)
 
             # Add the names and styles of drawn markers for the legend
-            if self._use_legend:
-                self._lgnd_items.append((zlabel, legend_pics))
+            self._lgnd_items.append((zlabel, legend_pics))
 
     def __call__(self):
         # Core preparation

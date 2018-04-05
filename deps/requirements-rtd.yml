@@ -8,7 +8,6 @@ dependencies:
   - scipy
   - xarray
   - dask
-  - distributed
   - zict
   - joblib
   - netcdf4

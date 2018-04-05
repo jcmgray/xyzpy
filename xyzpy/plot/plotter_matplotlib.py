@@ -760,6 +760,22 @@ def histogram(ds, x, z=None, **kwargs):
     return Histogram(ds, x, z=z, **kwargs)
 
 
+class AutoHistogram(Histogram):
+    """Tbokehhe non-dataset input version of Lineplot - automatically converts
+    two arrays to a dataset with names 'x', 'y', 'z'.
+    """
+
+    def __init__(self, x, **histogram_opts):
+        ds = auto_xyz_ds(x)
+        super().__init__(ds, 'x', **histogram_opts)
+
+
+def auto_histogram(x, **histogram_opts):
+    """Function-version of AutoLinePlot
+    """
+    return AutoHistogram(x, **histogram_opts)()
+
+
 # --------------------------------------------------------------------------- #
 
 _HEATMAP_ALT_DEFAULTS = (

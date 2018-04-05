@@ -12,7 +12,6 @@ setup(
         'xarray>=0.9.0',
         'h5py>=2.6.0',
         'h5netcdf>=0.2.2',
-        'distributed>=1.15.2',
         'joblib>=0.10',
         'tqdm>=4.7.6',
         'matplotlib>=2.2.0',

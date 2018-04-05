@@ -62,6 +62,14 @@ def xyz_colormaps(name=None, reverse=False):
         else:
             name = 'xyz'
 
+    # specify some aliases
+    name = {
+        'rainbow_pink': 'rainbow_bgyrm_35_85_c71',
+        'rainbow_pink_r': 'rainbow_bgyrm_35_85_c71_r',
+        'isolum_pink': 'isoluminant_cm_70_c39',
+        'isolum_pink_r': 'isoluminant_cm_70_c39_r',
+    }.get(name, name)
+
     # TODO: make this more general - not reliant on '_r' versions of cmaps
     if reverse:
         if name[-2:] != '_r':

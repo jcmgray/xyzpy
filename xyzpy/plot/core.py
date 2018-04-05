@@ -35,6 +35,7 @@ _PLOTTER_DEFAULTS = {
     'vmin': None,
     'vmax': None,
     'colorbar_relative_position': None,
+    'colorbar_where': None,
     'colorbar_opts': dict(),
     'method': None,
     'colorbar_color': "black",
@@ -45,6 +46,7 @@ _PLOTTER_DEFAULTS = {
     'zticks': None,
     'legend': None,
     'legend_loc': 'best',
+    'legend_where': None,
     'legend_ncol': 1,
     'legend_bbox': None,
     'legend_marker_scale': None,
@@ -422,6 +424,9 @@ class Plotter:
 
         coo = self.z_coo if self.c_coo is None else self.c_coo
 
+        if coo is None:
+            return
+
         # check if real numeric type
         if self._ds[coo].dtype.kind in {'i', 'u', 'f'}:
             self._zmin = self.zlims[0]
@@ -647,4 +652,6 @@ def prettify(x):
     import numpy as np
     if np.issubdtype(type(x), np.floating):
         x = "{0:0.4f}".format(x).rstrip('0')
+        if x[-1] == '.':
+            x += "0"
     return x

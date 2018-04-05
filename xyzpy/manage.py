@@ -202,15 +202,29 @@ def check_runs(obj, dim='run', var=None, sel=()):
     print(msg)
 
 
-def auto_xyz_ds(x, y_z):
-    """Automatically turn an array into a `xarray` dataset.
+def auto_xyz_ds(x, y_z=None):
+    """Automatically turn an array into a `xarray` dataset. Transpose ``y_z``
+    if necessary to automatically match dimension sizes.
+
+    Parameters
+    ----------
+    x : array_like
+        The x-coordinates.
+    y_z : array_like, optional
+        The y-data, possibly varying with coordinate z.
     """
+    # assume non-coordinated - e.g. for auto_histogram
+    if y_z is None:
+        dims = ['zywvu'[i] for i in range(x.ndim)]
+        return xr.Dataset(data_vars={'x': (dims, x)})
+
     # Infer dimensions to coords mapping
     y_z = np.array(np.squeeze(y_z), ndmin=2)
     x = np.asarray(x)
     if np.size(x) == y_z.shape[0]:
         y_z = np.transpose(y_z)
     n_y = y_z.shape[0]
+
     # Turn into dataset
     if x.ndim == 2:
         ds = xr.Dataset(data_vars={'y': (['z', '_x'], y_z),
