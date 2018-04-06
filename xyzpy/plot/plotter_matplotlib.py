@@ -311,7 +311,7 @@ class PlotterMatplotlib(Plotter):
             plt.close(self._fig)
             return self._fig
 
-    def prepare_fig(self):
+    def prepare_plot(self):
         """Do all the things that every plot has.
         """
         self.prepare_axes()
@@ -482,7 +482,7 @@ class LinePlot(PlotterMatplotlib, AbstractLinePlot):
     def __call__(self):
         self.prepare_data_single()
         # matplotlib preparation
-        self.prepare_fig()
+        self.prepare_plot()
         self.plot_lines()
         self.plot_legend()
         self.plot_colorbar()
@@ -565,7 +565,7 @@ class Scatter(PlotterMatplotlib, AbstractScatter):
     def __call__(self):
         self.prepare_data_single()
         # matplotlib preparation
-        self.prepare_fig()
+        self.prepare_plot()
         self.plot_scatter()
         self.plot_legend()
         self.plot_colorbar()
@@ -677,7 +677,7 @@ class Histogram(PlotterMatplotlib, AbstractHistogram):
         # Core preparation
         self.prepare_data_single()
         # matplotlib preparation
-        self.prepare_fig()
+        self.prepare_plot()
         self.plot_histogram()
         self.plot_legend()
         self.plot_colorbar()
@@ -757,7 +757,7 @@ class HeatMap(PlotterMatplotlib, AbstractHeatMap):
         # Core preparation
         self.prepare_data_single()
         # matplotlib preparation
-        self.prepare_fig()
+        self.prepare_plot()
         self.plot_heatmap()
         self.plot_colorbar()
         self.set_panel_label()

@@ -448,8 +448,7 @@ class Plotter:
             mpl.colors, "LogNorm" if self.colormap_log else "Normalize")(
                 vmin=self.vmin, vmax=self.vmax)
 
-        if self._use_colorbar:
-            self.set_mappable()
+        self.set_mappable()
 
     def calc_line_colors(self):
         """Helper function for calculating what the colormapped color of each
@@ -681,14 +680,15 @@ class AbstractHeatMap:
     def prepare_data_single(self):
         self.prepare_axes_labels()
         self.prepare_heatmap_data()
-        self.calc_plot_range()
         self.calc_use_legend_or_colorbar()
+        self.calc_plot_range()
 
     def prepare_data_multi_grid(self):
         self.prepare_axes_labels()
         self.prepare_heatmap_data(grid=True)
         self.calc_use_legend_or_colorbar()
         self.calc_color_norm()
+        self.calc_data_range()
 
 
 # Helpers for grid plots

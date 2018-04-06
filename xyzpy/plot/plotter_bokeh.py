@@ -4,11 +4,14 @@
 
 import functools
 import itertools
+import numpy as np
+
 from ..manage import auto_xyz_ds
 from .core import (
     Plotter,
     AbstractLinePlot,
     AbstractScatter,
+    AbstractHeatMap,
     calc_row_col_datasets,
     PLOTTER_DEFAULTS,
     intercept_call_arg,
@@ -50,7 +53,7 @@ class PlotterBokeh(Plotter):
 
         super().__init__(ds, x, y, z, **kwargs, backend='BOKEH')
 
-    def prepare_plot_and_set_axes_scale(self):
+    def prepare_axes(self):
         """Make the bokeh plot figure and set options.
         """
         from bokeh.plotting import figure
@@ -64,11 +67,12 @@ class PlotterBokeh(Plotter):
                 # convert figsize to roughly matplotlib dimensions
                 width=int(self.figsize[0] * 80 +
                           (100 if self._use_legend else 0) +
-                          (25 if self._ytitle else 0) +
-                          (25 if not self.yticklabels_hide else 0)),
+                          (20 if self._ytitle else 0) +
+                          (20 if not self.yticklabels_hide else 0)),
                 height=int(self.figsize[1] * 80 +
-                           (25 if self.title else 0) +
-                           (25 if not self.xticklabels_hide else 0)),
+                           (20 if self.title else 0) +
+                           (20 if self._xtitle else 0) +
+                           (20 if not self.xticklabels_hide else 0)),
                 x_axis_type=('log' if self.xlog else 'linear'),
                 y_axis_type=('log' if self.ylog else 'linear'),
                 y_axis_location=('right' if self.ytitle_right else 'left'),
@@ -162,12 +166,26 @@ class PlotterBokeh(Plotter):
         """Set the source dictionaries to be used by the plotter functions.
         This is seperate to allow interactive updates of the data.
         """
+        from bokeh.plotting import ColumnDataSource
+
+        # check if heatmap
+        if hasattr(self, '_heatmap_var'):
+            var = np.ma.getdata(self._heatmap_var)
+            data = {
+                'image': [var],
+                'x': [self._data_xmin],
+                'y': [self._data_ymin],
+                'dw': [self._data_xmax - self._data_xmin],
+                'dh': [self._data_ymax - self._data_ymin],
+            }
+            self._source = ColumnDataSource(data=data)
+            return
+
         # 'copy' the zlabels iterator into src_zlbs
         self._zlbls, src_zlbs = itertools.tee(self._zlbls)
 
         # Initialise with empty dicts
         if not hasattr(self, "_sources"):
-            from bokeh.plotting import ColumnDataSource
             self._sources = [ColumnDataSource(dict())
                              for _ in range(len(self._z_vals))]
 
@@ -221,12 +239,12 @@ class PlotterBokeh(Plotter):
     def set_mappable(self):
         from bokeh.models import LogColorMapper, LinearColorMapper
         import matplotlib as plt
-        mapper_fn = (LogColorMapper if self.colormap_log else
-                     LinearColorMapper)
-        bokehpalette = [plt.colors.rgb2hex(m)
-                        for m in self.cmap(range(256))]
-        self.mappable = mapper_fn(palette=bokehpalette,
-                                  low=self._zmin, high=self._zmax)
+
+        mappr_fn = (LogColorMapper if self.colormap_log else LinearColorMapper)
+        bokehpalette = [plt.colors.rgb2hex(m) for m in self.cmap(range(256))]
+
+        self.mappable = mappr_fn(palette=bokehpalette,
+                                 low=self._zmin, high=self._zmax)
 
     def plot_colorbar(self):
         if self._use_colorbar:
@@ -263,6 +281,15 @@ class PlotterBokeh(Plotter):
         bshow(self._plot, **kwargs)
         return self
 
+    def prepare_plot(self):
+        self.prepare_axes()
+        self.set_axes_labels()
+        self.set_axes_range()
+        self.set_spans()
+        self.set_gridlines()
+        self.set_tick_marks()
+        self.set_sources()
+
 
 def bokeh_multi_plot(fn):
     """Decorate a plotting function to plot a grid of values.
@@ -290,7 +317,8 @@ def bokeh_multi_plot(fn):
         # intercept figsize as meaning *total* size for whole grid
         figsize = kwargs.pop('figsize', None)
         if figsize is None:
-            figsize = (2 * (4 / ncols)**0.5, 2 * (3 / nrows)**0.5)
+            av_n = (ncols + nrows) / 2
+            figsize = (2 * (4 / av_n)**0.5, 2 * (4 / av_n)**0.5)
         else:
             figsize = (figsize[0] / ncols, figsize[1] / nrows)
         kwargs['figsize'] = figsize
@@ -439,13 +467,7 @@ class ILinePlot(PlotterBokeh, AbstractLinePlot):
     def __call__(self):
         self.prepare_data_single()
         # Bokeh preparation
-        self.prepare_plot_and_set_axes_scale()
-        self.set_axes_labels()
-        self.set_axes_range()
-        self.set_spans()
-        self.set_gridlines()
-        self.set_tick_marks()
-        self.set_sources()
+        self.prepare_plot()
         self.plot_lines()
         self.plot_legend()
         self.plot_colorbar()
@@ -514,13 +536,7 @@ class IScatter(PlotterBokeh, AbstractScatter):
     def __call__(self):
         self.prepare_data_single()
         # Bokeh preparation
-        self.prepare_plot_and_set_axes_scale()
-        self.set_axes_labels()
-        self.set_axes_range()
-        self.set_spans()
-        self.set_gridlines()
-        self.set_tick_marks()
-        self.set_sources()
+        self.prepare_plot()
         self.plot_scatter()
         self.plot_legend()
         self.plot_colorbar()
@@ -552,3 +568,48 @@ def auto_iscatter(x, y_z, **iscatter_opts):
 
 
 # --------------------------------------------------------------------------- #
+
+
+_HEATMAP_ALT_DEFAULTS = (
+    ('legend', False),
+    ('colorbar', True),
+    ('colormap', 'inferno'),
+    ('gridlines', False),
+    ('padding', 0),
+    ('figsize', (4, 5)),  # try to be square
+)
+
+
+class IHeatMap(PlotterBokeh, AbstractHeatMap):
+    """
+    """
+
+    def __init__(self, ds, x, y, z, **kwargs):
+        # set some heatmap specific options
+        for k, default in _HEATMAP_ALT_DEFAULTS:
+            if k not in kwargs:
+                kwargs[k] = default
+        super().__init__(ds, y, x, z, **kwargs)
+
+    def plot_heatmap(self):
+        self.calc_color_norm()
+        self._plot.image(image='image', x='x', y='y', dw='dw', dh='dh',
+                         source=self._source, color_mapper=self.mappable)
+
+    def __call__(self):
+        # Core preparation
+        self.prepare_data_single()
+        # matplotlib preparation
+        self.prepare_plot()
+        self.plot_heatmap()
+        self.plot_colorbar()
+        self.set_tools()
+        return self.show(interactive=self._interactive)
+
+
+@bokeh_multi_plot
+@intercept_call_arg
+def iheatmap(ds, x, y, z, **kwargs):
+    """
+    """
+    return IHeatMap(ds, x, y, z, **kwargs)

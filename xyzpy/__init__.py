@@ -81,6 +81,7 @@ from .plot.plotter_bokeh import (
     auto_ilineplot,
     iscatter,
     auto_iscatter,
+    iheatmap,
 )
 
 __all__ = [
@@ -123,6 +124,7 @@ __all__ = [
     "auto_ilineplot",
     "iscatter",
     "auto_iscatter",
+    "iheatmap",
     "visualize_matrix",
     "unzip",
     "progbar",
@@ -184,6 +186,10 @@ class XYZPY(object):
     @functools.wraps(iscatter)
     def iscatter(self, *args, **kwargs):
         return iscatter(self._obj, *args, **kwargs)
+
+    @functools.wraps(iheatmap)
+    def iheatmap(self, *args, **kwargs):
+        return iheatmap(self._obj, *args, **kwargs)
 
     # ----------------------------- Processing ------------------------------ #
 

@@ -228,6 +228,19 @@ class TestHeatmap:
         dataset_5d.xyz.heatmap('x', 'y', 'c', col='phi', row='A')
 
 
+class TestIHeatmap:
+    def test_simple(self, dataset_heatmap):
+        dataset_heatmap.xyz.iheatmap('x', 'y', 'c', return_fig=True)
+
+    def test_multi_plot_4d(self, dataset_4d):
+        dataset_4d.xyz.iheatmap('x', 'y', 'c', row='phi')
+        dataset_4d.xyz.iheatmap('x', 'y', 'c', col='phi')
+
+    def test_multi_plot_5d(self, dataset_5d):
+        dataset_5d.xyz.iheatmap('x', 'y', 'c', row='phi', col='A')
+        dataset_5d.xyz.iheatmap('x', 'y', 'c', col='phi', row='A')
+
+
 class TestScatter:
 
     def test_normal(self, dataset_scatter):
