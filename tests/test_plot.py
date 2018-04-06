@@ -255,6 +255,20 @@ class TestScatter:
         dataset_5d.xyz.scatter('x', 'y', c='c', col='phi', row='A')
 
 
+class TestIScatter:
+
+    def test_normal(self, dataset_scatter):
+        dataset_scatter.xyz.iscatter('x', 'y')
+
+    def test_multi_plot_4d(self, dataset_4d):
+        dataset_4d.xyz.iscatter('x', 'y', c='c', row='phi')
+        dataset_4d.xyz.iscatter('x', 'y', c='c', col='phi')
+
+    def test_multi_plot_5d(self, dataset_5d):
+        dataset_5d.xyz.iscatter('x', 'y', c='c', row='phi', col='A')
+        dataset_5d.xyz.iscatter('x', 'y', c='c', col='phi', row='A')
+
+
 class TestHistogram:
 
     def test_normal(self, dataset_3d):

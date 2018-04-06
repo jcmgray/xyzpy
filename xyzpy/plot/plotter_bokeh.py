@@ -162,24 +162,31 @@ class PlotterBokeh(Plotter):
         if self.yticklabels_hide:
             self._plot.yaxis.major_label_text_font_size = '0pt'
 
+    def set_sources_heatmap(self):
+        from bokeh.plotting import ColumnDataSource
+
+        # initialize empty source
+        if not hasattr(self, '_source'):
+            self._source = ColumnDataSource(data=dict())
+
+        # remove mask from data -> not necessary soon? / convert to nan?
+        var = np.ma.getdata(self._heatmap_var)
+
+        self._source.add([var], 'image')
+        self._source.add([self._data_xmin], 'x')
+        self._source.add([self._data_ymin], 'y')
+        self._source.add([self._data_xmax - self._data_xmin], 'dw')
+        self._source.add([self._data_ymax - self._data_ymin], 'dh')
+
     def set_sources(self):
         """Set the source dictionaries to be used by the plotter functions.
-        This is seperate to allow interactive updates of the data.
+        This is seperate to allow interactive updates of the data only.
         """
         from bokeh.plotting import ColumnDataSource
 
         # check if heatmap
         if hasattr(self, '_heatmap_var'):
-            var = np.ma.getdata(self._heatmap_var)
-            data = {
-                'image': [var],
-                'x': [self._data_xmin],
-                'y': [self._data_ymin],
-                'dw': [self._data_xmax - self._data_xmin],
-                'dh': [self._data_ymax - self._data_ymin],
-            }
-            self._source = ColumnDataSource(data=data)
-            return
+            return self.set_sources_heatmap()
 
         # 'copy' the zlabels iterator into src_zlbs
         self._zlbls, src_zlbs = itertools.tee(self._zlbls)
@@ -576,7 +583,7 @@ _HEATMAP_ALT_DEFAULTS = (
     ('colormap', 'inferno'),
     ('gridlines', False),
     ('padding', 0),
-    ('figsize', (4, 5)),  # try to be square
+    ('figsize', (4, 5)),  # try to be square, maybe use aspect_ratio??
 )
 
 
