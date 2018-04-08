@@ -26,11 +26,11 @@ def unzip(its, zip_level=1):
 
     Parameters
     ----------
-        its: iterable (of iterables (of iterables ...))
-            'n-dimensional' iterable to split
-        zip_level: int
-            level at which to split the iterable, default of 1 replicates
-            zip(*its) behaviour.
+    its: iterable (of iterables (of iterables ...))
+        'n-dimensional' iterable to split
+    zip_level: int
+        level at which to split the iterable, default of 1 replicates
+        ``zip(*its)`` behaviour.
 
     Example
     -------

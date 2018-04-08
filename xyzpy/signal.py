@@ -474,7 +474,8 @@ def _gufunc_interp(x, y, order, out=None):  # pragma: no cover
     x, y, num_nan, mask = xynm
 
     # interpolating function
-    ifn = interpolate.interp1d(x, y, kind=_INTERP_INT2STR[order[0]])
+    ifn = interpolate.interp1d(x, y, kind=_INTERP_INT2STR[order[0]],
+                               bounds_error=False)
     yf = ifn(x)
     postprocess_nan_func(yf, num_nan, mask, out)
 
@@ -492,7 +493,8 @@ def _gufunc_interp_upscale(x, y, ix, order, out=None):  # pragma: no cover
     x, y, _, _ = xynm
 
     # interpolating function
-    ifn = interpolate.interp1d(x, y, kind=_INTERP_INT2STR[order[0]])
+    ifn = interpolate.interp1d(x, y, kind=_INTERP_INT2STR[order[0]],
+                               bounds_error=False)
 
     # no need to nan_func post process and upscaling into exact right size
     out[:] = ifn(ix)

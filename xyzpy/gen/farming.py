@@ -173,14 +173,14 @@ class Runner(object):
 
         Parameters
         ----------
-        combos : tuple of form ((str, seq), *)
+        combos : tuple of form ((str, seq), ...)
             The values of each function argument with which to evaluate all
             combinations.
         constants : dict (optional)
             Extra constant arguments for this run, repeated arguments will
             take precedence over stored constants but for this run only.
         runner_settings
-            Keyword arguments supplied to ``combo_runner``.
+            Keyword arguments supplied to :func:`~xyzpy.combo_runner`.
         """
         combos = _parse_combos(combos)
         self.last_ds = combo_runner_to_ds(
@@ -214,10 +214,10 @@ class Runner(object):
 
         Parameters
         ----------
-        cases : tuple of form ((arg1_val, *), *)
-            A list of cases, each
-        **runner_settings :
-            Keyword arguments supplied to `case_runner`
+        cases : sequence of mappings or tuples
+            A sequence of cases.
+        runner_settings
+            Keyword arguments supplied to :func:`~xyzpy.case_runner`.
         """
         cases = _parse_cases(cases)
         self.last_ds = case_runner_to_ds(
@@ -442,17 +442,20 @@ class Harvester(object):
             If True (default), load and save the disk dataset before
             and after merging in the new data.
         overwrite : {None, False, True}, optional
-                * ``None`` (default): attempt the merge and only raise if
-                data conflicts.
-                * ``True``: overwrite conflicting current data with
-                that from the new dataset.
-                *``False``: drop any conflicting data from the new dataset.
+
+            - ``None`` (default): attempt the merge and only raise if
+              data conflicts.
+            - ``True``: overwrite conflicting current data with
+              that from the new dataset.
+            - ``False``: drop any conflicting data from the new dataset.
+
         chunks : bool, optional
             If not None, passed passed to xarray so that the full dataset is
             loaded and merged into with on-disk dask arrays.
         engine : str, optional
             Engine to use to save and load datasets.
-        **runner_settings
+        runner_settings
+            Supplied to :func:`~xyzpy.combo_runner`.
         """
 
         ds = self.runner.run_combos(combos, **runner_settings)

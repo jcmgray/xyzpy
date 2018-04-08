@@ -583,7 +583,7 @@ _HEATMAP_ALT_DEFAULTS = (
     ('colormap', 'inferno'),
     ('gridlines', False),
     ('padding', 0),
-    ('figsize', (4, 5)),  # try to be square, maybe use aspect_ratio??
+    ('figsize', (5, 5)),  # try to be square, maybe use aspect_ratio??
 )
 
 

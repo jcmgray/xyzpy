@@ -94,7 +94,9 @@ class Crop(object):
     """Encapsulates all the details describing a single 'crop', that is,
     its location, name, and batch size/number. Also allows tracking of
     crop's progress, and experimentally, automatic submission of
-    workers to grid engine to complete un-grown cases.
+    workers to grid engine to complete un-grown cases. Can also be instantiated
+    directly from a :class:`~xyzpy.Runner` or :class:`~xyzpy.Harvester`
+    instance.
 
     Parameters
     ----------
@@ -130,6 +132,9 @@ class Crop(object):
         If True, check for the existence of a Crop written to disk
         with the same location, and if found, load it.
 
+    See Also
+    --------
+    Runner.Crop, Harvester.Crop
     """
 
     def __init__(self, *,
