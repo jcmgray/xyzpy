@@ -6,11 +6,22 @@
 Welcome to xyzpy's documentation!
 =================================
 
-.. image:: https://img.shields.io/travis/jcmgray/xyzpy/master.svg?style=flat-square   :alt: Travis branch
+.. image:: https://travis-ci.org/jcmgray/xyzpy.svg?branch=master
+  :target: https://travis-ci.org/jcmgray/xyzpy
+.. image:: https://codecov.io/gh/jcmgray/xyzpy/branch/master/graph/badge.svg
+  :target: https://codecov.io/gh/jcmgray/xyzpy
+.. image:: https://api.codacy.com/project/badge/Grade/7085feb3f47c4c509559778be5eb6a60
+  :target: https://www.codacy.com/app/jcmgray/xyzpy?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=jcmgray/xyzpy&amp;utm_campaign=Badge_Grade
+.. image:: https://landscape.io/github/jcmgray/xyzpy/master/landscape.svg?style=flat
+  :target: https://landscape.io/github/jcmgray/xyzpy/master
+  :alt: Code Health
+.. image:: https://readthedocs.org/projects/xyzpy/badge/?version=latest
+  :target: http://xyzpy.readthedocs.io/en/latest/?badge=latest
+  :alt: Documentation Status
 
 ----------------------------------------------------------------------------------
 
-`xyzpy <https://github.com/jcmgray/xyzpy>`__ is python library for efficiently generating, manipulating and plotting data with a lot of dimensions. It stands wholly atop the labelled N-dimensional array library `xarray <http://xarray.pydata.org/en/stable/>`__.
+`xyzpy <https://github.com/jcmgray/xyzpy>`__ is python library for efficiently generating, manipulating and plotting data with a lot of dimensions, standing wholly atop the labelled N-dimensional array library `xarray <http://xarray.pydata.org/en/stable/>`__. The project is hosted on `github <https://github.com/jcmgray/xyzpy>`__, please do submit any issues or PRs there.
 
 The aim is to take the pain and errors out of generating and exploring data with a high number of possible parameters. This means:
 
