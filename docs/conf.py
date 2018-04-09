@@ -98,8 +98,8 @@ pygments_style = 'sphinx'
 html_theme = 'bootstrap'
 html_theme_path = sphinx_bootstrap_theme.get_html_theme_path()
 html_theme_options = {
-    'bootswatch_theme': "flatly",
-    'navbar_site_name': "Guides",
+    'bootswatch_theme': "paper",
+    'navbar_site_name': "Site",
     'nosidebar': True,
 }
 
@@ -118,6 +118,8 @@ html_static_path = ['_static']
 def setup(app):
     app.add_stylesheet("my-styles.css")
 
+
+html_logo = "_static/xyzpy-logo.png"
 
 # Custom sidebar templates, must be a dictionary that maps document names
 # to template names.
