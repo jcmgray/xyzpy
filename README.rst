@@ -1,6 +1,6 @@
 .. raw:: html
 
-    <img src="https://github.com/jcmgray/xyzpy/blob/master/docs/_static/xyzpy-logo-title.png" height="128px">
+    <img src="https://github.com/jcmgray/xyzpy/blob/master/docs/_static/xyzpy-logo-title.png" width="450px">
 
 .. image:: https://travis-ci.org/jcmgray/xyzpy.svg?branch=master
   :target: https://travis-ci.org/jcmgray/xyzpy
