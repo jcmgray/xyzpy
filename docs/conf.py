@@ -29,7 +29,7 @@ copyright = '2018, Johnnie Gray'
 author = 'Johnnie Gray'
 
 # The short X.Y version
-version = ''
+version = '0.1'
 # The full version, including alpha/beta/rc tags
 release = '0.1.1'
 
@@ -100,7 +100,9 @@ html_theme_path = sphinx_bootstrap_theme.get_html_theme_path()
 html_theme_options = {
     'bootswatch_theme': "paper",
     'navbar_site_name': "Site",
+    'navbar_title': " ",
     'nosidebar': True,
+    'source_link_position': "",
 }
 
 # Theme options are theme-specific and customize the look and feel of a theme
@@ -119,7 +121,7 @@ def setup(app):
     app.add_stylesheet("my-styles.css")
 
 
-html_logo = "_static/xyzpy-logo.png"
+html_logo = "_static/xyzpy-logo-title.png"
 
 # Custom sidebar templates, must be a dictionary that maps document names
 # to template names.
