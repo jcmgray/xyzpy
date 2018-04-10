@@ -1,17 +1,17 @@
-import os
 from pytest import fixture, mark
 import numpy as np
 import xarray as xr
 import matplotlib
 
+from xyzpy import (
+    lineplot,
+    auto_lineplot,
+    ilineplot,
+    auto_ilineplot,
+    visualize_matrix
+)
 from xyzpy.plot.color import convert_colors
-from xyzpy.plot.plotter_matplotlib import lineplot
-from xyzpy.plot.plotter_bokeh import ilineplot
 
-
-DISPLAY_PRESENT = 'DISPLAY' in os.environ
-no_display_msg = "No display found."
-needs_display = mark.skipif(not DISPLAY_PRESENT, reason=no_display_msg)
 
 matplotlib.use('Template')
 
@@ -125,7 +125,7 @@ class TestCommonInterface:
                 colors=colors,
                 markers=markers)
 
-    @mark.parametrize("colormap", ['xyz', 'neon', 'viridis'])
+    @mark.parametrize("colormap", ['xyz', 'viridis'])
     @mark.parametrize("colormap_log", [True, False])
     @mark.parametrize("colormap_reverse", [True, False])
     @mark.parametrize("string_z_coo", [True, False])
@@ -167,8 +167,8 @@ class TestCommonInterface:
                 xlims=xlims,
                 ylims=ylims)
 
-    @mark.parametrize("xlog", [None, True, False])
-    @mark.parametrize("ylog", [None, True, False])
+    @mark.parametrize("xlog", [True, False])
+    @mark.parametrize("ylog", [True, False])
     @mark.parametrize("xticks", [None, (2, 3,)])
     @mark.parametrize("yticks", [None, (0.2, 0.3,)])
     @mark.parametrize("vlines", [None, (2, 3,)])
@@ -191,6 +191,11 @@ class TestCommonInterface:
 
 class TestLinePlot:
 
+    def test_auto_lineplot(self):
+        x = [1, 2, 3]
+        y = [[4, 5, 6], [7, 8, 9]]
+        auto_lineplot(x, y)
+
     def test_multi_plot_4d(self, dataset_4d):
         dataset_4d.xyz.lineplot('x', 'c', 'y', row='phi')
         dataset_4d.xyz.lineplot('x', 'c', 'y', col='phi')
@@ -203,6 +208,11 @@ class TestLinePlot:
 
 
 class TestILinePlot:
+
+    def test_auto_ilineplot(self):
+        x = [1, 2, 3]
+        y = [[4, 5, 6], [7, 8, 9]]
+        auto_ilineplot(x, y)
 
     def test_multi_plot_4d(self, dataset_4d):
         dataset_4d.xyz.ilineplot('x', 'c', 'y', row='phi')
@@ -284,3 +294,10 @@ class TestHistogram:
     def test_multi_plot_5d(self, dataset_5d):
         dataset_5d.xyz.histogram(('c', 's'), row='phi', col='A')
         dataset_5d.xyz.histogram(('c', 's'), col='phi', row='A')
+
+
+class TestVisualizeMatrix():
+
+    def test_single(self):
+        x = np.random.randn(10, 10)
+        visualize_matrix(x)

@@ -1,6 +1,7 @@
 from tempfile import TemporaryDirectory
 
 import pytest
+import os
 
 from xyzpy import combo_runner
 from xyzpy.gen.batch import (
@@ -24,9 +25,12 @@ class TestSowerReaper:
             (foo_add, None, None, '.xyz-foo_add'),
             (None, 'custom', None, '.xyz-custom'),
             (foo_add, 'custom', None, '.xyz-custom'),
-            (foo_add, None, 'custom_dir', 'custom_dir/.xyz-foo_add'),
-            (None, 'custom', 'custom_dir', 'custom_dir/.xyz-custom'),
-            (foo_add, 'custom', 'custom_dir', 'custom_dir/.xyz-custom'),
+            (foo_add, None, 'custom_dir', os.path.join('custom_dir',
+                                                       '.xyz-foo_add')),
+            (None, 'custom', 'custom_dir', os.path.join('custom_dir',
+                                                        '.xyz-custom')),
+            (foo_add, 'custom', 'custom_dir', os.path.join('custom_dir',
+                                                           '.xyz-custom')),
             (None, None, None, 'raises'),
             (None, None, 'custom_dir', 'raises'),
 

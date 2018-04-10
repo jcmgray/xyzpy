@@ -96,11 +96,13 @@ class TestSaveAndLoad:
                           chunks=1)
             assert ds2.chunks['b'] == (1, 1)
             assert ds_real.identical(ds2)
+            ds2.close()
 
     @mark.xfail
     def test_h5netcdf_dask(self, ds1):
         ds = ds1.chunk()
         with tempfile.TemporaryDirectory() as tmpdir:
-            save_ds(ds, os.path.join(tmpdir, "test.nc"), engine='h5netcdf')
-            ds2 = load_ds(os.path.join(tmpdir, "test.nc"))
+            save_ds(ds, os.path.join(tmpdir, "test.h5"), engine='h5netcdf')
+            ds2 = load_ds(os.path.join(tmpdir, "test.h5"))
             assert ds1.identical(ds2)
+            ds2.close()

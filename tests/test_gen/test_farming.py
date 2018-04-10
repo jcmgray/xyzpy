@@ -291,9 +291,10 @@ class TestHarvester:
             h = Harvester(fn3_fba_runner, fl_pth, engine='netcdf4')
             h.harvest_cases([(1, 3), (2, 4)], chunks=1)
             h.harvest_cases([(1, 4), (2, 3)], chunks=1)
-        assert not h.last_ds.identical(fn3_fba_ds)
-        assert h.full_ds.identical(fn3_fba_ds)
-        assert h.full_ds['sum'].chunks is not None
+            assert not h.last_ds.identical(fn3_fba_ds)
+            assert h.full_ds.identical(fn3_fba_ds)
+            assert h.full_ds['sum'].chunks is not None
+            h.full_ds.close()
 
     def test_harvest_cases_merge_dask_default(self, fn3_fba_runner,
                                               fn3_fba_ds):
@@ -307,6 +308,7 @@ class TestHarvester:
                           chunks=1)
             h.harvest_cases([(1, 3), (2, 4)])
             h.harvest_cases([(1, 4), (2, 3)])
-        assert not h.last_ds.identical(fn3_fba_ds)
-        assert h.full_ds.identical(fn3_fba_ds)
-        assert h.full_ds['sum'].chunks is not None
+            assert not h.last_ds.identical(fn3_fba_ds)
+            assert h.full_ds.identical(fn3_fba_ds)
+            assert h.full_ds['sum'].chunks is not None
+            h.full_ds.close()
