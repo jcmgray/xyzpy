@@ -940,7 +940,7 @@ def qsub_grow(crop, batch_ids=None, *,
               mpi=False,
               temp_gigabytes=1,
               output_directory=None,
-              debugging=False):
+              debugging=False):  # pragma: no cover
     """Automagically submit SGE jobs to grow all missing results.
     """
     if crop.is_ready_to_reap():

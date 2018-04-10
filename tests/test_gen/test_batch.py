@@ -171,6 +171,11 @@ class TestSowerReaper:
             crop = Crop(fn=foo3_scalar, parent_dir=tdir, batchsize=5)
             crop.sow_combos(combos)
 
+            # check on disk repr works and gen qsub_script works
+            print(crop)
+            repr(crop)
+            assert crop.gen_qsub_script() is not None
+
             # grow seeds
             for i in range(1, 6):
                 crop.grow(i)
