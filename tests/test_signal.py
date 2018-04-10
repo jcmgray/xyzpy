@@ -44,11 +44,14 @@ def eds():
 @pytest.fixture
 def nan_ds():
     def make_data(a, b):
-        return 10. * a + b, a + 10. * b
+        return np.cos(a) + b, a + np.sin(b)
     r = Runner(make_data, ('a10sum', 'b10sum'))
-    ds1 = r.run_combos((('a', [1, 2, 3]), ('b', [1, 2, 3])))
-    ds2 = r.run_combos((('a', [2, 3, 4]), ('b', [1, 2, 3])))
-    ds3 = r.run_combos((('a', [4, 5, 6]), ('b', [4, 5, 6])))
+    ds1 = r.run_combos((('a', np.linspace(1, 3, 10)),
+                        ('b', np.linspace(1, 3, 10))))
+    ds2 = r.run_combos((('a', np.linspace(1.5, 3.5, 10)),
+                        ('b', np.linspace(1, 3, 10))))
+    ds3 = r.run_combos((('a', np.linspace(4, 6, 10)),
+                        ('b', np.linspace(4, 6, 10))))
     return xr.merge([ds1, ds2, ds3])
 
 
@@ -116,7 +119,7 @@ class TestFit:
         assert nds.t.size == ds.t.size
 
     def test_ds_int_upscale(self, ds, fit):
-        kws = {'dim': 't', 'ix': 50}
+        kws = {'dim': 't', 'ix': 13}
         if fit == 'interp':
             nds = ds.xyz.interp(**kws, order=3)
         elif fit == 'unispline':
@@ -126,7 +129,7 @@ class TestFit:
         else:
             nds = ds.xyz.polyfit(**kws, poly=fit)
         assert 't' in nds
-        assert nds.t.size == 50
+        assert nds.t.size == 13
 
     def test_ds_upscale(self, ds, fit):
         kws = {'dim': 't', 'ix': np.linspace(0.1, 0.3, 13)}
@@ -154,7 +157,7 @@ class TestFit:
         assert nds.a.size == nan_ds.a.size
 
     def test_nan_ds_int_upscale(self, nan_ds, fit):
-        kws = {'dim': 'a', 'ix': 50}
+        kws = {'dim': 'a', 'ix': 13}
         if fit == 'interp':
             nds = nan_ds.xyz.interp(**kws, order=2)
         elif fit == 'unispline':
@@ -164,7 +167,7 @@ class TestFit:
         else:
             nds = nan_ds.xyz.polyfit(**kws, poly=fit)
         assert 'a' in nds
-        assert nds.a.size == 50
+        assert nds.a.size == 13
 
     def test_nan_ds_upscale(self, nan_ds, fit):
         kws = {'dim': 'a', 'ix': np.linspace(1.5, 2.5, 13)}
@@ -232,7 +235,7 @@ class TestFiltFilt:
             nan_ds.xyz.filtfilt_butter(dim='b')
         elif filter_type == 'bessel':
             nan_ds.xyz.filtfilt_bessel(dim='a')
-        nan_ds.xyz.filtfilt_bessel(dim='b')
+            nan_ds.xyz.filtfilt_bessel(dim='b')
 
 
 @pytest.fixture
