@@ -46,12 +46,9 @@ def nan_ds():
     def make_data(a, b):
         return 10. * a + b, a + 10. * b
     r = Runner(make_data, ('a10sum', 'b10sum'))
-    ds1 = r.run_combos((('a', [1, 2, 3]),
-                        ('b', [1, 2, 3])))
-    ds2 = r.run_combos((('a', [2, 3, 4]),
-                        ('b', [1, 2, 3])))
-    ds3 = r.run_combos((('a', [4, 5, 6]),
-                        ('b', [4, 5, 6])))
+    ds1 = r.run_combos((('a', [1, 2, 3]), ('b', [1, 2, 3])))
+    ds2 = r.run_combos((('a', [2, 3, 4]), ('b', [1, 2, 3])))
+    ds3 = r.run_combos((('a', [4, 5, 6]), ('b', [4, 5, 6])))
     return xr.merge([ds1, ds2, ds3])
 
 
@@ -101,171 +98,140 @@ class TestUnevenDiff:
         eds.xyz.diff_u_err('t')
 
 
-class TestInterp:
+@pytest.mark.parametrize('fit', ['unispline', 'pchip', 'interp',
+                                 'polynomial', 'chebyshev', 'legendre',
+                                 'laguerre', 'hermite'])
+class TestFit:
 
-    def test_ds_no_upscale(self, ds):
-        nds = ds.xyz.interp('t', ix=None, order=3)
+    def test_ds_no_upscale(self, ds, fit):
+        kws = {'dim': 't', 'ix': None}
+        if fit == 'interp':
+            nds = ds.xyz.interp(**kws)
+        elif fit == 'unispline':
+            nds = ds.xyz.unispline(**kws, num_knots=4)
+        elif fit == 'pchip':
+            nds = ds.xyz.interp_pchip(**kws)
+        else:
+            nds = ds.xyz.polyfit(**kws, poly=fit)
         assert nds.t.size == ds.t.size
 
-    def test_ds_int_upscale(self, ds):
-        nds = ds.xyz.interp('t', ix=50, order=3)
+    def test_ds_int_upscale(self, ds, fit):
+        kws = {'dim': 't', 'ix': 50}
+        if fit == 'interp':
+            nds = ds.xyz.interp(**kws, order=3)
+        elif fit == 'unispline':
+            nds = ds.xyz.unispline(**kws, num_knots=4)
+        elif fit == 'pchip':
+            nds = ds.xyz.interp_pchip(**kws)
+        else:
+            nds = ds.xyz.polyfit(**kws, poly=fit)
         assert 't' in nds
         assert nds.t.size == 50
 
-    def test_ds_upscale(self, ds):
-        nds = ds.xyz.interp('t', ix=np.linspace(0.1, 0.3, 13), order=3)
+    def test_ds_upscale(self, ds, fit):
+        kws = {'dim': 't', 'ix': np.linspace(0.1, 0.3, 13)}
+        if fit == 'interp':
+            nds = ds.xyz.interp(**kws, order=3)
+        elif fit == 'unispline':
+            nds = ds.xyz.unispline(**kws, num_knots=4)
+        elif fit == 'pchip':
+            nds = ds.xyz.interp_pchip(**kws)
+        else:
+            nds = ds.xyz.polyfit(**kws, poly=fit)
         assert 't' in nds
         assert nds.t.size == 13
 
-    def test_nan_ds_no_upscale(self, nan_ds):
-        nds = nan_ds.xyz.interp('a', ix=None, order=2)
+    def test_nan_ds_no_upscale(self, nan_ds, fit):
+        kws = {'dim': 'a', 'ix': None}
+        if fit == 'interp':
+            nds = nan_ds.xyz.interp(**kws, order=2)
+        elif fit == 'unispline':
+            nds = nan_ds.xyz.unispline(**kws, num_knots=4)
+        elif fit == 'pchip':
+            nds = nan_ds.xyz.interp_pchip(**kws)
+        else:
+            nds = nan_ds.xyz.polyfit(**kws, poly=fit)
         assert nds.a.size == nan_ds.a.size
 
-    def test_nan_ds_int_upscale(self, nan_ds):
-        nds = nan_ds.xyz.interp('a', ix=50, order=2)
+    def test_nan_ds_int_upscale(self, nan_ds, fit):
+        kws = {'dim': 'a', 'ix': 50}
+        if fit == 'interp':
+            nds = nan_ds.xyz.interp(**kws, order=2)
+        elif fit == 'unispline':
+            nds = nan_ds.xyz.unispline(**kws, num_knots=4)
+        elif fit == 'pchip':
+            nds = nan_ds.xyz.interp_pchip(**kws)
+        else:
+            nds = nan_ds.xyz.polyfit(**kws, poly=fit)
         assert 'a' in nds
         assert nds.a.size == 50
 
-    def test_nan_ds_upscale(self, nan_ds):
-        nds = nan_ds.xyz.interp('a', ix=np.linspace(1.5, 2.5, 13), order=2)
+    def test_nan_ds_upscale(self, nan_ds, fit):
+        kws = {'dim': 'a', 'ix': np.linspace(1.5, 2.5, 13)}
+        if fit == 'interp':
+            nds = nan_ds.xyz.interp(**kws, order=2)
+        elif fit == 'unispline':
+            nds = nan_ds.xyz.unispline(**kws, num_knots=4)
+        elif fit == 'pchip':
+            nds = nan_ds.xyz.interp_pchip(**kws)
+        else:
+            nds = nan_ds.xyz.polyfit(**kws, poly=fit)
         assert 'a' in nds
         assert nds.a.size == 13
 
 
-class TestPchip:
+@pytest.mark.parametrize("filter_type", ['butter', 'bessel'])
+class TestFiltFilt:
 
-    def test_ds_no_upscale(self, ds):
-        nds = ds.xyz.interp_pchip('t', ix=None)
-        assert nds.t.size == ds.t.size
-
-    def test_ds_int_upscale(self, ds):
-        nds = ds.xyz.interp_pchip('t', ix=50)
-        assert 't' in nds
-        assert nds.t.size == 50
-
-    def test_ds_upscale(self, ds):
-        nds = ds.xyz.interp_pchip('t', ix=np.linspace(0.1, 0.3, 13))
-        assert 't' in nds
-        assert nds.t.size == 13
-
-    def test_nan_ds_no_upscale(self, nan_ds):
-        nds = nan_ds.xyz.interp_pchip('a', ix=None)
-        assert nds.a.size == nan_ds.a.size
-
-    def test_nan_ds_int_upscale(self, nan_ds):
-        nds = nan_ds.xyz.interp_pchip('a', ix=50)
-        assert 'a' in nds
-        assert nds.a.size == 50
-
-    def test_nan_ds_upscale(self, nan_ds):
-        nds = nan_ds.xyz.interp_pchip('a', ix=np.linspace(1.5, 2.5, 13))
-        assert 'a' in nds
-        assert nds.a.size == 13
-
-
-@pytest.mark.parametrize('poly', ['polynomial',
-                                  'chebyshev',
-                                  'legendre',
-                                  'laguerre',
-                                  'hermite'])
-class TestPolyFit:
-
-    def test_ds_no_upscale(self, ds, poly):
-        nds = ds.xyz.polyfit('t', ix=None, poly=poly)
-        assert nds.t.size == ds.t.size
-
-    def test_ds_int_upscale(self, ds, poly):
-        nds = ds.xyz.polyfit('t', ix=50, poly=poly)
-        assert 't' in nds
-        assert nds.t.size == 50
-
-    def test_ds_upscale(self, ds, poly):
-        nds = ds.xyz.polyfit('t', ix=np.linspace(0.1, 0.3, 13), poly=poly)
-        assert 't' in nds
-        assert nds.t.size == 13
-
-    def test_nan_ds_no_upscale(self, nan_ds, poly):
-        nds = nan_ds.xyz.polyfit('a', ix=None, poly=poly)
-        assert nds.a.size == nan_ds.a.size
-
-    def test_nan_ds_int_upscale(self, nan_ds, poly):
-        nds = nan_ds.xyz.polyfit('a', ix=50, poly=poly)
-        assert 'a' in nds
-        assert nds.a.size == 50
-
-    def test_nan_ds_upscale(self, nan_ds, poly):
-        nds = nan_ds.xyz.polyfit('a', ix=np.linspace(1.5, 2.5, 13), poly=poly)
-        assert 'a' in nds
-        assert nds.a.size == 13
-
-
-class TestFiltFiltButter:
-
-    def test_all_finite(self):
+    def test_all_finite(self, filter_type):
+        fn = {
+            'butter': _broadcast_filtfilt_butter,
+            'bessel': _broadcast_filtfilt_bessel,
+        }[filter_type]
         n = 20
         s = 5 * np.random.rand(n)
         x = np.cumsum(s)
         y = np.cos(x) + 0.2 * np.random.randn(n)
-        yf = _broadcast_filtfilt_butter(x, y, 2, 0.3)
+        yf = fn(x, y, 2, 0.3)
         assert np.all(np.isfinite(yf))
 
-    def test_all_nan(self):
+    def test_all_nan(self, filter_type):
+        fn = {
+            'butter': _broadcast_filtfilt_butter,
+            'bessel': _broadcast_filtfilt_bessel,
+        }[filter_type]
         n = 20
         s = 5 * np.random.rand(n)
         x = np.cumsum(s)
         y = np.tile(np.nan, n)
-        yf = _broadcast_filtfilt_butter(x, y, 2, 0.3)
+        yf = fn(x, y, 2, 0.3)
         assert np.all(~np.isfinite(yf))
 
-    def test_some_nan(self):
+    def test_some_nan(self, filter_type):
+        fn = {
+            'butter': _broadcast_filtfilt_butter,
+            'bessel': _broadcast_filtfilt_bessel,
+        }[filter_type]
         n = 20
         s = 5 * np.random.rand(n)
         x = np.cumsum(s)
         y = np.cos(x) + 0.2 * np.random.randn(n)
         y[[1, 5, 6, 10, 14]] = np.nan
-        yf = _broadcast_filtfilt_butter(x, y, 2, 0.3)
+        yf = fn(x, y, 2, 0.3)
         assert np.sum(np.isfinite(yf)) == 15
 
-    def test_ds_version(self, ds):
-        ds.xyz.filtfilt_butter(dim='t')
+    def test_ds_version(self, ds, filter_type):
+        if filter_type == 'butter':
+            ds.xyz.filtfilt_butter(dim='t')
+        elif filter_type == 'bessel':
+            ds.xyz.filtfilt_bessel(dim='t')
 
-    def test_nan_ds_version(self, nan_ds):
-        nan_ds.xyz.filtfilt_butter(dim='a')
-        nan_ds.xyz.filtfilt_butter(dim='b')
-
-
-class TestFiltFiltBessel:
-
-    def test_all_finite(self):
-        n = 20
-        s = 5 * np.random.rand(n)
-        x = np.cumsum(s)
-        y = np.cos(x) + 0.2 * np.random.randn(n)
-        yf = _broadcast_filtfilt_bessel(x, y, 2, 0.3)
-        assert np.all(np.isfinite(yf))
-
-    def test_all_nan(self):
-        n = 20
-        s = 5 * np.random.rand(n)
-        x = np.cumsum(s)
-        y = np.tile(np.nan, n)
-        yf = _broadcast_filtfilt_bessel(x, y, 2, 0.3)
-        assert np.all(~np.isfinite(yf))
-
-    def test_some_nan(self):
-        n = 20
-        s = 5 * np.random.rand(n)
-        x = np.cumsum(s)
-        y = np.cos(x) + 0.2 * np.random.randn(n)
-        y[[1, 5, 6, 10, 14]] = np.nan
-        yf = _broadcast_filtfilt_bessel(x, y, 2, 0.3)
-        assert np.sum(np.isfinite(yf)) == 15
-
-    def test_ds_version(self, ds):
-        ds.xyz.filtfilt_bessel(dim='t')
-
-    def test_nan_ds_version(self, nan_ds):
-        nan_ds.xyz.filtfilt_bessel(dim='a')
+    def test_nan_ds_version(self, nan_ds, filter_type):
+        if filter_type == 'butter':
+            nan_ds.xyz.filtfilt_butter(dim='a')
+            nan_ds.xyz.filtfilt_butter(dim='b')
+        elif filter_type == 'bessel':
+            nan_ds.xyz.filtfilt_bessel(dim='a')
         nan_ds.xyz.filtfilt_bessel(dim='b')
 
 
