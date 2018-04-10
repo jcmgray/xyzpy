@@ -695,8 +695,8 @@ class Sower(object):
             self.save_batch()
 
 
-def grow(batch_number, crop=None, fn=None, check_mpi=True, hide_progbar=False,
-         debugging=False):
+def grow(batch_number, crop=None, fn=None, check_mpi=True,
+         hide_progbar=False, debugging=False):
     """Automatically process a batch of cases into results. Should be run in an
     ".xyz-{fn_name}" folder.
 
@@ -714,6 +714,10 @@ def grow(batch_number, crop=None, fn=None, check_mpi=True, hide_progbar=False,
         so - allows mpi functions to be simply used. Defaults to true,
         this should only be turned off if e.g. a pool of workers is being
         used to run different ``grow`` instances.
+    hide_progbar : bool, optional
+        Hide progress within this batch.
+    debugging : bool, optional
+        Set logging level to DEBUG.
     """
     if debugging:
         import logging
