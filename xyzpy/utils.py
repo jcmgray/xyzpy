@@ -12,14 +12,6 @@ def prod(it):
     return functools.reduce(operator.mul, it)
 
 
-def argwhere(x, y, key=operator.eq):
-    """Returns the first index of where y matches an element of x using key.
-    """
-    for i, el in enumerate(x):
-        if key(el, y):
-            return i
-
-
 def unzip(its, zip_level=1):
     """Split a nested iterable at a specified level, i.e. in numpy language
     transpose the specified 'axis' to be the first.

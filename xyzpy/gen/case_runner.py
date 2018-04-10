@@ -73,18 +73,18 @@ def case_runner(fn, fn_args, cases,
     fn_args : tuple
         Names of case arguments that fn takes
     cases : tuple of tuple
-        List settings that fn_args take
-    constants : dict (optional)
+        List settings that ``fn_args`` take.
+    constants : dict, optional
         List of tuples/dict of *constant* fn argument mappings.
-    split : bool (optional)
+    split : bool, optional
         Whether to split into multiple output arrays or not.
-    parallel : bool (optional)
+    parallel : bool, optional
         Process combos in parallel, default number of workers picked.
-    pool : executor-like pool (optional)
+    pool : executor-like pool, optional
         Submit all combos to this pool.
-    num_workers : int (optional)
+    num_workers : int, optional
         Explicitly choose how many workers to use, None for automatic.
-    hide_progbar : bool (optional)
+    hide_progbar : bool, optional
         Whether to disable the progress bar.
 
     Returns

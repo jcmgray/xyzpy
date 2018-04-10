@@ -146,8 +146,7 @@ def sort_dims(ds):
     dim_list = tuple(ds.dims)
 
     for var in ds.data_vars:
-        var_dims = (d for d in dim_list if
-                    d in ds[var].dims)
+        var_dims = (d for d in dim_list if d in ds[var].dims)
         ds[var] = ds[var].transpose(*var_dims)
 
 

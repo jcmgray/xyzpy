@@ -1,9 +1,6 @@
 """
-XYZPY
-=====
 """
-# TODO: plotters with interact, automatic ----------------------------------- #
-# TODO: harvesting split_data_on, save_data_every --------------------------- #
+
 import functools
 import xarray as xr
 

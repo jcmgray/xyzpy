@@ -61,13 +61,8 @@ class Runner(object):
         Like `constants` but not saved to the the dataset, e.g. if very big.
     attrs : dict-like, optional
         Any other miscelleous information to be saved with the dataset.
-    **default_runner_settings
+    default_runner_settings
         These keyword arguments will be supplied as defaults to any runner.
-
-    Members
-    -------
-    last_ds : xarray.Dataset
-        The last dataset generated with this Runner.
     """
 
     def __init__(self, fn, var_names,

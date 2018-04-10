@@ -739,7 +739,7 @@ class HeatMap(PlotterMatplotlib, AbstractHeatMap):
         for k, default in _HEATMAP_ALT_DEFAULTS:
             if k not in kwargs:
                 kwargs[k] = default
-        super().__init__(ds, y, x, z, **kwargs)
+        super().__init__(ds, x, y, z, **kwargs)
 
     def plot_heatmap(self):
         """Plot the data as a heatmap.
