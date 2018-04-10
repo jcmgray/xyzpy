@@ -3,35 +3,35 @@
 
 code {
     font-family: 'Roboto Mono', monospace;
-    font-size: 16px;
-    line-height: 25px;
+    font-size: 15px;
+    line-height: 24px;
 }
 
 code, kbd, pre, samp {
     font-family: 'Roboto Mono', monospace;
-    font-size: 16px;
-    line-height: 25px;
+    font-size: 15px;
+    line-height: 24px;
 }
 
 blockquote {
-    font-size: 17px;
+    font-size: 16px;
 }
 
 body {
     font-family: 'Roboto', sans-serif;
-    font-size: 17px;
-    line-height: 25px;
+    font-size: 16px;
+    line-height: 24px;
 }
 
 
 h2 {
-    font-size: 30px;
+    font-size: 28px;
     font-weight: bold;
 }
 
 
 h1 {
-    font-size: 50px;
+    font-size: 46px;
     font-weight: bold;
 }
 

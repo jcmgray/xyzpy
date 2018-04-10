@@ -265,8 +265,8 @@ def xr_diff_fornberg(obj, dim, ix=100, order=1, mode='points', window=5):
         SIAM Rev., 40(3), 685–691
         http://dx.doi.org/10.1137/S0036144596322507
 
-    Paramters
-    ---------
+    Parameters
+    ----------
     xobj : xarray.DataArray or xarray.Dataset
         Object to find windowed finite difference for.
     dim : str

@@ -401,7 +401,7 @@ def bokeh_multi_plot(fn):
             lgren.outline_line_color = None
 
             # size it - this is pretty hacky at the moment
-            lgren.width = 100
+            lgren.width = 120
             lgren.height = int(80 * figsize[1] * nrows + 100)
             lgren.x_range = Range1d(0, 0)
             lgren.y_range = Range1d(0, 0)

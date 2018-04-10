@@ -46,6 +46,7 @@ Overview
   :maxdepth: 2
 
   generate
+  gen_parallel
   manipulate
   plot
 
