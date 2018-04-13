@@ -40,7 +40,7 @@ class TestComboRunner:
         combos = [('a', [1, 2]),
                   ('b', [10, 20, 30]),
                   ('c', [100, 200, 300, 400])]
-        combo_runner(foo3_scalar, combos, hide_progbar=False)
+        combo_runner(foo3_scalar, combos, verbosity=2)
 
     def test_dict(self):
         combos = OrderedDict((('a', [1, 2]),
@@ -108,7 +108,7 @@ class TestComboRunner:
                               ('b', [10, 20, 30]),
                               ('c', [100, 200, 300, 400])))
         x = [*combo_runner(foo3_scalar, combos, num_workers=2,
-                           parallel=parallel)]
+                           parallel=parallel, verbosity=2)]
         xn = (np.array([1, 2]).reshape((2, 1, 1)) +
               np.array([10, 20, 30]).reshape((1, 3, 1)) +
               np.array([100, 200, 300, 400]).reshape((1, 1, 4)))

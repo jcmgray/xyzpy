@@ -90,26 +90,9 @@ def progbar(it=None, nb=False, **kwargs):
         **kwargs: dict-like
             additional options to send to tqdm
     """
-    disable = kwargs.pop('disable', False)
-    if disable:
-        return it
-
     defaults = {'ascii': True, 'smoothing': 0.0}
     # Overide defaults with custom kwargs
     settings = {**defaults, **kwargs}
     if nb:  # pragma: no cover
         return tqdm.tqdm_notebook(it, **settings)
     return tqdm.tqdm(it, **settings)
-
-
-def update_upon_eval(fn, pbar):
-    """Decorate `fn` such that every time it is called, `pbar` is updated
-    """
-
-    @functools.wraps(fn)
-    def new_fn(*args, **kwargs):
-        result = fn(*args, **kwargs)
-        pbar.update()
-        return result
-
-    return new_fn

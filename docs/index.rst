@@ -21,7 +21,7 @@ Welcome to xyzpy's documentation!
 
 ----------------------------------------------------------------------------------
 
-`xyzpy <https://github.com/jcmgray/xyzpy>`__ is python library for efficiently generating, manipulating and plotting data with a lot of dimensions, standing wholly atop the labelled N-dimensional array library `xarray <http://xarray.pydata.org/en/stable/>`__. The project is hosted on `github <https://github.com/jcmgray/xyzpy>`__, please do submit any issues or PRs there.
+`xyzpy <https://github.com/jcmgray/xyzpy>`__ is python library for efficiently generating, manipulating and plotting data with a lot of dimensions, of the type that often occurs in numerical simulations. It stands wholly atop the labelled N-dimensional array library `xarray <http://xarray.pydata.org/en/stable/>`__. The project is hosted on `github <https://github.com/jcmgray/xyzpy>`__, please do submit any issues or PRs there.
 
 The aim is to take the pain and errors out of generating and exploring data with a high number of possible parameters. This means:
 

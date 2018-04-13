@@ -29,15 +29,14 @@ class TestCaseRunner:
         cases = ((1, 10, 100),
                  (2, 20, 200),
                  (3, 30, 300))
-        xs = case_runner(foo3_scalar, ('a', 'b', 'c'), cases)
+        xs = case_runner(foo3_scalar, ('a', 'b', 'c'), cases, verbosity=0)
         assert xs == (111, 222, 333)
 
     def test_progbar(self):
         cases = ((1, 10, 100),
                  (2, 20, 200),
                  (3, 30, 300))
-        xs = case_runner(foo3_scalar, ('a', 'b', 'c'), cases,
-                         hide_progbar=False)
+        xs = case_runner(foo3_scalar, ('a', 'b', 'c'), cases, verbosity=2)
         assert xs == (111, 222, 333)
 
     def test_constants(self):

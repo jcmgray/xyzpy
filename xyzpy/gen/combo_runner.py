@@ -1,21 +1,15 @@
 """Functions for systematically evaluating a function over all combinations.
 """
-# TODO: allow/encourage results to be a dict? ------------------------------- #
-# TODO: add_to_ds, skip_completed? ------------------------------------------ #
-# TODO: add straight to array, ds ... --------------------------------------- #
-# TODO: allow combo_runner_to_ds to use output vars as coords --------------- #
-# TODO: better checks for var_name compatilibtiy with fn_args eg. ----------- #
-# TODO: allow nan results in combo_runner --> write to cases file? ---------- #
-
+import functools
 from concurrent import futures as cf
-import xarray as xr
 import numpy as np
+import xarray as xr
+
 from ..utils import (
     unzip,
     flatten,
     prod,
     progbar,
-    update_upon_eval,
 )
 from .prepare import (
     _parse_var_names,
@@ -101,62 +95,92 @@ def nested_get(futures, ndim, getter):
             tuple(nested_get(fut, ndim - 1, getter) for fut in futures))
 
 
-def _combo_runner_pool(fn, combos, constants, n, ndim, hide_progbar, pool):
+def _combo_runner_pool(fn, combos, constants, n, ndim, pool, verbosity=1):
     """Submit and retrieve combos from a generic pool.
     """
-    with progbar(total=n, disable=hide_progbar) as pbar:
+    with progbar(total=n, disable=verbosity <= 0) as pbar:
+
+        if verbosity >= 2:
+            pbar.set_description("Processing with pool")
+
         futures = nested_submit(fn, combos, constants, pool=pool)
         getter = default_getter(pbar)
         return nested_get(futures, ndim, getter)
 
 
-def _combo_runner_parallel(fn, combos, constants, n, ndim, hide_progbar,
-                           num_workers):
+def _combo_runner_parallel(fn, combos, constants, n, ndim,
+                           num_workers, verbosity=1):
     """Submit and retrieve combos from a ProcessPoolExecutor.
     """
     with cf.ProcessPoolExecutor(max_workers=num_workers) as pool:
-        with progbar(total=n, disable=hide_progbar) as pbar:
+
+        with progbar(total=n, disable=verbosity <= 0) as pbar:
+
+            if verbosity >= 2:
+                pbar.set_description(
+                    "Processing with {} workers".format(pool._max_workers)
+                )
+
             futures = nested_submit(fn, combos, constants, pool=pool)
             for f in cf.as_completed(flatten(futures, ndim)):
                 pbar.update()
             return nested_get(futures, ndim, default_getter())
 
 
-def _combo_runner_sequential(fn, combos, constants, n, hide_progbar):
+def update_upon_eval(fn, pbar, verbosity=1):
+    """Decorate `fn` such that every time it is called, `pbar` is updated
+    """
+
+    @functools.wraps(fn)
+    def new_fn(**kwargs):
+        if verbosity >= 2:
+            pbar.set_description(str(kwargs))
+        result = fn(**kwargs)
+        pbar.update()
+        return result
+
+    return new_fn
+
+
+def _combo_runner_sequential(fn, combos, constants, n, ndim, verbosity=1):
     """Run combos in a sequential manner.
     """
-    with progbar(total=n, disable=hide_progbar) as p:
+    with progbar(total=n, disable=verbosity <= 0) as pbar:
+
         # Wrap the function such that the progbar is updated upon each call
-        fn = update_upon_eval(fn, p)
+        fn = update_upon_eval(fn, pbar, verbosity=verbosity)
         return nested_submit(fn, combos, constants)
 
 
-def _combo_runner(fn, combos, constants, split=False, parallel=False,
-                  num_workers=None, pool=None, hide_progbar=False):
+def _combo_runner(fn, combos, constants, split=False,
+                  parallel=False, num_workers=None, pool=None,
+                  verbosity=1):
     """Core combo runner, i.e. no parsing of arguments.
     """
     n = prod(len(x) for _, x in combos)
     ndim = len(combos)
 
+    kws = {'fn': fn, 'combos': combos, 'constants': constants, 'n': n,
+           'ndim': ndim, 'verbosity': verbosity}
+
+    # Custom pool supplied
     if pool is not None:
-        results = _combo_runner_pool(
-            fn, combos, constants, n, ndim, hide_progbar, pool)
+        results = _combo_runner_pool(pool=pool, **kws)
 
     # Else for parallel, by default use a process pool exceutor
     elif parallel or num_workers:
-        results = _combo_runner_parallel(
-            fn, combos, constants, n, ndim, hide_progbar, num_workers)
+        results = _combo_runner_parallel(num_workers=num_workers, **kws)
 
     # Evaluate combos sequentially
     else:
-        results = _combo_runner_sequential(
-            fn, combos, constants, n, hide_progbar)
+        results = _combo_runner_sequential(**kws)
 
     return tuple(unzip(results, ndim)) if split else results
 
 
-def combo_runner(fn, combos, *, constants=None, split=False, parallel=False,
-                 pool=None, num_workers=None, hide_progbar=False):
+def combo_runner(fn, combos, *, constants=None, split=False,
+                 parallel=False, pool=None, num_workers=None,
+                 verbosity=1):
     """Take a function fn and analyse it over all combinations of named
     variables' values, optionally showing progress and in parallel.
 
@@ -170,15 +194,20 @@ def combo_runner(fn, combos, *, constants=None, split=False, parallel=False,
     constants : dict, optional
         List of tuples/dict of *constant* fn argument mappings.
     split : bool, optional
-        Whether to split into multiple output arrays or not.
+        Whether to split (unzip) into multiple output arrays or not.
     parallel : bool, optional
         Process combos in parallel, default number of workers picked.
     pool : executor-like pool, optional
-        Submit all combos to this pool.
+        Submit all combos to this pool. Must have ``submit`` or ``apply_async``
+        methods.
     num_workers : int, optional
         Explicitly choose how many workers to use, None for automatic.
-    hide_progbar : bool, optional
-        Whether to disable the progress bar.
+    verbosity : {0, 1, 2}, optional
+        How much information to display:
+
+        - 0: nothing,
+        - 1: just progress,
+        - 2: all information.
 
     Returns
     -------
@@ -192,7 +221,7 @@ def combo_runner(fn, combos, *, constants=None, split=False, parallel=False,
     # Submit to core combo runner
     return _combo_runner(fn, combos, constants=constants, split=split,
                          parallel=parallel, pool=pool, num_workers=num_workers,
-                         hide_progbar=hide_progbar)
+                         verbosity=verbosity)
 
 
 def multi_concat(results, dims):
@@ -288,7 +317,7 @@ def combo_runner_to_ds(fn, combos, var_names, *,
     attrs : mapping, optional
         Any extra attributes to store.
     combo_runner_settings
-        Arguments supplied to :func:`combo_runner`.
+        Arguments supplied to :func:`~xyzpy.combo_runner`.
 
     Returns
     -------

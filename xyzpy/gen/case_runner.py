@@ -36,7 +36,7 @@ def _case_runner(fn, fn_args, cases, constants,
                  parallel=False,
                  num_workers=None,
                  pool=None,
-                 hide_progbar=False):
+                 verbosity=1):
     """Core case runner, i.e. without parsing of arguments.
     """
     # Turn the function into a single arg function to send to combo_runner
@@ -53,7 +53,7 @@ def _case_runner(fn, fn_args, cases, constants,
                          parallel=parallel,
                          num_workers=num_workers,
                          pool=pool,
-                         hide_progbar=hide_progbar)
+                         verbosity=verbosity)
 
 
 def case_runner(fn, fn_args, cases,
@@ -62,7 +62,7 @@ def case_runner(fn, fn_args, cases,
                 parallel=False,
                 pool=None,
                 num_workers=None,
-                hide_progbar=False):
+                verbosity=1):
     """Evaluate a function in many different configurations, optionally in
     parallel and or with live progress.
 
@@ -75,17 +75,17 @@ def case_runner(fn, fn_args, cases,
     cases : tuple of tuple
         List settings that ``fn_args`` take.
     constants : dict, optional
-        List of tuples/dict of *constant* fn argument mappings.
+        See :func:`~xyzpy.combo_runner`.
     split : bool, optional
-        Whether to split into multiple output arrays or not.
+        See :func:`~xyzpy.combo_runner`.
     parallel : bool, optional
-        Process combos in parallel, default number of workers picked.
+        See :func:`~xyzpy.combo_runner`.
     pool : executor-like pool, optional
-        Submit all combos to this pool.
+        See :func:`~xyzpy.combo_runner`.
     num_workers : int, optional
-        Explicitly choose how many workers to use, None for automatic.
-    hide_progbar : bool, optional
-        Whether to disable the progress bar.
+        See :func:`~xyzpy.combo_runner`.
+    verbosity : {0, 1, 2}, optional
+        See :func:`~xyzpy.combo_runner`.
 
     Returns
     -------
@@ -102,7 +102,7 @@ def case_runner(fn, fn_args, cases,
                         parallel=parallel,
                         num_workers=num_workers,
                         pool=pool,
-                        hide_progbar=hide_progbar)
+                        verbosity=verbosity)
 
 
 def find_union_coords(cases):

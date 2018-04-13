@@ -370,7 +370,7 @@ class Crop(object):
             percentage=percentage,
         )
 
-    def sow_combos(self, combos, constants=None, hide_progbar=False):
+    def sow_combos(self, combos, constants=None, verbosity=1):
         """Sow to disk.
         """
         combos = _parse_combos(combos)
@@ -386,7 +386,7 @@ class Crop(object):
 
         with Sower(self, combos) as sow_fn:
             _combo_runner(fn=sow_fn, combos=combos, constants=constants,
-                          hide_progbar=hide_progbar)
+                          verbosity=verbosity)
 
     def grow(self, batch_ids, **combo_runner_opts):
         """Grow specific batch numbers using this process.
@@ -395,7 +395,7 @@ class Crop(object):
             batch_ids = (batch_ids,)
 
         _combo_runner(grow, combos=(('batch_number', batch_ids),),
-                      constants={'hide_progbar': True, 'crop': self},
+                      constants={'verbosity': 0, 'crop': self},
                       **combo_runner_opts)
 
     def grow_missing(self, **combo_runner_opts):
@@ -696,7 +696,7 @@ class Sower(object):
 
 
 def grow(batch_number, crop=None, fn=None, check_mpi=True,
-         hide_progbar=False, debugging=False):
+         verbosity=1, debugging=False):
     """Automatically process a batch of cases into results. Should be run in an
     ".xyz-{fn_name}" folder.
 
@@ -714,8 +714,8 @@ def grow(batch_number, crop=None, fn=None, check_mpi=True,
         so - allows mpi functions to be simply used. Defaults to true,
         this should only be turned off if e.g. a pool of workers is being
         used to run different ``grow`` instances.
-    hide_progbar : bool, optional
-        Hide progress within this batch.
+    verbosity : {0, 1, 2}, optional
+        How much information to show.
     debugging : bool, optional
         Set logging level to DEBUG.
     """
@@ -759,7 +759,7 @@ def grow(batch_number, crop=None, fn=None, check_mpi=True,
 
     if rank == 0:
         results = []
-        for i in progbar(range(len(cases)), disable=hide_progbar,
+        for i in progbar(range(len(cases)), disable=verbosity <= 0,
                          desc="Batch: {}".format(batch_number)):
             results.append(fn(**cases[i]))
 
