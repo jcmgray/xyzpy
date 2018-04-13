@@ -7,13 +7,13 @@ First we wrap it in a :class:`~xyzpy.Runner` object, that encapsulates how to ru
 
 .. code-block:: python
 
-    >>> from xyzpy import *
-    >>> from from scipy.special import eval_jacobi
+    from xyzpy import *
+    from scipy.special import eval_jacobi
 
-    >>> def jacobi(x, n, alpha, beta):
-    ...     return eval_jacobi(n, alpha, beta, x)
+    def jacobi(x, n, alpha, beta):
+         return eval_jacobi(n, alpha, beta, x)
 
-    >>> r = Runner(jacobi, var_names='Pn(x)')
+    r = Runner(jacobi, var_names='Pn(x)')
 
 This is as simple as it gets, the function ``jacobi`` has one output variable, which we are calling ``'Pn(x)'``.
 
@@ -21,13 +21,13 @@ Now let's define all the different values we want to try for each argument (the 
 
 .. code-block:: python
 
-    >>> import numpy as np
-    >>> combos = {
-    ...     'x': np.linspace(0, 1, 101),
-    ...     'n': [1, 2, 4, 8, 16],
-    ...     'alpha': np.linspace(0, 2, 3),
-    ...     'beta': np.linspace(0, 1, 5),
-    ... }
+    import numpy as np
+    combos = {
+        'x': np.linspace(0, 1, 101),
+        'n': [1, 2, 4, 8, 16],
+        'alpha': np.linspace(0, 2, 3),
+        'beta': np.linspace(0, 1, 5),
+    }
 
 Now, let's run the function for every combination of the above parameters:
 
@@ -49,9 +49,9 @@ The resulting dataset is stored in ``r.last_ds`` and is an automatically labelle
 
 .. code-block:: python
 
-    >>> r.last_ds.xyz.ilineplot(
-    ...     x='x', y='Pn(x)', z='beta', col='n', row='alpha', ylims=(-2, 2),
-    ...     colors=True, colormap='rainbow_r', colorbar=True,
-    ... )
+    r.last_ds.xyz.ilineplot(
+        x='x', y='Pn(x)', z='beta', col='n', row='alpha', ylims=(-2, 2),
+        colors=True, colormap='rainbow_r', colorbar=True,
+    )
 
 .. image:: ex_simple.png

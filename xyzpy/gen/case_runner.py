@@ -335,11 +335,12 @@ def fill_missing_cases(ds, fn, var_names,
         Output variabe named dimensions of function
     var_coords : dict
         Dictionary of coords for output dims
-    **case_runner_settings: settings sent to `case_runner`
+    case_runner_settings:
+        Supplied to :func:`~xyzpy.case_runner`.
 
     Returns
     -------
-        xarray.Dataset
+    xarray.Dataset
     """
     var_names = _parse_var_names(var_names)
     var_dims = _parse_var_dims(var_dims, var_names)

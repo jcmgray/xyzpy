@@ -189,30 +189,18 @@ class Runner(object):
             **{**self.default_runner_settings, **runner_settings})
         return self.last_ds
 
-    def Crop(self,
-             name=None,
-             parent_dir=None,
-             save_fn=None,
-             batchsize=None,
-             num_batches=None):
-        """
-        """
-        return Crop(runner=self,
-                    name=name,
-                    parent_dir=parent_dir,
-                    save_fn=save_fn,
-                    batchsize=batchsize,
-                    num_batches=num_batches)
-
-    def run_cases(self, cases, **runner_settings):
+    def run_cases(self, cases, constants=(), **runner_settings):
         """Run cases using the function and save to dataset.
 
         Parameters
         ----------
         cases : sequence of mappings or tuples
             A sequence of cases.
+        constants : dict (optional)
+            Extra constant arguments for this run, repeated arguments will
+            take precedence over stored constants but for this run only.
         runner_settings
-            Keyword arguments supplied to :func:`~xyzpy.case_runner`.
+            Supplied to :func:`~xyzpy.case_runner`.
         """
         cases = _parse_cases(cases)
         self.last_ds = case_runner_to_ds(
@@ -222,20 +210,53 @@ class Runner(object):
             var_names=self._var_names,
             var_dims=self._var_dims,
             var_coords=self._var_coords,
-            constants=self._constants,
+            constants={**self._constants, **dict(constants)},
             resources=self._resources,
             attrs=self._attrs,
             parse=False,
             **{**self.default_runner_settings, **runner_settings})
         return self.last_ds
 
+    def Crop(self,
+             name=None,
+             parent_dir=None,
+             save_fn=None,
+             batchsize=None,
+             num_batches=None):
+        """Return a Crop instance with this runner, from which ``fn``
+        will be set, and then combos can be sown, grown, and reaped into the
+        ``Runner.last_ds``. See :class:`~xyzpy.Crop`.
+
+        Returns
+        -------
+        Crop
+        """
+        return Crop(runner=self,
+                    name=name,
+                    parent_dir=parent_dir,
+                    save_fn=save_fn,
+                    batchsize=batchsize,
+                    num_batches=num_batches)
+
     def __repr__(self):
-        string = "Runner.fn: {self.fn}\n"
+        string = "<xyzpy.Runner>\n"
+        string += "    fn: {self.fn}\n"
+
         if self.fn_args is not None:
             string += "    fn_args: {self.fn_args}\n"
+
         string += "    var_names: {self.var_names}\n"
+
         if self.var_dims is not None:
             string += "    var_dims: {self.var_dims}\n"
+
+        if self.constants:
+            self._constants_list = list(self.constants)
+            string += "    constants: {self._constants_list}\n"
+
+        if self.resources:
+            self._resources_list = list(self.resources)
+            string += "    resources: {self._resources_list}\n"
 
         return string.format(self=self)
 
@@ -280,14 +301,6 @@ class Harvester(object):
         self._full_ds = full_ds
 
     @property
-    def full_ds(self):
-        """Dataset containing all saved runs.
-        """
-        if self._full_ds is None:
-            self.load_full_ds()
-        return self._full_ds
-
-    @property
     def last_ds(self):
         """Dataset containing the last runs' data.
         """
@@ -324,6 +337,14 @@ class Harvester(object):
         else:
             raise OSError("The file '{}' exists but cannot be written "
                           "to".format(self.data_name))
+
+    @property
+    def full_ds(self):
+        """Dataset containing all saved runs.
+        """
+        if self._full_ds is None:
+            self.load_full_ds()
+        return self._full_ds
 
     def save_full_ds(self, new_full_ds=None, engine=None):
         """Save `full_ds` onto disk.
@@ -373,11 +394,11 @@ class Harvester(object):
         overwrite : {None, False, True}, optional
             How to combine data from the new run into the current full_ds:
 
-                * ``None`` (default): attempt the merge and only raise if
-                  data conflicts.
-                * ``True``: overwrite conflicting current data with
-                  that from the new dataset.
-                * ``False``: drop any conflicting data from the new dataset.
+            - ``None`` (default): attempt the merge and only raise if
+              data conflicts.
+            - ``True``: overwrite conflicting current data with
+              that from the new dataset.
+            - ``False``: drop any conflicting data from the new dataset.
 
         chunks : int or dict, optional
             If not None, passed to xarray so that the full dataset is loaded
@@ -473,6 +494,7 @@ class Harvester(object):
             If True (default), load and save the disk dataset before
             and after merging in the new data.
         overwrite : {None, False, True}, optional
+            What to do regarding clashes with old data:
 
             - ``None`` (default): attempt the merge and only raise if
               data conflicts.
@@ -485,7 +507,8 @@ class Harvester(object):
             loaded and merged into with on-disk dask arrays.
         engine : str, optional
             Engine to use to save and load datasets.
-        **runner_settings
+        runner_settings
+            Supplied to :func:`~xyzpy.case_runner`.
         """
         ds = self.runner.run_cases(cases, **runner_settings)
         self.add_ds(ds, sync=sync, overwrite=overwrite, chunks=chunks,
@@ -499,7 +522,11 @@ class Harvester(object):
              num_batches=None):
         """Return a Crop instance with this Harvester, from which `fn`
         will be set, and then combos can be sown, grown, and reaped into the
-        Harvester.full_ds.
+        ``Harvester.full_ds``. See :class:`~xyzpy.Crop`.
+
+        Returns
+        -------
+        Crop
         """
         return Crop(harvester=self,
                     name=name,
@@ -509,10 +536,9 @@ class Harvester(object):
                     num_batches=num_batches)
 
     def __repr__(self):
-        string = ("Harvester\n"
-                  "---------\n"
-                  "{self.runner}"
-                  ">->->->->\n"
-                  "{self.data_name}    [{self.engine}]")
+        string = ("<xyzpy.Harvester>\n"
+                  "Runner: {self.runner}"
+                  "Sync file -->\n"
+                  "    {self.data_name}    [{self.engine}]")
 
         return string.format(self=self)

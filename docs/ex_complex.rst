@@ -89,8 +89,8 @@ Now let's plot the main variable 'm'. Since we can only plot 4 dimensions at onc
 
 .. code-block:: python
 
-    >>> ds = runner.last_ds.sel(p=2.0)
-    >>> ds.xyz.iheatmap(x='re', y='im', z='m', col='phi', row='A')
+    ds = runner.last_ds.sel(p=2.0)
+    ds.xyz.iheatmap(x='re', y='im', z='m', col='phi', row='A')
 
 .. image:: _static/ex_complex_a.png
 
@@ -98,6 +98,6 @@ We output multiple variables so we can also plot the quantity ``m_sdev``:
 
 .. code-block:: python
 
-    >>> runner.last_ds.xyz.ilineplot(x='phi', y='m_sdev', z='A', col='p')
+    runner.last_ds.xyz.ilineplot(x='phi', y='m_sdev', z='A', col='p')
 
 .. image:: _static/ex_complex_b.png
