@@ -875,7 +875,39 @@ def gen_qsub_script(crop, batch_ids=None, *,
                     temp_gigabytes=1,
                     output_directory=None,
                     debugging=False):
-    """
+    """Generate a qsub script to grow a Crop.
+
+    Parameters
+    ----------
+    crop : Crop
+        The crop to grow.
+    batch_ids : int or tuple[int]
+        Which batch numbers to grow, defaults to all missing batches.
+    hours : int
+        How many hours to request, default=0.
+    minutes : int, optional
+        How many minutes to request, default=20.
+    seconds : int, optional
+        How many seconds to request, default=0.
+    gigabytes : int, optional
+        How much memory to request, default: 2.
+    num_procs : int, optional
+        How many processes to request (threaded cores or MPI), default: 1.
+    launcher : str, optional
+        How to launch the script, default: ``'python'``. But could for example
+        be ``'mpiexec python'`` for a MPI program.
+    mpi : bool, optional
+        Request MPI processes not threaded processes.
+    temp_gigabytes : int, optional
+        How much temporary on-disk memory.
+    output_directory : str, optional
+        What directory to write output to. Defaults to "$HOME/scratch/output".
+    debugging : bool, optional
+        Set the python log level to debugging.
+
+    Returns
+    -------
+    str
     """
     if hours is minutes is seconds is None:
         hours, minutes, seconds = 1, 0, 0
@@ -946,6 +978,34 @@ def qsub_grow(crop, batch_ids=None, *,
               output_directory=None,
               debugging=False):  # pragma: no cover
     """Automagically submit SGE jobs to grow all missing results.
+
+    Parameters
+    ----------
+    crop : Crop
+        The crop to grow.
+    batch_ids : int or tuple[int]
+        Which batch numbers to grow, defaults to all missing batches.
+    hours : int
+        How many hours to request, default=0.
+    minutes : int, optional
+        How many minutes to request, default=20.
+    seconds : int, optional
+        How many seconds to request, default=0.
+    gigabytes : int, optional
+        How much memory to request, default: 2.
+    num_procs : int, optional
+        How many processes to request (threaded cores or MPI), default: 1.
+    launcher : str, optional
+        How to launch the script, default: ``'python'``. But could for example
+        be ``'mpiexec python'`` for a MPI program.
+    mpi : bool, optional
+        Request MPI processes not threaded processes.
+    temp_gigabytes : int, optional
+        How much temporary on-disk memory.
+    output_directory : str, optional
+        What directory to write output to. Defaults to "$HOME/scratch/output".
+    debugging : bool, optional
+        Set the python log level to debugging.
     """
     if crop.is_ready_to_reap():
         print("Crop ready to reap: nothing to submit.")
