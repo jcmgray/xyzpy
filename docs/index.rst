@@ -57,11 +57,10 @@ Examples
 .. toctree::
   :maxdepth: 1
 
-  ex_basic
-  ex_complex
-  ex_farming
-  ex_pool
-  ex_crop
+  examples/basic output example
+  examples/complex output example
+  examples/farming example
+  examples/crop example
 
 
 Installation

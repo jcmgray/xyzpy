@@ -21,3 +21,5 @@ dependencies:
   - cloudpickle
   - sphinx
   - sphinx_bootstrap_theme
+  - nbsphinx
+  - ipython

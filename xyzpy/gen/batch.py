@@ -341,7 +341,7 @@ class Crop(object):
     def __repr__(self):
         # Location and name, underlined
         if not os.path.exists(self.location):
-            return self.location + "\n * Not yet sown or already reaped * \n"
+            return self.location + "\n * Not yet sown, or already reaped * \n"
 
         loc_len = len(self.location)
         name_len = len(self.name)
