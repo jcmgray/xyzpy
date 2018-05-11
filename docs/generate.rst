@@ -112,6 +112,8 @@ Which, because it didn't exist yet, created the file ``data_name``:
     $ ls *.h5
     foo.h5
 
+:meth:`xyzpy.Harvester.harvest_combos` calls :meth:`xyzpy.Runner.run_combos` itself - this doesn't need to be done seperately.
+
 Now we can run a second set of different combos:
 
 .. code-block:: python
@@ -141,3 +143,14 @@ Now we can check the total dataset containing all combos and cases run so far:
 
 Note that, since the different runs were disjoint, missing values have automatically been filled in with ``nan`` values - see :func:`xarray.merge`. The on-disk dataset now contains both runs.
 
+
+Summary
+-------
+
+  1. :func:`~xyzpy.combo_runner` is the core function which outputs a nested tuple and contains the parallelization logic and progress display etc.
+
+  2. :class:`~xyzpy.Runner` and :meth:`xyzpy.Runner.run_combos` are used to describe the function's output and perform a single set of runs yielding a :class:`~xarray.Dataset`. These internally call :func:`~xyzpy.combo_runner`.
+
+  3. :class:`~xyzpy.Harvester` and :meth:`xyzpy.Runner.harvest_combos` are used to perform many sets of runs, continuously merging the results into one larger :class:`~xarray.Dataset` - ``Harvester.full_ds``, probably synced to disk. These internally call :meth:`xyzpy.Runner.run_combos`.
+
+In general, you would only generate data with one of these methods at once.

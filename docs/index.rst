@@ -41,6 +41,8 @@ The aim of the plotting functionality is to keep the same interface between inte
 Overview
 --------
 
+The following guides introduce the main parts of ``xyzpy``:
+
 .. toctree::
   :numbered:
   :maxdepth: 2
@@ -53,6 +55,8 @@ Overview
 
 Examples
 --------
+
+These following examples are generated from the notebooks in ``docs/examples``. They demonstrate more complete usage or advanced features of ``xyzpy``.
 
 .. toctree::
   :maxdepth: 1
