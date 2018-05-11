@@ -6,7 +6,8 @@ import xarray as xr
 
 from .utils import (
     unzip,
-    progbar
+    progbar,
+    Timer,
 )
 from .gen.combo_runner import (
     combo_runner,
@@ -125,6 +126,7 @@ __all__ = [
     "visualize_matrix",
     "unzip",
     "progbar",
+    "Timer",
     "xr_diff_fornberg",
     "xr_diff_u",
     "xr_diff_u_err",

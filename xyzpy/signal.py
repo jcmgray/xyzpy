@@ -1,7 +1,5 @@
 """Processing and signal analysis.
 """
-# TODO: fornberg, exact number of points
-# TODO: singh     higher different order and k
 
 import functools
 
@@ -256,8 +254,8 @@ def _diff_fornberg_broadcast(x, fx, ix, order, mode='points',
 
 
 def xr_diff_fornberg(obj, dim, ix=100, order=1, mode='points', window=5):
-    """Find (d^k fx)/(dx^k) at points ix, using a windowed finite difference.
-    This is only appropirate for very nicely sampled/analytic data.
+    """Find ``(d^k fx)/(dx^k)`` at points ``ix``, using a windowed finite
+    difference. This is only appropirate for very nicely sampled/analytic data.
 
     Uses algorithm found in:
         Calculation of Weights in Finite Difference Formulas
@@ -284,10 +282,11 @@ def xr_diff_fornberg(obj, dim, ix=100, order=1, mode='points', window=5):
         to the total range is given by `window`.
         If 'absolute', the window size is geven explicitly by `window`.
     window : int or float
-        Depends on `mode`,
-            - 'points', target number of points to use for each window.
-            - 'relative' relative size of window compared to full range.
-            - 'absolute' The absolute window size.
+        Depends on ``mode``:
+
+        - 'points', target number of points to use for each window.
+        - 'relative' relative size of window compared to full range.
+        - 'absolute' The absolute window size.
 
     Returns
     -------
@@ -331,10 +330,6 @@ def xr_diff_fornberg(obj, dim, ix=100, order=1, mode='points', window=5):
     (double[:], double[:], double[:]),
 ], "(n),(n)->(n)", cache=_NUMBA_CACHE_DEFAULT, nopython=True)
 def diff_u(fx, x, out=None):  # pragma: no cover
-    """Singh, Ashok K., and B. S. Bhadauria. "Finite difference formulae for
-    unequal sub-intervals using lagrange’s interpolation formula."
-    International Journal of Mathematics and Analysis 3.17 (2009): 815-827.
-    """
     xynm = preprocess_nan_func(x, fx, out)
     if xynm is None:
         return
@@ -375,7 +370,22 @@ def _broadcast_diff_u(x, fx, axis=-1):
 
 
 def xr_diff_u(obj, dim):
-    """Uneven-third-order finite difference derivative.
+    """Uneven-third-order finite difference derivative [1].
+
+    [1] Singh, Ashok K., and B. S. Bhadauria. "Finite difference formulae for
+    unequal sub-intervals using lagrange’s interpolation formula."
+    International Journal of Mathematics and Analysis 3.17 (2009): 815-827.
+
+    Parameters
+    ----------
+    obj : xarray.Dataset or xarray.DataArray
+        The object to differentiate.
+    dim : str
+        The dimension to differentiate along.
+
+    Returns
+    -------
+    new_xobj : xarray.DataArray or xarray.Dataset
     """
     kwargs = {'axis': -1}
     input_core_dims = [(dim,), (dim,)]
@@ -437,7 +447,21 @@ def _broadcast_diff_u_err(x, fx, axis=-1):
 
 
 def xr_diff_u_err(obj, dim):
-    """Uneven-third-order finite difference derivative.
+    """Propagate error through uneven-third-order finite difference derivative.
+    If you have calculated a derivative already using ``xr_diff_u``, and you
+    have data about the uncertainty on the original data, this function
+    propagates that error through to be an error on the derivative.
+
+    Parameters
+    ----------
+    obj : xarray.Dataset or xarray.DataArray
+        The object to differentiate.
+    dim : str
+        The dimension to differentiate along.
+
+    Returns
+    -------
+    new_xobj : xarray.DataArray or xarray.Dataset
     """
     kwargs = {'axis': -1}
     input_core_dims = [(dim,), (dim,)]
@@ -515,6 +539,29 @@ def _broadcast_interp(x, y, ix=100, order=3, axis=-1):
 
 
 def xr_interp(obj, dim, ix=100, order=3):
+    """Interpolate along axis ``dim`` using :func:`scipy.interpolate.interp1d`.
+
+    Parameters
+    ----------
+    obj : xarray.Dataset or xarray.DataArray
+        The object to interpolate.
+    dim : str
+        The axis to interpolate along.
+    ix : int or array
+        If int, interpolate to this many points spaced evenly along the range
+        of the original data. If array, interpolate to those points directly.
+    order : int
+        Supplied to :func:`scipy.interpolate.interp1d` as the order of
+        interpolation.
+
+    Returns
+    -------
+    new_xobj : xarray.DataArray or xarray.Dataset
+
+    See Also
+    --------
+    xr_pchip
+    """
 
     input_core_dims = [(dim,), (dim,)]
     args = (obj[dim], obj)
@@ -593,6 +640,26 @@ def _broadcast_pchip(x, y, ix=100, axis=-1):
 
 
 def xr_interp_pchip(obj, dim, ix=100):
+    """Interpolate along axis ``dim`` using :func:`scipy.interpolate.pchip`.
+
+    Parameters
+    ----------
+    obj : xarray.Dataset or xarray.DataArray
+        The object to interpolate.
+    dim : str
+        The axis to interpolate along.
+    ix : int or array
+        If int, interpolate to this many points spaced evenly along the range
+        of the original data. If array, interpolate to those points directly.
+
+    Returns
+    -------
+    new_xobj : xarray.DataArray or xarray.Dataset
+
+    See Also
+    --------
+    xr_interp
+    """
 
     input_core_dims = [(dim,), (dim,)]
     args = (obj[dim], obj)
@@ -784,6 +851,19 @@ def gufunc_idxmax(x, y, axis=None):
 
 
 def xr_idxmax(obj, dim):
+    """Find the coordinate of the maximum along ``dim``.
+
+    Parameters
+    ----------
+    obj : xarray.DataArray or xarray.Dataset
+        Object to find coordnate maximum in.
+    dim : str
+        Dimension along which to find maximum
+
+    Returns
+    -------
+    new_xobj : xarray.DataArray or xarray.Dataset
+    """
     input_core_dims = [(dim,), (dim,)]
     kwargs = {'axis': -1}
     allna = obj.isnull().all(dim)
@@ -808,6 +888,19 @@ def gufunc_idxmin(x, y, axis=None):
 
 
 def xr_idxmin(obj, dim):
+    """Find the coordinate of the minimum along ``dim``.
+
+    Parameters
+    ----------
+    obj : xarray.DataArray or xarray.Dataset
+        Object to find coordnate maximum in.
+    dim : str
+        Dimension along which to find maximum
+
+    Returns
+    -------
+    new_xobj : xarray.DataArray or xarray.Dataset
+    """
     input_core_dims = [(dim,), (dim,)]
     kwargs = {'axis': -1}
     allna = obj.isnull().all(dim)
@@ -915,20 +1008,28 @@ def xr_unispline(obj, dim, err=None, num_knots=11, ix=None):
 
     Parameters
     ----------
-        obj : Dataset or DataArray
-            Object to fit spline to.
-        dim : str
-            Dimension to fit spline along.
-        err : DataArray or str (optional)
-            Error in variables, with with to weight spline fitting. If `err`
-            is a string, use the corresponding variable found within `obj`.
-        num_knots : int (optional)
-            Number of linearly spaced interior knots to form spline with,
-            defaults to 11.
-        ix : array-like or int (optional)
-            Which points to evaluate the newly fitted spline. If int, `ix` many
-            points will be chosen linearly spaced across the datas range. If
-            None, spline will be evaluated at original coordinates.
+    obj : Dataset or DataArray
+        Object to fit spline to.
+    dim : str
+        Dimension to fit spline along.
+    err : DataArray or str (optional)
+        Error in variables, with with to weight spline fitting. If `err`
+        is a string, use the corresponding variable found within `obj`.
+    num_knots : int (optional)
+        Number of linearly spaced interior knots to form spline with,
+        defaults to 11.
+    ix : array-like or int (optional)
+        Which points to evaluate the newly fitted spline. If int, `ix` many
+        points will be chosen linearly spaced across the datas range. If
+        None, spline will be evaluated at original coordinates.
+
+    Returns
+    -------
+    new_xobj : xarray.DataArray or xarray.Dataset
+
+    See Also
+    --------
+    xr_polyfit
     """
     if isinstance(err, str):
         err = obj[err]
@@ -1198,6 +1299,14 @@ def xr_polyfit(obj, dim, ix=None, deg=0.5, poly='hermite'):
     poly : {'chebyshev', 'polynomial', 'legendre',
             'laguerre', hermite}, optional
         The type of polynomial to fit.
+
+    Returns
+    -------
+    new_xobj : xarray.DataArray or xarray.Dataset
+
+    See Also
+    --------
+    xr_unispline
     """
     input_core_dims = [(dim,), (dim,)]
     args = (obj[dim], obj)

@@ -2,8 +2,8 @@
 Generating Data
 ===============
 
-The aim of ``xyzpy`` is to ease the some of the pain generating data with a large parameter space.
-The idea being that it should be as easy as saying, "run these combinations of parameters, now run these particular cases" and you just get a fully self-described dataset back.
+The idea of ``xyzpy`` is to ease the some of the pain generating data with a large parameter space.
+The central aim being that, once you know what a single run of a function looks like, it should be as easy as saying, "run these combinations of parameters, now run these particular cases" with everything automatically aggregated into a fully self-described dataset.
 
 Combos & Cases
 --------------

@@ -4,6 +4,7 @@ import functools
 import operator
 import itertools
 import tqdm
+import time
 
 
 def prod(it):
@@ -96,3 +97,16 @@ def progbar(it=None, nb=False, **kwargs):
     if nb:  # pragma: no cover
         return tqdm.tqdm_notebook(it, **settings)
     return tqdm.tqdm(it, **settings)
+
+
+class Timer:
+    """A simple context manager class for timing blocks.
+    """
+
+    def __enter__(self):
+        self.start = time.clock()
+        return self
+
+    def __exit__(self, *args):
+        self.end = time.clock()
+        self.interval = self.end - self.start
