@@ -71,7 +71,7 @@ These following examples are generated from the notebooks in ``docs/examples``. 
 Installation
 ------------
 
-``xzypy`` is a puthon python package. The core dependencies are:
+``xzypy`` is a pure python package. The core dependencies are:
 
 - `numpy <http://www.numpy.org/>`__
 - `xarray <http://xarray.pydata.org/en/latest/>`__ - labelled ndarrays
