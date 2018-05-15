@@ -417,8 +417,6 @@ def bokeh_multi_plot(fn):
 
 
 class ILinePlot(PlotterBokeh, AbstractLinePlot):
-    """Interactive dataset multi-line plot.
-    """
 
     def __init__(self, ds, x, y, z=None, y_err=None, x_err=None, **kwargs):
         super().__init__(ds, x, y, z=z, y_err=y_err, x_err=x_err, **kwargs)
@@ -485,7 +483,30 @@ class ILinePlot(PlotterBokeh, AbstractLinePlot):
 @bokeh_multi_plot
 @intercept_call_arg
 def ilineplot(ds, x, y, z=None, y_err=None, x_err=None, **kwargs):
-    """Interactive dataset multi-line plot - functional form.
+    """From  ``ds`` plot lines of ``y`` as a function of ``x``, optionally for
+    varying ``z``. Interactive,
+
+    Parameters
+    ----------
+    ds : xarray.Dataset
+        Dataset to plot from.
+    x : str
+        Dimension to plot along the x-axis.
+    y : str or tuple[str]
+        Variable(s) to plot along the y-axis. If tuple, plot each of the
+        variables - instead of ``z``.
+    z : str, optional
+        Dimension to plot into the page.
+    y_err : str, optional
+        Variable to plot as y-error.
+    x_err : str, optional
+        Variable to plot as x-error.
+    row : str, optional
+        Dimension to vary over as a function of rows.
+    col : str, optional
+        Dimension to vary over as a function of columns.
+    plot_opts
+        See ``xyzpy.plot.core.PLOTTER_DEFAULTS``.
     """
     return ILinePlot(ds, x, y, z, y_err=y_err, x_err=x_err, **kwargs)
 
@@ -500,7 +521,8 @@ class AutoILinePlot(ILinePlot):
 
 
 def auto_ilineplot(x, y_z, **lineplot_opts):
-    """Interactive raw data multi-line plot - functional form.
+    """Auto version of :func:`~xyzpy.ilineplot` that accepts array arguments
+    by converting them to a ``Dataset`` first.
     """
     return AutoILinePlot(x, y_z, **lineplot_opts)()
 
@@ -508,8 +530,6 @@ def auto_ilineplot(x, y_z, **lineplot_opts):
 # --------------------------------------------------------------------------- #
 
 class IScatter(PlotterBokeh, AbstractScatter):
-    """Interactive dataset scatter plot - functional form.
-    """
 
     def __init__(self, ds, x, y, z=None, **kwargs):
         super().__init__(ds, x, y, z, **kwargs, markers=True)
@@ -554,14 +574,35 @@ class IScatter(PlotterBokeh, AbstractScatter):
 @bokeh_multi_plot
 @intercept_call_arg
 def iscatter(ds, x, y, z=None, y_err=None, x_err=None, **kwargs):
-    """Interactive dataset scatter plot - functional form.
+    """From  ``ds`` plot a scatter of ``y`` against ``x``, optionally for
+    varying ``z``. Interactive.
+
+    Parameters
+    ----------
+    ds : xarray.Dataset
+        Dataset to plot from.
+    x : str
+        Quantity to plot along the x-axis.
+    y : str or tuple[str]
+        Quantity(s) to plot along the y-axis. If tuple, plot each of the
+        variables - instead of ``z``.
+    z : str, optional
+        Dimension to plot into the page.
+    y_err : str, optional
+        Variable to plot as y-error.
+    x_err : str, optional
+        Variable to plot as x-error.
+    row : str, optional
+        Dimension to vary over as a function of rows.
+    col : str, optional
+        Dimension to vary over as a function of columns.
+    plot_opts
+        See ``xyzpy.plot.core.PLOTTER_DEFAULTS``.
     """
     return IScatter(ds, x, y, z, y_err=y_err, x_err=x_err, **kwargs)
 
 
 class AutoIScatter(IScatter):
-    """Interactive raw-data scatter plot.
-    """
 
     def __init__(self, x, y_z, **iscatter_opts):
         ds = auto_xyz_ds(x, y_z)
@@ -569,7 +610,8 @@ class AutoIScatter(IScatter):
 
 
 def auto_iscatter(x, y_z, **iscatter_opts):
-    """Interactive raw-data scatter plot - functional form.
+    """Auto version of :func:`~xyzpy.iscatter` that accepts array arguments
+    by converting them to a ``Dataset`` first.
     """
     return AutoIScatter(x, y_z, **iscatter_opts)
 
@@ -588,8 +630,6 @@ _HEATMAP_ALT_DEFAULTS = (
 
 
 class IHeatMap(PlotterBokeh, AbstractHeatMap):
-    """
-    """
 
     def __init__(self, ds, x, y, z, **kwargs):
         # set some heatmap specific options
@@ -617,6 +657,38 @@ class IHeatMap(PlotterBokeh, AbstractHeatMap):
 @bokeh_multi_plot
 @intercept_call_arg
 def iheatmap(ds, x, y, z, **kwargs):
-    """
+    """From  ``ds`` plot variable ``z`` as a function of ``x`` and ``y`` using
+    a 2D heatmap. Interactive,
+
+    Parameters
+    ----------
+    ds : xarray.Dataset
+        Dataset to plot from.
+    x : str
+        Dimension to plot along the x-axis.
+    y : str
+        Dimension to plot along the y-axis.
+    z : str, optional
+        Variable to plot as colormap.
+    row : str, optional
+        Dimension to vary over as a function of rows.
+    col : str, optional
+        Dimension to vary over as a function of columns.
+    plot_opts
+        See ``xyzpy.plot.core.PLOTTER_DEFAULTS``.
     """
     return IHeatMap(ds, x, y, z, **kwargs)
+
+
+class AutoIHeatMap(IHeatMap):
+
+    def __init__(self, x, **iheatmap_opts):
+        ds = auto_xyz_ds(x)
+        super().__init__(ds, 'x', **iheatmap_opts)
+
+
+def auto_iheatmap(x, **iheatmap_opts):
+    """Auto version of :func:`~xyzpy.iheatmap` that accepts array arguments
+    by converting them to a ``Dataset`` first.
+    """
+    return AutoIHeatMap(x, **iheatmap_opts)()

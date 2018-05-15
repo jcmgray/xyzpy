@@ -50,7 +50,7 @@ The following guides introduce the main parts of ``xyzpy``:
   generate
   gen_parallel
   manipulate
-  plot
+  plotting
 
 
 Examples

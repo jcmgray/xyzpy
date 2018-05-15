@@ -167,8 +167,10 @@ class Plotter:
             right_opts = [difflib.get_close_matches(opt, _PLOTTER_OPTS, n=3)
                           for opt in wrong_opts]
 
-            raise ValueError("Option(s) {} not valid.\n Did you mean: {}?"
-                             .format(wrong_opts, right_opts))
+            msg = ("Option(s) {} not valid.\n Did you mean: {}?"
+                   .format(wrong_opts, right_opts))
+            print(msg)
+            raise ValueError(msg)
 
         if self.colors and self.c_coo:
             raise ValueError("Cannot specify explicit colors if ``c`` used.")

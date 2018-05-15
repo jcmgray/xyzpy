@@ -492,24 +492,44 @@ class LinePlot(PlotterMatplotlib, AbstractLinePlot):
 
 @mpl_multi_plot
 @intercept_call_arg
-def lineplot(ds, x, y, z=None, y_err=None, x_err=None, **kwargs):
+def lineplot(ds, x, y, z=None, y_err=None, x_err=None, **plot_opts):
+    """From  ``ds`` plot lines of ``y`` as a function of ``x``, optionally for
+    varying ``z``.
+
+    Parameters
+    ----------
+    ds : xarray.Dataset
+        Dataset to plot from.
+    x : str
+        Dimension to plot along the x-axis.
+    y : str or tuple[str]
+        Variable(s) to plot along the y-axis. If tuple, plot each of the
+        variables - instead of ``z``.
+    z : str, optional
+        Dimension to plot into the page.
+    y_err : str, optional
+        Variable to plot as y-error.
+    x_err : str, optional
+        Variable to plot as x-error.
+    row : str, optional
+        Dimension to vary over as a function of rows.
+    col : str, optional
+        Dimension to vary over as a function of columns.
+    plot_opts
+        See ``xyzpy.plot.core.PLOTTER_DEFAULTS``.
     """
-    """
-    return LinePlot(ds, x, y, z, y_err=y_err, x_err=x_err, **kwargs)
+    return LinePlot(ds, x, y, z, y_err=y_err, x_err=x_err, **plot_opts)
 
 
 class AutoLinePlot(LinePlot):
-    """The non-dataset input version of Lineplot - automatically converts
-    two arrays to a dataset with names 'x', 'y', 'z'.
-    """
-
     def __init__(self, x, y_z, **lineplot_opts):
         ds = auto_xyz_ds(x, y_z)
         super().__init__(ds, 'x', 'y', z='z', **lineplot_opts)
 
 
 def auto_lineplot(x, y_z, **lineplot_opts):
-    """Function-version of AutoLinePlot
+    """Auto version of :func:`~xyzpy.lineplot` that accepts array arguments
+    by converting them to a ``Dataset`` first.
     """
     return AutoLinePlot(x, y_z, **lineplot_opts)()
 
@@ -522,8 +542,6 @@ _SCATTER_ALT_DEFAULTS = (
 
 
 class Scatter(PlotterMatplotlib, AbstractScatter):
-    """
-    """
 
     def __init__(self, ds, x, y, z=None, **kwargs):
         # set some scatter specific options
@@ -575,15 +593,36 @@ class Scatter(PlotterMatplotlib, AbstractScatter):
 
 @mpl_multi_plot
 @intercept_call_arg
-def scatter(ds, x, y, z=None, y_err=None, x_err=None, **kwargs):
+def scatter(ds, x, y, z=None, y_err=None, x_err=None, **plot_opts):
+    """From  ``ds`` plot a scatter of ``y`` against ``x``, optionally for
+    varying ``z``.
+
+    Parameters
+    ----------
+    ds : xarray.Dataset
+        Dataset to plot from.
+    x : str
+        Quantity to plot along the x-axis.
+    y : str or tuple[str]
+        Quantity(s) to plot along the y-axis. If tuple, plot each of the
+        variables - instead of ``z``.
+    z : str, optional
+        Dimension to plot into the page.
+    y_err : str, optional
+        Variable to plot as y-error.
+    x_err : str, optional
+        Variable to plot as x-error.
+    row : str, optional
+        Dimension to vary over as a function of rows.
+    col : str, optional
+        Dimension to vary over as a function of columns.
+    plot_opts
+        See ``xyzpy.plot.core.PLOTTER_DEFAULTS``.
     """
-    """
-    return Scatter(ds, x, y, z, y_err=y_err, x_err=x_err, **kwargs)
+    return Scatter(ds, x, y, z, y_err=y_err, x_err=x_err, **plot_opts)
 
 
 class AutoScatter(Scatter):
-    """
-    """
 
     def __init__(self, x, y_z, **scatter_opts):
         ds = auto_xyz_ds(x, y_z)
@@ -591,7 +630,8 @@ class AutoScatter(Scatter):
 
 
 def auto_scatter(x, y_z, **scatter_opts):
-    """
+    """Auto version of :func:`~xyzpy.scatter` that accepts array arguments
+    by converting them to a ``Dataset`` first.
     """
     return AutoScatter(x, y_z, **scatter_opts)
 
@@ -609,8 +649,6 @@ _HISTOGRAM_ALT_DEFAULTS = {
 
 
 class Histogram(PlotterMatplotlib, AbstractHistogram):
-    """
-    """
 
     def __init__(self, ds, x, z=None, **kwargs):
 
@@ -687,7 +725,7 @@ class Histogram(PlotterMatplotlib, AbstractHistogram):
 
 @mpl_multi_plot
 @intercept_call_arg
-def histogram(ds, x, z=None, **kwargs):
+def histogram(ds, x, z=None, **plot_opts):
     """Dataset histogram.
 
     Parameters
@@ -695,17 +733,21 @@ def histogram(ds, x, z=None, **kwargs):
     ds : xarray.Dataset
         The dataset to plot.
     x : str, sequence of str
-        The variable(s) to plot the probability density of.
+        The variable(s) to plot the probability density of. If sequence, plot a
+        histogram of each instead of using a ``z`` coordinate.
     z : str, optional
         If given, range over this coordinate a plot a histogram for each.
+    row : str, optional
+        Dimension to vary over as a function of rows.
+    col : str, optional
+        Dimension to vary over as a function of columns.
+    plot_opts
+        See ``xyzpy.plot.core.PLOTTER_DEFAULTS``.
     """
-    return Histogram(ds, x, z=z, **kwargs)
+    return Histogram(ds, x, z=z, **plot_opts)
 
 
 class AutoHistogram(Histogram):
-    """Tbokehhe non-dataset input version of Lineplot - automatically converts
-    two arrays to a dataset with names 'x', 'y', 'z'.
-    """
 
     def __init__(self, x, **histogram_opts):
         ds = auto_xyz_ds(x)
@@ -713,7 +755,8 @@ class AutoHistogram(Histogram):
 
 
 def auto_histogram(x, **histogram_opts):
-    """Function-version of AutoLinePlot
+    """Auto version of :func:`~xyzpy.histogram` that accepts array arguments
+    by converting them to a ``Dataset`` first.
     """
     return AutoHistogram(x, **histogram_opts)()
 
@@ -731,8 +774,6 @@ _HEATMAP_ALT_DEFAULTS = (
 
 
 class HeatMap(PlotterMatplotlib, AbstractHeatMap):
-    """
-    """
 
     def __init__(self, ds, x, y, z, **kwargs):
         # set some heatmap specific options
@@ -767,9 +808,41 @@ class HeatMap(PlotterMatplotlib, AbstractHeatMap):
 @mpl_multi_plot
 @intercept_call_arg
 def heatmap(ds, x, y, z, **kwargs):
-    """
+    """From  ``ds`` plot variable ``z`` as a function of ``x`` and ``y`` using
+    a 2D heatmap.
+
+    Parameters
+    ----------
+    ds : xarray.Dataset
+        Dataset to plot from.
+    x : str
+        Dimension to plot along the x-axis.
+    y : str
+        Dimension to plot along the y-axis.
+    z : str, optional
+        Variable to plot as colormap.
+    row : str, optional
+        Dimension to vary over as a function of rows.
+    col : str, optional
+        Dimension to vary over as a function of columns.
+    plot_opts
+        See ``xyzpy.plot.core.PLOTTER_DEFAULTS``.
     """
     return HeatMap(ds, x, y, z, **kwargs)
+
+
+class AutoHeatMap(HeatMap):
+
+    def __init__(self, x, **heatmap_opts):
+        ds = auto_xyz_ds(x)
+        super().__init__(ds, 'x', **heatmap_opts)
+
+
+def auto_heatmap(x, **heatmap_opts):
+    """Auto version of :func:`~xyzpy.heatmap` that accepts array arguments
+    by converting them to a ``Dataset`` first.
+    """
+    return AutoHeatMap(x, **heatmap_opts)()
 
 
 # --------------- Miscellenous matplotlib plotting functions ---------------- #
@@ -796,19 +869,19 @@ def visualize_matrix(x, figsize=(4, 4),
 
     Parameters
     ----------
-        x : array or iterable of arrays
-            2d-matrix or matrices to plot.
-        figsize : tuple
-            Total size of plot.
-        colormap : str
-            Colormap to use to weight elements.
-        touching : bool
-            If plotting more than one matrix, whether the edges should touch.
-        zlims:
-            Scaling parameters for the element colorings, (i.e. if these are
-            set then the weightings are not normalized).
-        return_fig : bool
-            Whether to return the figure created or just show it.
+    x : array or iterable of arrays
+        2d-matrix or matrices to plot.
+    figsize : tuple
+        Total size of plot.
+    colormap : str
+        Colormap to use to weight elements.
+    touching : bool
+        If plotting more than one matrix, whether the edges should touch.
+    zlims:
+        Scaling parameters for the element colorings, (i.e. if these are
+        set then the weightings are not normalized).
+    return_fig : bool
+        Whether to return the figure created or just show it.
     """
     import matplotlib.pyplot as plt
 
