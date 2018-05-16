@@ -1,6 +1,5 @@
 """
 """
-
 import functools
 import xarray as xr
 
@@ -84,6 +83,13 @@ from .plot.plotter_bokeh import (
     iheatmap,
     auto_iheatmap,
 )
+
+
+# versioneer
+from ._version import get_versions
+__version__ = get_versions()['version']
+del get_versions
+
 
 __all__ = [
     "Runner",
