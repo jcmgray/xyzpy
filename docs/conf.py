@@ -17,9 +17,6 @@
 # sys.path.insert(0, os.path.abspath('.'))
 
 import sphinx_bootstrap_theme
-import numpy
-import scipy
-import xarray
 import xyzpy
 
 # -- Project information -----------------------------------------------------
@@ -28,10 +25,10 @@ project = 'xyzpy'
 copyright = '2018, Johnnie Gray'
 author = 'Johnnie Gray'
 
-# The short X.Y version
-version = '0.1'
-# The full version, including alpha/beta/rc tags
-release = '0.1.1'
+# The full version, including alpha/beta/rc tags.
+release = xyzpy._version.get_versions()['version']
+# The short X.Y version.
+version = '.'.join(release.split('.')[:2])
 
 
 # -- General configuration ---------------------------------------------------
