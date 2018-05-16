@@ -104,9 +104,9 @@ class Timer:
     """
 
     def __enter__(self):
-        self.start = time.clock()
+        self.start = time.time()
         return self
 
     def __exit__(self, *args):
-        self.end = time.clock()
+        self.end = time.time()
         self.interval = self.end - self.start
