@@ -402,6 +402,7 @@ def mpl_multi_plot(fn):
 
                 # label each row
                 if (j == ncols - 1) and (row is not None):
+                    # XXX: if number of cols==1 this hide yaxis - want both
                     row_val = prettify(ds[row].values[i])
                     skws['ytitle_right'] = True
                     skws['ytitle'] = "{} = {}".format(row, row_val)

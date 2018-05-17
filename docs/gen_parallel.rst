@@ -44,4 +44,4 @@ Running combos using the disk as a persistence mechanism requires one more objec
 5. **'Reap'**. Once all the batches have completed, run ``Crop.reap()`` to collect the results and remove the batches' temporary directory. If the crop originated from a ``Runner`` or ``Harvester``, the data will be labelled, merged and saved accordingly.
 
 
-See the full demonstration in :ref:`Examples`.
+See the full demonstrations in :ref:`Examples`.

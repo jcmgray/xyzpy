@@ -32,3 +32,5 @@ Processing Data
        - :func:`~xyzpy.xr_idxmax`
        - :func:`~xyzpy.xr_idxmin`
 
+
+One workflow the combination of these allow, for example, is to find the locations of steepest descent/ascent in noisy data: (i) filter or fit data, (ii) differentiate smooth data (iii) find coordinate min/max of gradients.

@@ -27,7 +27,7 @@ The aim is to take the pain and errors out of generating and exploring data with
 - you don't have to worry about loading, saving and merging disjoint data
 - you don't need to guess when a set of runs is going to finish
 
-As well as the ability to automatically parallelize over runs, ``xyzpy`` provides the :class:`~xyzpy.Crop` object that allows runs and results to be written to disk, these can then be run by any process with access to the files - e.g. a batch system - or just serve as a convenient persistent progress mechanism.
+As well as the ability to automatically parallelize over runs, ``xyzpy`` provides the ``Crop`` object that allows runs and results to be written to disk, these can then be run by any process with access to the files - e.g. a batch system - or just serve as a convenient persistent progress mechanism.
 
 In terms of post-processing, as well as all the power of `xarray <http://xarray.pydata.org/en/stable/>`__, ``xyzpy`` adds uneven step differentiation and error propagation, filtering and interpolation - along any axis just specified by name.
 

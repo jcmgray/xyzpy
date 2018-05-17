@@ -153,4 +153,4 @@ Summary
 
   3. :class:`~xyzpy.Harvester` and :meth:`xyzpy.Runner.harvest_combos` are used to perform many sets of runs, continuously merging the results into one larger :class:`~xarray.Dataset` - ``Harvester.full_ds``, probably synced to disk. These internally call :meth:`xyzpy.Runner.run_combos`.
 
-In general, you would only generate data with one of these methods at once.
+In general, you would only generate data with one of these methods at once - see the full demonstrations in :ref:`Examples`.
