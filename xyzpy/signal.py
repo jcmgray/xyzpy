@@ -618,7 +618,7 @@ def _gufunc_pchip_upscale(x, y, ix, out=None):  # pragma: no cover
     xynm = preprocess_nan_func(x, y, out)
     if xynm is None:
         return
-    x, y, num_nan, mask = xynm
+    x, y, _, mask = xynm
 
     # interpolating function
     ifn = interpolate.PchipInterpolator(x, y, extrapolate=False)
@@ -1101,7 +1101,7 @@ def _gufunc_polyfit_upscale(x, y, ix, deg, out=None):  # pragma: no cover
     xynm = preprocess_nan_func(x, y, out)
     if xynm is None:
         return
-    x, y, num_nan, mask = xynm
+    x, y, _, mask = xynm
 
     # interpolating function
     c = np.polynomial.polynomial.polyfit(x, y, deg[0])
@@ -1136,7 +1136,7 @@ def _gufunc_chebfit_upscale(x, y, ix, deg, out=None):  # pragma: no cover
     xynm = preprocess_nan_func(x, y, out)
     if xynm is None:
         return
-    x, y, num_nan, mask = xynm
+    x, y, _, mask = xynm
 
     # interpolating function
     c = np.polynomial.chebyshev.chebfit(x, y, deg[0])
@@ -1171,7 +1171,7 @@ def _gufunc_legfit_upscale(x, y, ix, deg, out=None):  # pragma: no cover
     xynm = preprocess_nan_func(x, y, out)
     if xynm is None:
         return
-    x, y, num_nan, mask = xynm
+    x, y, _, mask = xynm
 
     # interpolating function
     c = np.polynomial.legendre.legfit(x, y, deg[0])
@@ -1206,7 +1206,7 @@ def _gufunc_lagfit_upscale(x, y, ix, deg, out=None):  # pragma: no cover
     xynm = preprocess_nan_func(x, y, out)
     if xynm is None:
         return
-    x, y, num_nan, mask = xynm
+    x, y, _, mask = xynm
 
     # interpolating function
     c = np.polynomial.laguerre.lagfit(x, y, deg[0])
@@ -1241,7 +1241,7 @@ def _gufunc_hermfit_upscale(x, y, ix, deg, out=None):  # pragma: no cover
     xynm = preprocess_nan_func(x, y, out)
     if xynm is None:
         return
-    x, y, num_nan, mask = xynm
+    x, y, _, mask = xynm
 
     # interpolating function
     c = np.polynomial.hermite.hermfit(x, y, deg[0])

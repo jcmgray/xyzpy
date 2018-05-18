@@ -900,7 +900,9 @@ def visualize_matrix(x, figsize=(4, 4),
     for img, subplot in zip(x, subplots):
 
         if tri is not None:
-            assert tri in {'upper', 'lower'}
+            if tri not in {'upper', 'lower'}:
+                raise ValueError("'tri' should be one of {'upper', 'lower}.")
+
             ma_fn = np.tril if tri == 'upper' else np.triu
             img = np.ma.array(img, mask=ma_fn(np.ones_like(img), k=-1))
 

@@ -734,9 +734,10 @@ def intercept_call_arg(fn):
 
 
 def prettify(x):
-    import numpy as np
+
     if np.issubdtype(type(x), np.floating):
         x = "{0:0.4f}".format(x).rstrip('0')
         if x[-1] == '.':
             x += "0"
+
     return x

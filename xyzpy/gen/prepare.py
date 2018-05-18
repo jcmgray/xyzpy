@@ -91,24 +91,24 @@ def _parse_var_dims(var_dims, var_names):
 
     Parameters
     ----------
-        var_dims : dict, tuple, or str
-            * dict
-                Mapping of each output to its dimensions, each either str
-                or tuple of str. The keys themselves can be a tuple of several
-                output names if they all have the same dimensions.
-            * tuple
-                List of output dimensions directly corresponding to list of
-                var_names. Must be same length as `var_names`
-            * str
-                Only allowed for single output with single dimension.
-        var_names : tuple of str, str, or None
-            * tuple of str
-                List of names of var_names.
-            * str
-                Single named output.
-            * None
-                Automatic result output using Dataset/DataArray, in this case
-                check that var_dims is None as well.
+    var_dims : dict, tuple, or str
+        * dict
+            Mapping of each output to its dimensions, each either str
+            or tuple of str. The keys themselves can be a tuple of several
+            output names if they all have the same dimensions.
+        * tuple
+            List of output dimensions directly corresponding to list of
+            var_names. Must be same length as `var_names`
+        * str
+            Only allowed for single output with single dimension.
+    var_names : tuple of str, str, or None
+        * tuple of str
+            List of names of var_names.
+        * str
+            Single named output.
+        * None
+            Automatic result output using Dataset/DataArray, in this case
+            check that var_dims is None as well.
     """
     if var_names is None:
         if var_dims is not None:
@@ -145,14 +145,21 @@ def _parse_var_dims(var_dims, var_names):
     try:
         for k, v in var_dims.items():
             v = (v,) if isinstance(v, str) else tuple(v)
+
             if isinstance(k, str):
-                assert k in var_names
+                if k not in var_names:
+                    raise KeyError
+
                 new_var_dims[k] = v
+
             else:
                 for sub_k in k:
-                    assert sub_k in var_names
+                    if sub_k not in var_names:
+                        raise KeyError
+
                     new_var_dims[sub_k] = v
-    except AssertionError:
+
+    except KeyError:
         raise ValueError("An unexpected output name was specified in the "
                          "output dimensions mapping.")
 

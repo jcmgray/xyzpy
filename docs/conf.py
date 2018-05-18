@@ -121,6 +121,7 @@ def setup(app):
 
 
 html_logo = "_static/xyzpy-logo-title.png"
+html_favicon = '_static/xyzpy.ico'
 
 # Custom sidebar templates, must be a dictionary that maps document names
 # to template names.
