@@ -338,7 +338,7 @@ class Crop(object):
         # delete everything
         shutil.rmtree(self.location)
 
-    def __repr__(self):
+    def __str__(self):
         # Location and name, underlined
         if not os.path.exists(self.location):
             return self.location + "\n * Not yet sown, or already reaped * \n"
@@ -369,6 +369,16 @@ class Crop(object):
             not_done_spaces=" " * (total_bars - bars),
             percentage=percentage,
         )
+
+    def __repr__(self):
+        if not os.path.exists(self.location):
+            progress = "*reaped or unsown*"
+        else:
+            self.calc_progress()
+            progress = "{}/{}".format(self._num_results, self.num_batches)
+
+        msg = "<Crop(name='{}', progress={}, batchsize={})>"
+        return msg.format(self.name, progress, self.batchsize)
 
     def sow_combos(self, combos, constants=None, verbosity=1):
         """Sow to disk.
@@ -596,11 +606,20 @@ class Crop(object):
                 self.location, "batches", BTCH_NM.format(result_num))
 
             batch = joblib.load(batch_file)
-            result = joblib.load(result_file)
 
-            if len(result) != len(batch):
-                print("result {} is bad".format(result_file) +
-                      ("." if not delete_bad else " - deleting it."))
+            try:
+                result = joblib.load(result_file)
+                unloadable = False
+            except Exception as e:
+                unloadable = True
+                err = e
+
+            if unloadable or (len(result) != len(batch)):
+                msg = "result {} is bad".format(result_file)
+                msg += "." if not delete_bad else " - deleting it."
+                msg += " Error was: {}".format(err) if unloadable else ""
+                print(msg)
+
                 if delete_bad:
                     os.remove(result_file)
 
