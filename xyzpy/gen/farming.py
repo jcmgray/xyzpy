@@ -1,11 +1,5 @@
+"""Objects for labelling and succesively running functions.
 """
-"""
-# TODO: logging
-# TODO: file lock
-# TODO: save_on=() : save every iteration of this parameter
-# TODO: split_on=() : split save files upon each iteration of these params
-# TODO: keep last n datasets
-# TODO: try auto_combine before merge?
 
 import os
 import shutil
@@ -83,6 +77,9 @@ class Runner(object):
         self._resources = _parse_resources(resources)
         self._attrs = _parse_attrs(attrs)
         self.default_runner_settings = default_runner_settings
+
+    def __call__(self, *args, **kwargs):
+        return self.fn(*args, **kwargs)
 
     # Attributes which should be parsed ------------------------------------- #
 

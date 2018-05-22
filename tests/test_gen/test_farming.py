@@ -27,12 +27,13 @@ def fn3_fba(a, b, c):
 
 @pytest.fixture
 def fn3_fba_runner():
-    return Runner(fn3_fba, fn_args=('a', 'b'),
-                  var_names=['sum', 'even', 'array'],
-                  var_dims={'array': ['time']},
-                  var_coords={'time': np.linspace(0, 1.0, 3)},
-                  constants={'c': 100},
-                  attrs={'fruit': 'apples'})
+    r = Runner(fn3_fba, fn_args=('a', 'b'),
+               var_names=['sum', 'even', 'array'],
+               var_dims={'array': ['time']},
+               var_coords={'time': np.linspace(0, 1.0, 3)},
+               constants={'c': 100},
+               attrs={'fruit': 'apples'})
+    return r
 
 
 @pytest.fixture
@@ -52,6 +53,12 @@ def fn3_fba_ds():
 # ------------------------------ Runner Tests ------------------------------- #
 
 class TestRunner:
+
+    def test_basic(self):
+        r = Runner(fn1_x, "x^2")
+        print(str(r))
+        print(repr(r))
+        assert r(2) == 4
 
     @pytest.mark.parametrize("prop, vals", [('var_names', ['S', 'E', 'A']),
                                             ('fn_args', ['A', 'B', 'C']),
