@@ -187,3 +187,18 @@ class TestSowerReaper:
             ds = crop.reap_combos_to_ds(var_names=['bananas'])
 
         assert ds.sel(a=2, b=30, c=400)['bananas'].data == 432
+
+    def test_num_batches_doesnt_divide(self):
+        combos = (('a', [1, 2, 3]),
+                  ('b', [10, 20, 30]),
+                  ('c', range(100, 1101, 100)))
+
+        with TemporaryDirectory() as tdir:
+            crop = Crop(fn=foo_add, parent_dir=tdir, num_batches=98)
+
+            crop.sow_combos(combos)
+            assert crop.num_batches == 50
+            crop.grow_missing()
+            ds = crop.reap_combos_to_ds(var_names=['sum'])
+
+        assert ds['sum'].sel(a=3, b=30, c=1100).data == 33

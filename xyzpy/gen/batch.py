@@ -6,6 +6,7 @@ from glob import glob
 import warnings
 import pickle
 import copy
+import math
 
 try:
     import joblib
@@ -192,9 +193,6 @@ class Crop(object):
             if self.batchsize < 1:
                 raise ValueError("`batchsize` must be >= 1.")
 
-            self.num_batches = ((n // self.batchsize) +
-                                int(n % self.batchsize != 0))
-
         # Decide based on num_batches:
         else:
             if not isinstance(self.num_batches, int):
@@ -202,8 +200,10 @@ class Crop(object):
             if self.num_batches < 1:
                 raise ValueError("`num_batches` must be >= 1.")
 
-            self.batchsize = ((n // self.num_batches) +
-                              int(n % self.num_batches != 0))
+            self.batchsize = math.ceil(n / self.num_batches)
+
+        # re-calculate num_batches slightly
+        self.num_batches = math.ceil(n / self.batchsize)
 
     def ensure_dirs_exists(self):
         """Make sure the directory structure for this crop exists.
@@ -677,21 +677,19 @@ class Sower(object):
         self.combos = combos
         self.crop = crop
         self.crop.choose_batch_settings(combos)
-        # Internal
-        self._batch_cases = []
-        self._counter = 0
-        self._batch_counter = 0
+        # Internal:
+        self._batch_cases = []  # collects cases to be written in single batch
+        self._counter = 0  # counts how many cases are in batch so far
+        self._batch_counter = 0  # counts how many batches have been written
 
     def save_batch(self):
         """Save the current batch of cases to disk using joblib.dump
          and start the next batch.
         """
         self._batch_counter += 1
-        joblib.dump(
-            self._batch_cases,
-            os.path.join(self.crop.location,
-                         "batches",
-                         BTCH_NM.format(self._batch_counter)))
+        joblib.dump(self._batch_cases, os.path.join(
+            self.crop.location, "batches", BTCH_NM.format(self._batch_counter))
+        )
 
     # Context manager #
 
