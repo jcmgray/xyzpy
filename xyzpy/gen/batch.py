@@ -193,6 +193,9 @@ class Crop(object):
             if self.batchsize < 1:
                 raise ValueError("`batchsize` must be >= 1.")
 
+            self.num_batches = math.ceil(n / self.batchsize)
+            self._batch_remainder = 0
+
         # Decide based on num_batches:
         else:
             if not isinstance(self.num_batches, int):
@@ -200,10 +203,7 @@ class Crop(object):
             if self.num_batches < 1:
                 raise ValueError("`num_batches` must be >= 1.")
 
-            self.batchsize = math.ceil(n / self.num_batches)
-
-        # re-calculate num_batches slightly
-        self.num_batches = math.ceil(n / self.batchsize)
+            self.batchsize, self._batch_remainder = divmod(n, self.num_batches)
 
     def ensure_dirs_exists(self):
         """Make sure the directory structure for this crop exists.
@@ -690,6 +690,8 @@ class Sower(object):
         joblib.dump(self._batch_cases, os.path.join(
             self.crop.location, "batches", BTCH_NM.format(self._batch_counter))
         )
+        self._batch_cases = []
+        self._counter = 0
 
     # Context manager #
 
@@ -701,10 +703,12 @@ class Sower(object):
         self._batch_cases.append(kwargs)
         self._counter += 1
 
-        if self._counter == self.crop.batchsize:
+        # when the number of cases doesn't divide the number of batches we
+        #     distribute the remainder among the first crops.
+        extra_batch = self._batch_counter < self.crop._batch_remainder
+
+        if self._counter == self.crop.batchsize + int(extra_batch):
             self.save_batch()
-            self._batch_cases = []
-            self._counter = 0
 
     def __exit__(self, exception_type, exception_value, traceback):
         # Make sure any overfill also saved

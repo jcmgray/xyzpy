@@ -188,16 +188,16 @@ class TestSowerReaper:
 
         assert ds.sel(a=2, b=30, c=400)['bananas'].data == 432
 
-    def test_num_batches_doesnt_divide(self):
+    @pytest.mark.parametrize("num_batches", [67, 98])
+    def test_num_batches_doesnt_divide(self, num_batches):
         combos = (('a', [1, 2, 3]),
                   ('b', [10, 20, 30]),
                   ('c', range(100, 1101, 100)))
 
         with TemporaryDirectory() as tdir:
-            crop = Crop(fn=foo_add, parent_dir=tdir, num_batches=98)
-
+            crop = Crop(fn=foo_add, parent_dir=tdir, num_batches=num_batches)
             crop.sow_combos(combos)
-            assert crop.num_batches == 50
+            assert crop.num_batches == num_batches
             crop.grow_missing()
             ds = crop.reap_combos_to_ds(var_names=['sum'])
 
