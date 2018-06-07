@@ -331,7 +331,8 @@ def mpl_multi_plot(fn):
 
     @functools.wraps(fn)
     def multi_plotter(ds, *args, row=None, col=None, hspace=None, wspace=None,
-                      tight_layout=True, **kwargs):
+                      tight_layout=True, coltitle=None, rowtitle=None,
+                      **kwargs):
 
         if (row is None) and (col is None):
             return fn(ds, *args, **kwargs)
@@ -345,6 +346,9 @@ def mpl_multi_plot(fn):
 
         kwargs['vmin'] = kwargs.pop('vmin', p.vmin)
         kwargs['vmax'] = kwargs.pop('vmax', p.vmax)
+
+        coltitle = col if coltitle is None else coltitle
+        rowtitle = row if rowtitle is None else rowtitle
 
         # split the dataset into its respective rows and columns
         ds_r_c, nrows, ncols = calc_row_col_datasets(ds, row=row, col=col)
@@ -395,7 +399,7 @@ def mpl_multi_plot(fn):
                 # label each column
                 if (i == 0) and (col is not None):
                     col_val = prettify(ds[col].values[j])
-                    skws['title'] = "{} = {}".format(col, col_val)
+                    skws['title'] = "{} = {}".format(coltitle, col_val)
                     fx = 'fontsize_xtitle'
                     skws['fontsize_title'] = kwargs.get(
                         fx, PLOTTER_DEFAULTS[fx])
@@ -405,7 +409,7 @@ def mpl_multi_plot(fn):
                     # XXX: if number of cols==1 this hide yaxis - want both
                     row_val = prettify(ds[row].values[i])
                     skws['ytitle_right'] = True
-                    skws['ytitle'] = "{} = {}".format(row, row_val)
+                    skws['ytitle'] = "{} = {}".format(rowtitle, row_val)
 
                 sP = fn(sub_ds, *args, add_to_fig=p._fig, call='both',
                         subplot=gs[i, j], **{**kwargs, **skws})
