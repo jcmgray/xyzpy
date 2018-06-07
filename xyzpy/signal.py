@@ -7,15 +7,31 @@ import numpy as np
 from scipy import interpolate, signal
 import xarray as xr
 from xarray.core.computation import apply_ufunc
-from numba import njit, guvectorize, double, int_
 from scipy.interpolate import LSQUnivariateSpline
+
+try:
+    from numba import njit, guvectorize, double, int_
+except ImportError:
+
+    no_numba_msg = "This function requires ``numba`` to be installed."
+
+    def njit(*args, **kwargs):
+        def raise_error_fn(*args, **kwargs):
+            raise ImportError(no_numba_msg)
+        return raise_error_fn
+
+    def guvectorize(*args, **kwargs):
+        raise ImportError(no_numba_msg)
+
+    # define these just to avoid NameError
+    double, int_ = (), ()
 
 
 _NUMBA_CACHE_DEFAULT = False
 
 
 class LazyCompile(object):
-    """Class that does 'compiles' a function only when called.
+    """Class that 'compiles' a function only when called.
     """
 
     def __init__(self, fn, compiler, compiler_args, compiler_kwargs):
