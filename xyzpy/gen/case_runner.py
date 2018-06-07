@@ -182,6 +182,11 @@ def _cases_to_ds(results, fn_args, cases, var_names, add_to_ds=None,
     """
     results = _parse_case_results(results, var_names)
 
+    # check if Dataset already returned -> can just merge
+    if isinstance(results[0][0], (xr.Dataset, xr.DataArray)):
+        ds0 = (add_to_ds,) if add_to_ds is not None else ()
+        return xr.merge([*ds0, *(r[0] for r in results)])
+
     if add_to_ds is not None:
         ds = add_to_ds
     else:
