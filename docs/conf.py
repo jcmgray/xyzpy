@@ -102,6 +102,9 @@ html_theme_options = {
     'navbar_title': " ",
     'nosidebar': True,
     'source_link_position': "",
+    'navbar_links': [
+        ("<b>Github</b>", "https://github.com/jcmgray/xyzpy", True),
+    ],
 }
 
 # Theme options are theme-specific and customize the look and feel of a theme
