@@ -111,7 +111,7 @@ def find_union_coords(cases):
     """
     for x in zip(*cases):
         try:
-            yield sorted(list(set(x)))
+            yield sorted(set(x))
         except TypeError:  # unsortable
             yield list(set(x))
 
@@ -190,7 +190,8 @@ def _cases_to_ds(results, fn_args, cases, var_names, add_to_ds=None,
     if add_to_ds is not None:
         ds = add_to_ds
     else:
-        # Find minimal covering set of coordinates for fn_args
+        # need to find minimal covering set of coordinates for fn_args
+
         if isinstance(cases[0], dict):
             fn_args = tuple(cases[0].keys())
             cases = tuple(tuple(c[a] for a in fn_args) for c in cases)
@@ -198,15 +199,16 @@ def _cases_to_ds(results, fn_args, cases, var_names, add_to_ds=None,
         case_coords = dict(zip(fn_args, find_union_coords(cases)))
 
         # Create new, 'all missing' dataset if required
-        ds = all_missing_ds(coords={**case_coords, **var_coords},
-                            var_names=var_names, attrs=attrs,
-                            all_dims=tuple(fn_args + var_dims[k]
-                                           for k in var_names),
-                            var_types=(np.asarray(x).dtype
-                                       for x in results[0]))
+        ds = all_missing_ds(
+            coords={**case_coords, **var_coords},
+            var_names=var_names, attrs=attrs,
+            all_dims=tuple(fn_args + var_dims[k] for k in var_names),
+            var_types=(np.asarray(x).dtype for x in results[0])
+        )
+
         if constants:
-            ds.attrs.update({k: v for k, v in constants.items()
-                             if k not in ds.dims})
+            newattrs = {k: v for k, v in constants.items() if k not in ds.dims}
+            ds.attrs.update(newattrs)
 
     # Go through cases, overwriting nan with results
     for res, cfg in zip(results, cases):
@@ -214,14 +216,19 @@ def _cases_to_ds(results, fn_args, cases, var_names, add_to_ds=None,
         cfg = [[c] for c in cfg]
 
         for vname, x in zip(var_names, res):
+            loc = dict(zip(fn_args, cfg))
+
             if not overwrite:
-                if not ds[vname].loc[dict(zip(fn_args, cfg))].isnull().all():
-                    raise ValueError("Existing data and `overwrite` = False")
+                if not ds[vname].loc[loc].isnull().all():
+                    raise ValueError(
+                        "Existing data for variable {} at position {} and "
+                        "`overwrite` = False.".format(vname, loc))
             try:
                 len(x)
-                ds[vname].loc[dict(zip(fn_args, cfg))] = np.asarray(x)
+                ds[vname].loc[loc] = np.asarray(x)
+
             except (TypeError, ValueError):
-                ds[vname].loc[dict(zip(fn_args, cfg))] = x
+                ds[vname].loc[loc] = x
 
     return ds
 
