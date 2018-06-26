@@ -791,10 +791,15 @@ class HeatMap(PlotterMatplotlib, AbstractHeatMap):
         """Plot the data as a heatmap.
         """
         self.calc_color_norm()
+
+        # add extra coords since they *bound* the quads placed
+        X = np.append(self._heatmap_x,
+                      2 * self._heatmap_x[-1] - self._heatmap_x[-2])
+        Y = np.append(self._heatmap_y,
+                      2 * self._heatmap_y[-1] - self._heatmap_y[-2])
+
         self._heatmap = getattr(self._axes, self.method)(
-            self._heatmap_x,
-            self._heatmap_y,
-            self._heatmap_var,
+            X, Y, self._heatmap_var,
             norm=self._color_norm,
             cmap=xyz_colormaps(self.colormap),
             rasterized=self.rasterize)
@@ -840,7 +845,7 @@ class AutoHeatMap(HeatMap):
 
     def __init__(self, x, **heatmap_opts):
         ds = auto_xyz_ds(x)
-        super().__init__(ds, 'x', **heatmap_opts)
+        super().__init__(ds, 'y', 'z', 'x', **heatmap_opts)
 
 
 def auto_heatmap(x, **heatmap_opts):

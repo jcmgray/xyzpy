@@ -684,7 +684,7 @@ class AutoIHeatMap(IHeatMap):
 
     def __init__(self, x, **iheatmap_opts):
         ds = auto_xyz_ds(x)
-        super().__init__(ds, 'x', **iheatmap_opts)
+        super().__init__(ds, 'y', 'z', 'x', **iheatmap_opts)
 
 
 def auto_iheatmap(x, **iheatmap_opts):
