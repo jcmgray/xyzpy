@@ -109,4 +109,59 @@ class Timer:
 
     def __exit__(self, *args):
         self.end = time.time()
-        self.interval = self.end - self.start
+        self.t = self.time = self.interval = self.end - self.start
+
+
+def _auto_min_time(timer, min_t=0.2, repeats=5):
+    tot_t = 0
+    number = 1
+
+    while True:
+        tot_t = timer.timeit(number)
+        if tot_t > min_t:
+            break
+        number *= 2
+
+    results = [tot_t] + timer.repeat(repeats - 1, number)
+
+    return min(t / number for t in results)
+
+
+def benchmark(fn, setup=None, n=None, min_t=0.2, repeats=5):
+    """Benchmark the time it takes to run ``fn``.
+
+    Parameters
+    ----------
+    fn : callable
+        The function to time.
+    setup : callable, optional
+        If supplied the function that sets up the argument for ``fn``.
+    n : int, optional
+        If supplied, the integer to supply to ``setup`` of ``fn``.
+    min_t : float, optional
+        Aim to repeat function enough times to take up this many seconds.
+    repeats : int, optional
+        Repeat the whole procedure (with setup) this many times in order to
+        take the minimum run time.
+
+    Returns
+    -------
+    t : float
+        The minimum, averaged, time to run ``fn`` in seconds.
+    """
+    from timeit import Timer
+
+    if n is None:
+        n = ""
+
+    if setup is None:
+        setup_str = ""
+        stmnt_str = "fn({})".format(n)
+    else:
+        setup_str = "X=setup({})".format(n)
+        stmnt_str = "fn(X)"
+
+    timer = Timer(setup=setup_str, stmt=stmnt_str,
+                  globals={'setup': setup, 'fn': fn})
+
+    return _auto_min_time(timer, min_t=min_t, repeats=repeats)

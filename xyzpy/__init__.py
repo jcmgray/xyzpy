@@ -7,6 +7,7 @@ from .utils import (
     unzip,
     progbar,
     Timer,
+    benchmark,
 )
 from .gen.combo_runner import (
     combo_runner,
@@ -139,6 +140,7 @@ __all__ = [
     "unzip",
     "progbar",
     "Timer",
+    "benchmark",
     "xr_diff_fornberg",
     "xr_diff_u",
     "xr_diff_u_err",
