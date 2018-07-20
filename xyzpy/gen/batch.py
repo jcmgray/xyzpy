@@ -717,7 +717,7 @@ class Sower(object):
 
 
 def grow(batch_number, crop=None, fn=None, check_mpi=True,
-         verbosity=1, debugging=False):
+         verbosity=2, debugging=False):
     """Automatically process a batch of cases into results. Should be run in an
     ".xyz-{fn_name}" folder.
 
@@ -780,8 +780,15 @@ def grow(batch_number, crop=None, fn=None, check_mpi=True,
 
     if rank == 0:
         results = []
-        for i in progbar(range(len(cases)), disable=verbosity <= 0,
-                         desc="Batch: {}".format(batch_number)):
+
+        descr = "Batch {}".format(batch_number)
+
+        pbar = progbar(range(len(cases)), disable=verbosity <= 0, desc=descr)
+        for i in pbar:
+            if verbosity >= 2:
+                pbar.set_description(descr + ": {}".format(cases[i]))
+
+            # compute and store result!
             results.append(fn(**cases[i]))
 
         if len(results) != len(cases):
@@ -794,6 +801,7 @@ def grow(batch_number, crop=None, fn=None, check_mpi=True,
             crop_location, "results", RSLT_NM.format(batch_number)))
     else:
         for i in range(len(cases)):
+            # help compute the result!
             fn(**cases[i])
 
 
@@ -856,9 +864,9 @@ class Reaper(object):
 
 _BASE_QSUB_SCRIPT = """#!/bin/bash -l
 #$ -S /bin/bash
-#$ -l h_rt={hours}:{minutes}:{seconds}
-#$ -l mem={gigabytes}G
+#$ -l h_rt={hours}:{minutes}:{seconds},mem={gigabytes}G
 #$ -l tmpfs={temp_gigabytes}G
+{extra_resources}
 #$ -N {name}
 mkdir -p {output_directory}
 #$ -wd {output_directory}
@@ -868,6 +876,7 @@ cd {working_directory}
 export OMP_NUM_THREADS={num_threads}
 tmpfile=$(mktemp .xyzpy-qsub.XXXXXXXX)
 cat <<EOF > $tmpfile
+{setup}
 from xyzpy.gen.batch import grow, Crop
 crop = Crop(name='{name}')
 """
@@ -892,9 +901,11 @@ def gen_qsub_script(crop, batch_ids=None, *,
                     gigabytes=2,
                     num_procs=1,
                     launcher='python',
+                    setup="",
                     mpi=False,
                     temp_gigabytes=1,
                     output_directory=None,
+                    extra_resources=None,
                     debugging=False):
     """Generate a qsub script to grow a Crop.
 
@@ -917,12 +928,18 @@ def gen_qsub_script(crop, batch_ids=None, *,
     launcher : str, optional
         How to launch the script, default: ``'python'``. But could for example
         be ``'mpiexec python'`` for a MPI program.
+    setup : str, optional
+        Python script to run before growing, for things that shouldnt't be put
+        in the crop function itself, e.g. one-time imports with side-effects
+        like: ``"import tensorflow as tf; tf.enable_eager_execution()``".
     mpi : bool, optional
         Request MPI processes not threaded processes.
     temp_gigabytes : int, optional
         How much temporary on-disk memory.
     output_directory : str, optional
-        What directory to write output to. Defaults to "$HOME/scratch/output".
+        What directory to write output to. Defaults to "$HOME/Scratch/output".
+    extra_resources : str, optional
+        Extra "#$ -l" resources, e.g. 'gpu=1'
     debugging : bool, optional
         Set the python log level to debugging.
 
@@ -944,6 +961,11 @@ def gen_qsub_script(crop, batch_ids=None, *,
 
     crop.calc_progress()
 
+    if extra_resources is None:
+        extra_resources = ""
+    else:
+        extra_resources = "#$ -l {}".format(extra_resources)
+
     opts = {
         'hours': hours,
         'minutes': minutes,
@@ -954,10 +976,12 @@ def gen_qsub_script(crop, batch_ids=None, *,
         'num_threads': 1 if mpi else num_procs,
         'run_start': 1,
         'launcher': launcher,
+        'setup': setup,
         'pe': 'mpi' if mpi else 'smp',
         'temp_gigabytes': temp_gigabytes,
         'output_directory': output_directory,
         'working_directory': crop.parent_dir,
+        'extra_resources': extra_resources,
         'debugging': debugging,
     }
 
@@ -994,9 +1018,11 @@ def qsub_grow(crop, batch_ids=None, *,
               gigabytes=2,
               num_procs=1,
               launcher='python',
+              setup="",
               mpi=False,
               temp_gigabytes=1,
               output_directory=None,
+              extra_resources=None,
               debugging=False):  # pragma: no cover
     """Automagically submit SGE jobs to grow all missing results.
 
@@ -1019,12 +1045,18 @@ def qsub_grow(crop, batch_ids=None, *,
     launcher : str, optional
         How to launch the script, default: ``'python'``. But could for example
         be ``'mpiexec python'`` for a MPI program.
+    setup : str, optional
+        Python script to run before growing, for things that shouldnt't be put
+        in the crop function itself, e.g. one-time imports with side-effects
+        like: ``"import tensorflow as tf; tf.enable_eager_execution()``".
     mpi : bool, optional
         Request MPI processes not threaded processes.
     temp_gigabytes : int, optional
         How much temporary on-disk memory.
     output_directory : str, optional
-        What directory to write output to. Defaults to "$HOME/scratch/output".
+        What directory to write output to. Defaults to "$HOME/Scratch/output".
+    extra_resources : str, optional
+        Extra "#$ -l" resources, e.g. 'gpu=1'
     debugging : bool, optional
         Set the python log level to debugging.
     """
@@ -1034,18 +1066,22 @@ def qsub_grow(crop, batch_ids=None, *,
 
     import subprocess
 
-    script = gen_qsub_script(crop,
-                             batch_ids=batch_ids,
-                             hours=hours,
-                             minutes=minutes,
-                             seconds=seconds,
-                             gigabytes=gigabytes,
-                             temp_gigabytes=temp_gigabytes,
-                             output_directory=output_directory,
-                             num_procs=num_procs,
-                             launcher=launcher,
-                             mpi=mpi,
-                             debugging=debugging)
+    script = gen_qsub_script(
+        crop,
+        batch_ids=batch_ids,
+        hours=hours,
+        minutes=minutes,
+        seconds=seconds,
+        gigabytes=gigabytes,
+        temp_gigabytes=temp_gigabytes,
+        output_directory=output_directory,
+        num_procs=num_procs,
+        launcher=launcher,
+        setup=setup,
+        mpi=mpi,
+        extra_resources=extra_resources,
+        debugging=debugging,
+    )
 
     script_file = os.path.join(crop.location, "__qsub_script__.sh")
 
