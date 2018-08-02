@@ -5,6 +5,7 @@ import operator
 import itertools
 import tqdm
 import time
+from cytoolz import isiterable
 
 
 def prod(it):
@@ -165,3 +166,85 @@ def benchmark(fn, setup=None, n=None, min_t=0.2, repeats=5):
                   globals={'setup': setup, 'fn': fn})
 
     return _auto_min_time(timer, min_t=min_t, repeats=repeats)
+
+
+class Benchmarker:
+    """Compare the performance of various ``kernels``. Internally this makes
+    use of :func:`~xyzpy.benchmark`, :func:`~xyzpy.Harvester` and xyzpys
+    plotting functionality.
+
+    Parameters
+    ----------
+    kernels : sequence of callable
+        The functions to compare performance with.
+    setup : callable, optional
+        If given, setup each benchmark run by suppling the size argument ``n``
+        to this function first, then feeding its output to each of the
+        functions.
+    names : sequence of str, optional
+        Alternate names to give the function, else they will be inferred.
+    benchmark_opts : dict, optional
+        Supplied to :func:`~xyzpy.benchmark`.
+    data_name : str, optional
+        If given, the file name the internal harvester will use to store
+        results persistently.
+
+    Attributes
+    ----------
+    harvester : xyz.Harvester
+        The harvester that runs and accumulates all the data.
+    ds : xarray.Dataset
+        Shortcut to the harvester's full dataset.
+    """
+
+    def __init__(self, kernels, setup=None, names=None,
+                 benchmark_opts=None, data_name=None):
+        import xyzpy as xyz
+
+        self.kernels = kernels
+        self.names = [f.__name__ for f in kernels] if names is None else names
+        self.setup = setup
+        self.benchmark_opts = {} if benchmark_opts is None else benchmark_opts
+
+        def time(n, kernel):
+            fn = self.kernels[self.names.index(kernel)]
+            return xyz.benchmark(fn, self.setup, n, **self.benchmark_opts)
+
+        self.runner = xyz.Runner(time, ['time'])
+        self.harvester = xyz.Harvester(self.runner, data_name=data_name)
+
+    def run(self, ns, kernels=None, **harvest_opts):
+        """Run the benchmarks. Each run accumulates rather than overwriting the
+        results.
+
+        Parameters
+        ----------
+        ns : sequence of int or int
+            The sizes to run the benchmarks with.
+        kernels : sequence of str, optional
+            If given, only run the kernels with these names.
+        harvest_opts
+            Supplied to :meth:`~xyzpy.Harvester.harvest_combos`.
+        """
+        if not isiterable(ns):
+            ns = (ns,)
+
+        if kernels is None:
+            kernels = self.names
+
+        combos = {'n': ns, 'kernel': kernels}
+        self.harvester.harvest_combos(combos, **harvest_opts)
+
+    @property
+    def ds(self):
+        return self.harvester.full_ds
+
+    def lineplot(self, **plot_opts):
+        """Plot the benchmarking results.
+        """
+        return self.ds.xyz.lineplot('n', 'time', 'kernel', **plot_opts)
+
+    def ilineplot(self, **plot_opts):
+        """Interactively plot the benchmarking results.
+        """
+        return self.ds.xyz.ilineplot('n', 'time', 'kernel', **plot_opts)

@@ -8,6 +8,7 @@ from .utils import (
     progbar,
     Timer,
     benchmark,
+    Benchmarker,
 )
 from .gen.combo_runner import (
     combo_runner,
@@ -141,6 +142,7 @@ __all__ = [
     "progbar",
     "Timer",
     "benchmark",
+    "Benchmarker",
     "xr_diff_fornberg",
     "xr_diff_u",
     "xr_diff_u_err",
