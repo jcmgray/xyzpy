@@ -792,11 +792,15 @@ class HeatMap(PlotterMatplotlib, AbstractHeatMap):
         """
         self.calc_color_norm()
 
-        # add extra coords since they *bound* the quads placed
-        X = np.append(self._heatmap_x,
-                      2 * self._heatmap_x[-1] - self._heatmap_x[-2])
-        Y = np.append(self._heatmap_y,
-                      2 * self._heatmap_y[-1] - self._heatmap_y[-2])
+        # add extra coords since they *bound* the quads placed -> want ticks
+        #     at center of quads
+        X = self._heatmap_x
+        av_x_bin = np.mean(np.abs(X[:-1] - X[1:]))
+        X = np.append(X - av_x_bin / 2, X[-1] + av_x_bin / 2)
+
+        Y = self._heatmap_y
+        av_Y_bin = np.mean(np.abs(Y[:-1] - Y[1:]))
+        Y = np.append(Y - av_Y_bin / 2, Y[-1] + av_Y_bin / 2)
 
         self._heatmap = getattr(self._axes, self.method)(
             X, Y, self._heatmap_var,
