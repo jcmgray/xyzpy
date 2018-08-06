@@ -8,7 +8,7 @@ cache:
     - $HOME/conda
 
 before_install:
-  - bash deps/travis-install-conda.sh
+  - travis_wait bash deps/travis-install-conda.sh
   - export PATH="$HOME/conda/bin:$PATH"
   - source activate "test-environment-${TRAVIS_PYTHON_VERSION}"
 
