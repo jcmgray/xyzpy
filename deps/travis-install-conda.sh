@@ -1,6 +1,7 @@
 #!/bin/sh
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+ENV="test-environment-${TRAVIS_PYTHON_VERSION}"
 
 # check if conda hasn't been installed (cached) yet
 if [ ! -d "$HOME/conda/bin" ]; then
@@ -17,15 +18,19 @@ if [ ! -d "$HOME/conda/bin" ]; then
   conda config --set always_yes yes --set changeps1 no
   conda update -q conda
   conda info -a
-  conda env create --name test-environment python=$TRAVIS_PYTHON_VERSION --file $DIR/requirements-py3.yml
-  source activate test-environment
+  conda env create \
+    --name $ENV \
+    python=$TRAVIS_PYTHON_VERSION \
+    --file $DIR/requirements-py3.yml
+  source activate $ENV
 
 else
   export PATH="$HOME/conda/bin:$PATH"
   hash -r
   conda config --set always_yes yes --set changeps1 no
   conda update -q conda
-  source activate test-environment
+  conda info -a
+  source activate $ENV
   conda update -q --file $DIR/requirements-py3.yml
 
   # update non-conda packages
