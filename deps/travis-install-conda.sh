@@ -17,7 +17,7 @@ if [ ! -d "$HOME/conda/bin" ]; then
   conda config --set always_yes yes --set changeps1 no
   conda update -q conda
   conda info -a
-  conda env create --name test-environment --file $DIR/requirements-py3.yml
+  conda env create --name test-environment python=$TRAVIS_PYTHON_VERSION --file $DIR/requirements-py3.yml
   source activate test-environment
 
 else
