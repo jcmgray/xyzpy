@@ -239,9 +239,19 @@ class Crop(object):
         }, os.path.join(self.location, INFO_NM))
 
     def load_info(self):
+        """Load the full settings from disk.
+        """
+        sfile = os.path.join(self.location, INFO_NM)
+
+        if not os.path.isfile(sfile):
+            raise XYZError("Settings can't be found at {}.".format(sfile))
+        else:
+            return joblib.load(sfile)
+
+    def _sync_info_from_disk(self):
         """Load information about the saved cases.
         """
-        settings = joblib.load(os.path.join(self.location, INFO_NM))
+        settings = self.load_info()
         self.batchsize = settings['batchsize']
         self.num_batches = settings['num_batches']
 
@@ -307,7 +317,7 @@ class Crop(object):
         """Calculate how much progressed has been made in growing the cases.
         """
         if self.is_prepared():
-            self.load_info()
+            self._sync_info_from_disk()
             self._num_sown_batches = len(glob(
                 os.path.join(self.location, "batches", BTCH_NM.format("*"))))
             self._num_results = len(glob(

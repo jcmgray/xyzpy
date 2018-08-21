@@ -113,7 +113,7 @@ class Timer:
         self.t = self.time = self.interval = self.end - self.start
 
 
-def _auto_min_time(timer, min_t=0.2, repeats=5):
+def _auto_min_time(timer, min_t=0.2, repeats=5, get='min'):
     tot_t = 0
     number = 1
 
@@ -125,10 +125,13 @@ def _auto_min_time(timer, min_t=0.2, repeats=5):
 
     results = [tot_t] + timer.repeat(repeats - 1, number)
 
+    if get == 'mean':
+        return sum(results) / (number * len(results))
+
     return min(t / number for t in results)
 
 
-def benchmark(fn, setup=None, n=None, min_t=0.2, repeats=5):
+def benchmark(fn, setup=None, n=None, min_t=0.2, repeats=5, get='min'):
     """Benchmark the time it takes to run ``fn``.
 
     Parameters
@@ -144,6 +147,8 @@ def benchmark(fn, setup=None, n=None, min_t=0.2, repeats=5):
     repeats : int, optional
         Repeat the whole procedure (with setup) this many times in order to
         take the minimum run time.
+    get : {'min', 'mean'}, optional
+        Return the minimum or mean time for each run.
 
     Returns
     -------
@@ -165,7 +170,7 @@ def benchmark(fn, setup=None, n=None, min_t=0.2, repeats=5):
     timer = Timer(setup=setup_str, stmt=stmnt_str,
                   globals={'setup': setup, 'fn': fn})
 
-    return _auto_min_time(timer, min_t=min_t, repeats=repeats)
+    return _auto_min_time(timer, min_t=min_t, repeats=repeats, get=get)
 
 
 class Benchmarker:

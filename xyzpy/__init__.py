@@ -52,6 +52,7 @@ from .signal import (
     xr_filtfilt_bessel,
     xr_unispline,
     xr_polyfit,
+    RunningStatistics,
 )
 from .plot.color import (
     convert_colors,
@@ -153,6 +154,7 @@ __all__ = [
     "xr_filtfilt_bessel",
     "xr_unispline",
     "xr_polyfit",
+    "RunningStatistics",
 ]
 
 

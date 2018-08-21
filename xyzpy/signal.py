@@ -10,7 +10,7 @@ from xarray.core.computation import apply_ufunc
 from scipy.interpolate import LSQUnivariateSpline
 
 try:
-    from numba import njit, guvectorize, double, int_
+    from numba import njit, guvectorize, double, int_, jitclass
 except ImportError:
 
     no_numba_msg = "This function requires ``numba`` to be installed."
@@ -19,6 +19,8 @@ except ImportError:
         def raise_error_fn(*args, **kwargs):
             raise ImportError(no_numba_msg)
         return raise_error_fn
+
+    jitclass = njit
 
     def guvectorize(*args, **kwargs):
         raise ImportError(no_numba_msg)
@@ -1345,3 +1347,96 @@ def xr_polyfit(obj, dim, ix=None, deg=0.5, poly='hermite'):
                          output_core_dims=output_core_dims)
     result['__temp_dim__'] = ix
     return result.rename({'__temp_dim__': dim})
+
+
+# --------------------------------------------------------------------------- #
+#                            Misc numba-functions                             #
+# --------------------------------------------------------------------------- #
+
+@jitclass([
+    ('count', int_),
+    ('mean', double),
+    ('M2', double),
+])
+class RunningStatistics:  # pragma: no cover
+    """Numba-compiled running mean & standard deviation using Welford's
+    algorithm. This is a very efficient way of keeping track of the error on
+    the mean for example.
+
+    Attributes
+    ----------
+    mean : float
+        Current mean.
+    count : int
+        Current count.
+    std : float
+        Current standard deviation.
+    var : float
+        Current variance.
+    err : float
+        Current error on the mean.
+    rel_err: float
+        The current relative error.
+
+    Examples
+    --------
+
+        >>> rs = RunningStatistics()
+        >>> rs.update(1.1)
+        >>> rs.update(1.4)
+        >>> rs.update(1.2)
+        >>> rs.update_from_it([1.5, 1.3, 1.6])
+        >>> rs.mean
+        1.3499999046325684
+
+        >>> rs.std  # standard deviation
+        0.17078252585383266
+
+        >>> rs.err  # error on the mean
+        0.06972167422092768
+
+    """
+
+    def __init__(self):
+        self.count = 0
+        self.mean = 0.0
+        self.M2 = 0.0
+
+    def update(self, x):
+        """
+        """
+        self.count += 1
+        delta = x - self.mean
+        self.mean += delta / self.count
+        delta2 = x - self.mean
+        self.M2 += delta * delta2
+
+    def update_from_it(self, xs):
+        """
+        """
+        for x in xs:
+            self.update(x)
+
+    @property
+    def var(self):
+        if self.count == 0:
+            return np.inf
+        return self.M2 / self.count
+
+    @property
+    def std(self):
+        if self.count == 0:
+            return np.inf
+        return self.var**0.5
+
+    @property
+    def err(self):
+        if self.count == 0:
+            return np.inf
+        return self.std / self.count**0.5
+
+    @property
+    def rel_err(self):
+        if self.count == 0:
+            return np.inf
+        return self.err / abs(self.mean)
