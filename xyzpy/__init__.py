@@ -9,6 +9,8 @@ from .utils import (
     Timer,
     benchmark,
     Benchmarker,
+    RunningStatistics,
+    estimate_from_repeats,
 )
 from .gen.combo_runner import (
     combo_runner,
@@ -52,7 +54,6 @@ from .signal import (
     xr_filtfilt_bessel,
     xr_unispline,
     xr_polyfit,
-    RunningStatistics,
 )
 from .plot.color import (
     convert_colors,
@@ -144,6 +145,8 @@ __all__ = [
     "Timer",
     "benchmark",
     "Benchmarker",
+    "RunningStatistics",
+    "estimate_from_repeats",
     "xr_diff_fornberg",
     "xr_diff_u",
     "xr_diff_u_err",
@@ -154,7 +157,6 @@ __all__ = [
     "xr_filtfilt_bessel",
     "xr_unispline",
     "xr_polyfit",
-    "RunningStatistics",
 ]
 
 

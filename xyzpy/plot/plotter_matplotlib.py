@@ -638,7 +638,7 @@ def auto_scatter(x, y_z, **scatter_opts):
     """Auto version of :func:`~xyzpy.scatter` that accepts array arguments
     by converting them to a ``Dataset`` first.
     """
-    return AutoScatter(x, y_z, **scatter_opts)
+    return AutoScatter(x, y_z, **scatter_opts)()
 
 
 # --------------------------------------------------------------------------- #

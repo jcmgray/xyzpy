@@ -613,7 +613,7 @@ def auto_iscatter(x, y_z, **iscatter_opts):
     """Auto version of :func:`~xyzpy.iscatter` that accepts array arguments
     by converting them to a ``Dataset`` first.
     """
-    return AutoIScatter(x, y_z, **iscatter_opts)
+    return AutoIScatter(x, y_z, **iscatter_opts)()
 
 
 # --------------------------------------------------------------------------- #

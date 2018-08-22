@@ -3,9 +3,15 @@
 import functools
 import operator
 import itertools
-import tqdm
 import time
+import math
+import sys
+
+import tqdm
 from cytoolz import isiterable
+import numpy as np
+
+from .signal import jitclass, double, int_
 
 
 def prod(it):
@@ -247,9 +253,194 @@ class Benchmarker:
     def lineplot(self, **plot_opts):
         """Plot the benchmarking results.
         """
+        plot_opts.setdefault('xlog', True)
+        plot_opts.setdefault('ylog', True)
         return self.ds.xyz.lineplot('n', 'time', 'kernel', **plot_opts)
 
     def ilineplot(self, **plot_opts):
         """Interactively plot the benchmarking results.
         """
+        plot_opts.setdefault('xlog', True)
+        plot_opts.setdefault('ylog', True)
         return self.ds.xyz.ilineplot('n', 'time', 'kernel', **plot_opts)
+
+
+@jitclass([
+    ('count', int_),
+    ('mean', double),
+    ('M2', double),
+])
+class RunningStatistics:  # pragma: no cover
+    """Numba-compiled running mean & standard deviation using Welford's
+    algorithm. This is a very efficient way of keeping track of the error on
+    the mean for example.
+
+    Attributes
+    ----------
+    mean : float
+        Current mean.
+    count : int
+        Current count.
+    std : float
+        Current standard deviation.
+    var : float
+        Current variance.
+    err : float
+        Current error on the mean.
+    rel_err: float
+        The current relative error.
+
+    Examples
+    --------
+
+        >>> rs = RunningStatistics()
+        >>> rs.update(1.1)
+        >>> rs.update(1.4)
+        >>> rs.update(1.2)
+        >>> rs.update_from_it([1.5, 1.3, 1.6])
+        >>> rs.mean
+        1.3499999046325684
+
+        >>> rs.std  # standard deviation
+        0.17078252585383266
+
+        >>> rs.err  # error on the mean
+        0.06972167422092768
+
+    """
+
+    def __init__(self):
+        self.count = 0
+        self.mean = 0.0
+        self.M2 = 0.0
+
+    def update(self, x):
+        """Add a single value ``x`` to the statistics.
+        """
+        self.count += 1
+        delta = x - self.mean
+        self.mean += delta / self.count
+        delta2 = x - self.mean
+        self.M2 += delta * delta2
+
+    def update_from_it(self, xs):
+        """Add all values from iterable ``xs`` to the statistics.
+        """
+        for x in xs:
+            self.update(x)
+
+    def converged(self, rtol, atol):
+        """Check if the stats have converged with respect to relative and
+        absolute tolerance ``rtol`` and ``atol``.
+        """
+        return self.err < rtol * abs(self.mean) + atol
+
+    @property
+    def var(self):
+        if self.count == 0:
+            return np.inf
+        return self.M2 / self.count
+
+    @property
+    def std(self):
+        if self.count == 0:
+            return np.inf
+        return self.var**0.5
+
+    @property
+    def err(self):
+        if self.count == 0:
+            return np.inf
+        return self.std / self.count**0.5
+
+    @property
+    def rel_err(self):
+        if self.count == 0:
+            return np.inf
+        return self.err / abs(self.mean)
+
+
+def estimate_from_repeats(fn, *fn_args, rtol=0.02, tol_scale=1.0, get='stats',
+                          verbosity=0, min_samples=5, max_samples=1000000,
+                          **fn_kwargs):
+    """
+    Parameters
+    ----------
+    fn : callable
+        The function that estimates a single value.
+    fn_args, optional
+        Supplied to ``fn``.
+    rtol : float, optional
+        Relative tolerance for error on mean.
+    tol_scale, optional
+        The expected 'scale' of the estimate, this modifies the aboslute
+        tolerance near zero to ``rtol * tol_scale``, default: 1.0.
+    get : {'stats', 'samples', 'mean'}, optional
+        Just get the ``RunningStatistics`` object, or the actual samples too,
+        or just the actual mean estimate.
+    verbosity : { 0, 1, 2}, optional
+        How much informatino to show: ``0``: nothing, ``1``: progress bar just
+        with iteration rate, ``2``: progress bar with running stats displayed.
+    min_samples : int, optional
+        Take at least this many samples before checking for convergence.
+    max_samples : int, optional
+        Take at maximum this many samples.
+    fn_kwargs, optional
+        Supplied to ``fn``.
+
+    Returns
+    -------
+    rs : RunningStatistics
+        Statistics about the random estimation.
+    samples : list[float]
+        If ``get=='samples'``, the actual samples.
+    """
+
+    rs = RunningStatistics()
+    repeats = itertools.count()
+
+    if verbosity >= 1:
+        repeats = progbar(repeats)
+        prec = abs(round(math.log10(tol_scale * rtol))) + 1
+
+    if get == 'samples':
+        xs = []
+
+    try:
+        for i in repeats:
+            x = fn(*fn_args, **fn_kwargs)
+            if get == 'samples':
+                xs.append(x)
+            rs.update(x)
+
+            if verbosity >= 2:
+                desc = '{}: mean: {:.{prec}f} err: {:.{prec}f}'
+                repeats.set_description(
+                    desc.format(rs.count, rs.mean, rs.err, prec=prec))
+
+            # need at least min_samples to check convergence
+            if (i > min_samples):
+                if rs.converged(rtol, tol_scale * rtol):
+                    break
+
+            # reached the maximum number of samples to try
+            if i >= max_samples - 1:
+                break
+
+    # allow user to cleanly interupt sampling with keyboard
+    except KeyboardInterrupt:
+        pass
+
+    if verbosity >= 1:
+        repeats.close()
+        sys.stderr.flush()
+        print("<RunningStatistics(mean={:.{prec}f}, err={:.{prec}f}, "
+              "count={})>".format(rs.mean, rs.err, rs.count, prec=prec))
+
+    if get == 'samples':
+        return rs, xs
+
+    if get == 'mean':
+        return rs.mean
+
+    return rs
