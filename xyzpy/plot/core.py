@@ -505,11 +505,18 @@ class Plotter:
         else:
             self._markersize = self.markersize
 
-        if self.markers:
+        # decide markers automatically
+        if self.markers is True:
             if len(self._z_vals) > 1:
                 self._mrkrs = itertools.cycle(_MARKERS[self.backend])
             else:
                 self._mrkrs = iter(_SINGLE_LINE_MARKER[self.backend])
+
+        # custom sequence
+        elif self.markers:
+            self._mrkrs = itertools.cycle(self.markers)
+
+        # no markers
         else:
             self._mrkrs = itertools.repeat(None)
 
