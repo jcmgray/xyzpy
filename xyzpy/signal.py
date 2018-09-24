@@ -427,7 +427,6 @@ def diff_u_err(efx, x, out=None):  # pragma: no cover
     if xynm is None:
         return
     x, efx, num_nan, mask = xynm
-    yf = np.empty_like(efx)
 
     n = len(x)
     yf = np.empty_like(efx)

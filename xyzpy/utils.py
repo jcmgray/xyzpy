@@ -137,7 +137,8 @@ def _auto_min_time(timer, min_t=0.2, repeats=5, get='min'):
     return min(t / number for t in results)
 
 
-def benchmark(fn, setup=None, n=None, min_t=0.2, repeats=5, get='min'):
+def benchmark(fn, setup=None, n=None, min_t=0.2,
+              repeats=5, get='min', starmap=False):
     """Benchmark the time it takes to run ``fn``.
 
     Parameters
@@ -155,6 +156,8 @@ def benchmark(fn, setup=None, n=None, min_t=0.2, repeats=5, get='min'):
         take the minimum run time.
     get : {'min', 'mean'}, optional
         Return the minimum or mean time for each run.
+    starmap : bool, optional
+        Unpack the arguments from ``setup``, if given.
 
     Returns
     -------
@@ -171,7 +174,7 @@ def benchmark(fn, setup=None, n=None, min_t=0.2, repeats=5, get='min'):
         stmnt_str = "fn({})".format(n)
     else:
         setup_str = "X=setup({})".format(n)
-        stmnt_str = "fn(X)"
+        stmnt_str = "fn(*X)" if starmap else "fn(X)"
 
     timer = Timer(setup=setup_str, stmt=stmnt_str,
                   globals={'setup': setup, 'fn': fn})
