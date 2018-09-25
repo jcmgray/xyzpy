@@ -810,9 +810,9 @@ def grow(batch_number, crop=None, fn=None, check_mpi=True,
         joblib.dump(tuple(results), os.path.join(
             crop_location, "results", RSLT_NM.format(batch_number)))
     else:
-        for i in range(len(cases)):
-            # help compute the result!
-            fn(**cases[i])
+        for case in cases:
+            # worker: just help compute the result!
+            fn(**case)
 
 
 # --------------------------------------------------------------------------- #

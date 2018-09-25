@@ -634,7 +634,7 @@ def _gufunc_pchip_upscale(x, y, ix, out=None):  # pragma: no cover
     xynm = preprocess_nan_func(x, y, out)
     if xynm is None:
         return
-    x, y, _, mask = xynm
+    x, y, _, _ = xynm
 
     # interpolating function
     ifn = interpolate.PchipInterpolator(x, y, extrapolate=False)

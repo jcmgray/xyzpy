@@ -10,8 +10,6 @@ Welcome to xyzpy's documentation!
   :target: https://travis-ci.org/jcmgray/xyzpy
 .. image:: https://codecov.io/gh/jcmgray/xyzpy/branch/master/graph/badge.svg
   :target: https://codecov.io/gh/jcmgray/xyzpy
-.. image:: https://api.codacy.com/project/badge/Grade/7085feb3f47c4c509559778be5eb6a60
-  :target: https://www.codacy.com/app/jcmgray/xyzpy?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=jcmgray/xyzpy&amp;utm_campaign=Badge_Grade
 .. image:: https://img.shields.io/lgtm/grade/python/g/jcmgray/xyzpy.svg
   :target: https://lgtm.com/projects/g/jcmgray/xyzpy/
   :alt: LGTM Grade
