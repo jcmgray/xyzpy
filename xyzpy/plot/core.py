@@ -433,10 +433,10 @@ class Plotter:
         if self._ds[coo].dtype.kind in {'i', 'u', 'f'}:
             self._zmin = self.zlims[0]
             if self._zmin is None:
-                self._zmin = self._ds[coo].min().values
+                self._zmin = self._ds[coo].min().values.item(0)
             self._zmax = self.zlims[1]
             if self._zmax is None:
-                self._zmax = self._ds[coo].max().values
+                self._zmax = self._ds[coo].max().values.item(0)
         else:
             # no relative coloring possible e.g. for strings
             self._zmin, self._zmax = 0.0, 1.0
