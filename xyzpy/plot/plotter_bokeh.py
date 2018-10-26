@@ -80,7 +80,6 @@ class PlotterBokeh(Plotter):
                 toolbar_location="above",
                 toolbar_sticky=False,
                 active_scroll="wheel_zoom",
-                logo=None,
             )
 
     def set_axes_labels(self):
