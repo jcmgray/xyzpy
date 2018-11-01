@@ -565,7 +565,7 @@ class Scatter(PlotterMatplotlib, AbstractScatter):
             if 'c' in data:
                 col = data['c']
             else:
-                col = next(self._cols)
+                col = [next(self._cols)]
 
             scatter_opts = {
                 'c': col,
