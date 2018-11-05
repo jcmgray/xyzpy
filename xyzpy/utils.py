@@ -107,7 +107,19 @@ def progbar(it=None, nb=False, **kwargs):
 
 
 class Timer:
-    """A simple context manager class for timing blocks.
+    """A very simple context manager class for timing blocks.
+
+    Examples
+    --------
+
+    >>> from xyzpy import Timer
+    >>> with Timer() as timer:
+    ...     print('Doing some work!')
+    ...
+    Doing some work!
+    >>> timer.t
+    0.00010752677917480469
+
     """
 
     def __enter__(self):
@@ -163,6 +175,23 @@ def benchmark(fn, setup=None, n=None, min_t=0.2,
     -------
     t : float
         The minimum, averaged, time to run ``fn`` in seconds.
+
+    Examples
+    --------
+
+    Just a parameter-less function:
+
+        >>> import xyzpy as xyz
+        >>> import numpy as np
+        >>> xyz.benchmark(lambda: np.linalg.eig(np.random.randn(100, 100)))
+        0.004726233000837965
+
+    The same but with a setup and size parameter ``n`` specified:
+
+        >>> setup = lambda n: np.random.randn(n, n)
+        >>> fn = lambda X: np.linalg.eig(X)
+        >>> xyz.benchmark(fn, setup, 100)
+        0.0042192734545096755
     """
     from timeit import Timer
 
@@ -397,6 +426,22 @@ def estimate_from_repeats(fn, *fn_args, rtol=0.02, tol_scale=1.0, get='stats',
         Statistics about the random estimation.
     samples : list[float]
         If ``get=='samples'``, the actual samples.
+
+
+    Examples
+    --------
+
+    Estimate the sum of ``n`` random numbers:
+
+        >>> import numpy as np
+        >>> import xyzpy as xyz
+        >>> def fn(n):
+        ...     return np.random.rand(n).sum()
+        ...
+        >>> stats = xyz.estimate_from_repeats(fn, n=10, verbosity=3)
+        51: mean: 5.002 err: 0.119: : 0it [00:00, ?it/s]
+        <RunningStatistics(mean=5.002, err=0.119, count=51)>
+
     """
 
     rs = RunningStatistics()
