@@ -291,7 +291,7 @@ class TestHarvester:
     def test_harvest_cases_merge_dask(self, fn3_fba_runner, fn3_fba_ds):
 
         import dask
-        dask.set_options(get=dask.threaded.get)
+        dask.config.set(scheduler='threads')
 
         with tempfile.TemporaryDirectory() as tmpdir:
             fl_pth = os.path.join(tmpdir, 'test.h5')
@@ -307,7 +307,7 @@ class TestHarvester:
                                               fn3_fba_ds):
 
         import dask
-        dask.set_options(get=dask.threaded.get)
+        dask.config.set(scheduler='threads')
 
         with tempfile.TemporaryDirectory() as tmpdir:
             fl_pth = os.path.join(tmpdir, 'test.h5')
