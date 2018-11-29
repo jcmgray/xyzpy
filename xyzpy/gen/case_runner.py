@@ -6,7 +6,7 @@ from cytoolz import concat
 import numpy as np
 import xarray as xr
 
-from ..utils import progbar
+from ..utils import progbar, _choose_executor_depr_pool
 from .prepare import (
     _parse_fn_args,
     _parse_cases,
@@ -35,10 +35,13 @@ def _case_runner(fn, fn_args, cases, constants,
                  split=False,
                  parallel=False,
                  num_workers=None,
-                 pool=None,
-                 verbosity=1):
+                 executor=None,
+                 verbosity=1,
+                 pool=None):
     """Core case runner, i.e. without parsing of arguments.
     """
+    executor = _choose_executor_depr_pool(executor, pool)
+
     # Turn the function into a single arg function to send to combo_runner
     sfn = SingleArgFn(fn)
 
@@ -52,7 +55,7 @@ def _case_runner(fn, fn_args, cases, constants,
                          split=split,
                          parallel=parallel,
                          num_workers=num_workers,
-                         pool=pool,
+                         executor=executor,
                          verbosity=verbosity)
 
 
@@ -60,9 +63,10 @@ def case_runner(fn, fn_args, cases,
                 constants=None,
                 split=False,
                 parallel=False,
-                pool=None,
+                executor=None,
                 num_workers=None,
-                verbosity=1):
+                verbosity=1,
+                pool=None):
     """Evaluate a function in many different configurations, optionally in
     parallel and or with live progress.
 
@@ -80,7 +84,7 @@ def case_runner(fn, fn_args, cases,
         See :func:`~xyzpy.combo_runner`.
     parallel : bool, optional
         See :func:`~xyzpy.combo_runner`.
-    pool : executor-like pool, optional
+    executor : executor-like pool, optional
         See :func:`~xyzpy.combo_runner`.
     num_workers : int, optional
         See :func:`~xyzpy.combo_runner`.
@@ -91,6 +95,8 @@ def case_runner(fn, fn_args, cases,
     -------
         results : list of fn output for each case
     """
+    executor = _choose_executor_depr_pool(executor, pool)
+
     # Prepare fn_args and values
     fn_args = _parse_fn_args(fn_args)
     cases = _parse_cases(cases)
@@ -101,7 +107,7 @@ def case_runner(fn, fn_args, cases,
                         split=split,
                         parallel=parallel,
                         num_workers=num_workers,
-                        pool=pool,
+                        executor=executor,
                         verbosity=verbosity)
 
 

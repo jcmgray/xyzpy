@@ -1,7 +1,9 @@
 """Functions for systematically evaluating a function over all combinations.
 """
 import functools
+import multiprocessing
 from concurrent import futures as cf
+
 import numpy as np
 import xarray as xr
 
@@ -10,6 +12,7 @@ from ..utils import (
     flatten,
     prod,
     progbar,
+    _choose_executor_depr_pool,
 )
 from .prepare import (
     _parse_var_names,
@@ -22,18 +25,43 @@ from .prepare import (
 )
 
 
-def default_submitter(pool, fn, *args, **kwds):
-    """Default method for submitting to a pool.
+def _submit(executor, fn, *args, **kwds):
+    """Default method for submitting to a executor.
+
+    Parameters
+    ----------
+    executor : pool-executor like
+        A ``multiprocessing.pool`` or an pool executor with API matching either
+        ``concurrent.futures``, or an ``ipyparallel`` view.
+    fn : callable
+        The function to submit.
+    args :
+        Supplied to ``fn``.
+    kwds :
+        Supplied to ``fn``.
+
+    Returns
+    --------
+    future
     """
-    try:
-        future = pool.submit(fn, *args, **kwds)
-    except AttributeError:
-        future = pool.apply_async(fn, *args, **kwds)
-    return future
+    if isinstance(executor, multiprocessing.pool.Pool):
+        return executor.apply_async(fn, args, kwds)
+
+    elif hasattr(executor, 'submit'):
+        # concurrent.futures like API
+        return executor.submit(fn, *args, **kwds)
+
+    elif hasattr(executor, 'apply_async'):
+        # ipyparallel like API
+        return executor.apply_async(fn, *args, **kwds)
+
+    else:
+        raise TypeError("The executor supplied, {}, does not have a ``submit``"
+                        " or ``apply_async`` method.".format(executor))
 
 
-def nested_submit(fn, combos, kwds, pool=None, submitter=default_submitter):
-    """Recursively submit jobs directly, as delayed objects or to a pool.
+def nested_submit(fn, combos, kwds, executor=None):
+    """Recursively submit jobs directly to an executor pool.
 
     Parameters
     ----------
@@ -43,8 +71,8 @@ def nested_submit(fn, combos, kwds, pool=None, submitter=default_submitter):
         Mapping of each argument and all its possible values.
     kwds : dict
         Constant keyword arguments not to iterate over.
-    pool : Executor pool
-        Pool-executor-like class implementing a submit method.
+    executor : Executor pool
+         The pool executor used to compute the results.
 
     Returns
     -------
@@ -55,15 +83,17 @@ def nested_submit(fn, combos, kwds, pool=None, submitter=default_submitter):
 
     # have reached most nested level?
     if len(combos) == 1:
-        if pool:
-            return tuple(submitter(pool, fn, **kwds, **{arg: x})
+        if executor is not None:
+            return tuple(_submit(executor, fn, **kwds, **{arg: x})
                          for x in inputs)
-        else:
-            return tuple(fn(**kwds, **{arg: x}) for x in inputs)
+
+        return tuple(fn(**kwds, **{arg: x}) for x in inputs)
+
     # else recurse through current level
-    else:
-        return tuple(nested_submit(fn, combos[1:], {**kwds, arg: x}, pool=pool,
-                                   submitter=submitter) for x in inputs)
+    return tuple(
+        nested_submit(fn, combos[1:], {**kwds, arg: x}, executor=executor)
+        for x in inputs
+    )
 
 
 def default_getter(pbar=None):
@@ -95,15 +125,16 @@ def nested_get(futures, ndim, getter):
             tuple(nested_get(fut, ndim - 1, getter) for fut in futures))
 
 
-def _combo_runner_pool(fn, combos, constants, n, ndim, pool, verbosity=1):
-    """Submit and retrieve combos from a generic pool.
+def _combo_runner_executor(fn, combos, constants, n,
+                           ndim, executor, verbosity=1):
+    """Submit and retrieve combos from a generic pool-executor.
     """
     with progbar(total=n, disable=verbosity <= 0) as pbar:
 
         if verbosity >= 2:
             pbar.set_description("Processing with pool")
 
-        futures = nested_submit(fn, combos, constants, pool=pool)
+        futures = nested_submit(fn, combos, constants, executor=executor)
         getter = default_getter(pbar)
         return nested_get(futures, ndim, getter)
 
@@ -112,16 +143,16 @@ def _combo_runner_parallel(fn, combos, constants, n, ndim,
                            num_workers, verbosity=1):
     """Submit and retrieve combos from a ProcessPoolExecutor.
     """
-    with cf.ProcessPoolExecutor(max_workers=num_workers) as pool:
+    with cf.ProcessPoolExecutor(max_workers=num_workers) as executor:
 
         with progbar(total=n, disable=verbosity <= 0) as pbar:
 
             if verbosity >= 2:
                 pbar.set_description(
-                    "Processing with {} workers".format(pool._max_workers)
+                    "Processing with {} workers".format(executor._max_workers)
                 )
 
-            futures = nested_submit(fn, combos, constants, pool=pool)
+            futures = nested_submit(fn, combos, constants, executor=executor)
             for f in cf.as_completed(flatten(futures, ndim)):
                 pbar.update()
             return nested_get(futures, ndim, default_getter())
@@ -152,11 +183,12 @@ def _combo_runner_sequential(fn, combos, constants, n, ndim, verbosity=1):
         return nested_submit(fn, combos, constants)
 
 
-def _combo_runner(fn, combos, constants, split=False,
-                  parallel=False, num_workers=None, pool=None,
-                  verbosity=1):
+def _combo_runner(fn, combos, constants, split=False, parallel=False,
+                  num_workers=None, executor=None, verbosity=1, pool=None):
     """Core combo runner, i.e. no parsing of arguments.
     """
+    executor = _choose_executor_depr_pool(executor, pool)
+
     n = prod(len(x) for _, x in combos)
     ndim = len(combos)
 
@@ -164,10 +196,10 @@ def _combo_runner(fn, combos, constants, split=False,
            'ndim': ndim, 'verbosity': verbosity}
 
     # Custom pool supplied
-    if pool is not None:
-        results = _combo_runner_pool(pool=pool, **kws)
+    if executor is not None:
+        results = _combo_runner_executor(executor=executor, **kws)
 
-    # Else for parallel, by default use a process pool exceutor
+    # Else for parallel, by default use a process pool-exceutor
     elif parallel or num_workers:
         results = _combo_runner_parallel(num_workers=num_workers, **kws)
 
@@ -179,8 +211,8 @@ def _combo_runner(fn, combos, constants, split=False,
 
 
 def combo_runner(fn, combos, *, constants=None, split=False,
-                 parallel=False, pool=None, num_workers=None,
-                 verbosity=1):
+                 parallel=False, executor=None, num_workers=None,
+                 verbosity=1, pool=None):
     """Take a function fn and analyse it over all combinations of named
     variables' values, optionally showing progress and in parallel.
 
@@ -197,9 +229,11 @@ def combo_runner(fn, combos, *, constants=None, split=False,
         Whether to split (unzip) into multiple output arrays or not.
     parallel : bool, optional
         Process combos in parallel, default number of workers picked.
-    pool : executor-like pool, optional
-        Submit all combos to this pool. Must have ``submit`` or ``apply_async``
-        methods.
+    executor : executor-like pool, optional
+        Submit all combos to this pool executor. Must have ``submit`` or
+        ``apply_async`` methods and API matching either ``concurrent.futures``
+        or an ``ipyparallel`` view. Pools from ``multiprocessing.pool`` are
+        also  supported.
     num_workers : int, optional
         Explicitly choose how many workers to use, None for automatic.
     verbosity : {0, 1, 2}, optional
@@ -214,14 +248,16 @@ def combo_runner(fn, combos, *, constants=None, split=False,
     data : nested tuple
         Nested tuple containing all combinations of running ``fn``.
     """
+    executor = _choose_executor_depr_pool(executor, pool)
+
     # Prepare combos
     combos = _parse_combos(combos)
     constants = _parse_constants(constants)
 
     # Submit to core combo runner
     return _combo_runner(fn, combos, constants=constants, split=split,
-                         parallel=parallel, pool=pool, num_workers=num_workers,
-                         verbosity=verbosity)
+                         parallel=parallel, executor=executor,
+                         num_workers=num_workers, verbosity=verbosity)
 
 
 def multi_concat(results, dims):

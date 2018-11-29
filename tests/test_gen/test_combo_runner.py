@@ -25,32 +25,27 @@ from . import (
 # COMBO_RUNNER tests                                                          #
 # --------------------------------------------------------------------------- #
 
+_test_combos1 = (('a', [1, 2]),
+                 ('b', [10, 20, 30]),
+                 ('c', [100, 200, 300, 400]))
+
+_test_expect1 = (np.array([1, 2]).reshape((2, 1, 1)) +
+                 np.array([10, 20, 30]).reshape((1, 3, 1)) +
+                 np.array([100, 200, 300, 400]).reshape((1, 1, 4)))
+
+
 class TestComboRunner:
     def test_simple(self):
-        combos = [('a', [1, 2]),
-                  ('b', [10, 20, 30]),
-                  ('c', [100, 200, 300, 400])]
-        x = combo_runner(foo3_scalar, combos)
-        xn = (np.array([1, 2]).reshape((2, 1, 1)) +
-              np.array([10, 20, 30]).reshape((1, 3, 1)) +
-              np.array([100, 200, 300, 400]).reshape((1, 1, 4)))
-        assert_allclose(x, xn)
+        x = combo_runner(foo3_scalar, _test_combos1)
+        assert_allclose(x, _test_expect1)
 
     def test_progbars(self):
-        combos = [('a', [1, 2]),
-                  ('b', [10, 20, 30]),
-                  ('c', [100, 200, 300, 400])]
-        combo_runner(foo3_scalar, combos, verbosity=2)
+        combo_runner(foo3_scalar, _test_combos1, verbosity=2)
 
     def test_dict(self):
-        combos = OrderedDict((('a', [1, 2]),
-                              ('b', [10, 20, 30]),
-                              ('c', [100, 200, 300, 400])))
+        combos = OrderedDict(_test_combos1)
         x = combo_runner(foo3_scalar, combos)
-        xn = (np.array([1, 2]).reshape((2, 1, 1)) +
-              np.array([10, 20, 30]).reshape((1, 3, 1)) +
-              np.array([100, 200, 300, 400]).reshape((1, 1, 4)))
-        assert_allclose(x, xn)
+        assert_allclose(x, _test_expect1)
 
     def test_single_combo(self):
         combos = [('a', [1, 2])]
@@ -64,13 +59,9 @@ class TestComboRunner:
         assert_allclose(x, [321, 322])
 
     def test_multires(self):
-        combos = [('a', [1, 2]),
-                  ('b', [10, 20, 30]),
-                  ('c', [100, 200, 300, 400])]
+        combos = _test_combos1
         x, y = combo_runner(foo3_float_bool, combos, split=True)
-        xn = (np.array([1, 2]).reshape((2, 1, 1)) +
-              np.array([10, 20, 30]).reshape((1, 3, 1)) +
-              np.array([100, 200, 300, 400]).reshape((1, 1, 4)))
+        xn = _test_expect1
         yn = (np.array([1, 2]).reshape((2, 1, 1)) %
               np.array([2] * 24).reshape((2, 3, 4))) == 0
         assert_allclose(x, xn)
@@ -79,40 +70,37 @@ class TestComboRunner:
     @pytest.mark.parametrize('parallel', [False, True])
     @pytest.mark.parametrize('fn', (foo3_scalar,))
     def test_parallel_basic(self, parallel, fn):
-        combos = (('a', [1, 2]),
-                  ('b', [10, 20, 30]),
-                  ('c', [100, 200, 300, 400]))
-        x = combo_runner(fn, combos, num_workers=2,
-                         parallel=parallel)
-        xn = (np.array([1, 2]).reshape((2, 1, 1)) +
-              np.array([10, 20, 30]).reshape((1, 3, 1)) +
-              np.array([100, 200, 300, 400]).reshape((1, 1, 4)))
-        assert_allclose(x, xn)
+        x = combo_runner(fn, _test_combos1, num_workers=2, parallel=parallel)
+        assert_allclose(x, _test_expect1)
+
+    @pytest.mark.parametrize('executor', ['cf-process', 'cf-thread',
+                                          'mp-process', 'mp-thread'])
+    @pytest.mark.parametrize('fn', (foo3_scalar,))
+    def test_executor_basic(self, executor, fn):
+        import concurrent.futures as cf
+        import multiprocessing as mp
+        executor = {
+            'cf-process': cf.ProcessPoolExecutor,
+            'cf-thread': cf.ThreadPoolExecutor,
+            'mp-process': mp.Pool,
+            'mp-thread': mp.pool.ThreadPool,
+        }[executor](2)
+        x = combo_runner(fn, _test_combos1, executor=executor)
+        assert_allclose(x, _test_expect1)
 
     @pytest.mark.parametrize('parallel', [False, True])
     def test_parallel_multires(self, parallel):
-        combos = (('a', [1, 2]),
-                  ('b', [10, 20, 30]),
-                  ('c', [100, 200, 300, 400]))
-        x = combo_runner(foo3_float_bool, combos, num_workers=2, split=True,
-                         parallel=parallel)
-        xn = (np.array([1, 2]).reshape((2, 1, 1)) +
-              np.array([10, 20, 30]).reshape((1, 3, 1)) +
-              np.array([100, 200, 300, 400]).reshape((1, 1, 4)))
-        assert_allclose(x[0], xn)
+        x = combo_runner(foo3_float_bool, _test_combos1, num_workers=2,
+                         split=True, parallel=parallel)
+        assert_allclose(x[0], _test_expect1)
         assert np.all(np.asarray(x[1])[1, ...])
 
     @pytest.mark.parametrize('parallel', [False, True])
     def test_parallel_dict(self, parallel):
-        combos = OrderedDict((('a', [1, 2]),
-                              ('b', [10, 20, 30]),
-                              ('c', [100, 200, 300, 400])))
+        combos = OrderedDict(_test_combos1)
         x = [*combo_runner(foo3_scalar, combos, num_workers=2,
                            parallel=parallel, verbosity=2)]
-        xn = (np.array([1, 2]).reshape((2, 1, 1)) +
-              np.array([10, 20, 30]).reshape((1, 3, 1)) +
-              np.array([100, 200, 300, 400]).reshape((1, 1, 4)))
-        assert_allclose(x, xn)
+        assert_allclose(x, _test_expect1)
 
 
 class TestCombosToDS:
@@ -135,17 +123,12 @@ class TestCombosToDS:
 
 class TestComboRunnerToDS:
     def test_basic(self):
-        combos = (('a', [1, 2]),
-                  ('b', [10, 20, 30]),
-                  ('c', [100, 200, 300, 400]))
+        combos = _test_combos1
         ds = combo_runner_to_ds(foo3_scalar, combos, var_names=['bananas'])
         assert ds.sel(a=2, b=30, c=400)['bananas'].data == 432
 
     def test_multiresult(self):
-        combos = (('a', [1, 2]),
-                  ('b', [10, 20, 30]),
-                  ('c', [100, 200, 300, 400]))
-        ds = combo_runner_to_ds(foo3_float_bool, combos,
+        ds = combo_runner_to_ds(foo3_float_bool, _test_combos1,
                                 var_names=['bananas', 'cakes'])
         assert ds.bananas.data.dtype == int
         assert ds.cakes.data.dtype == bool

@@ -12,7 +12,7 @@ Running a function for many different parameters theoretically allows perfect pa
 
 2. Supply ``num_workers=...`` instead to explicitly control how any workers are used. Since for many numeric codes threading is controlled by the environement variable ``$OMP_NUM_THREADS`` you generally want the product of this and ``num_workers`` to be equal to the number of cores.
 
-3. Supply ``pool=...`` to use any custom parallel ``pool`` object (e.g. a ``dask.distributed`` client) which has a ``submit``/``apply_async`` method, and yields futures with  a ``result``/``get`` method.
+3. Supply ``executor=...`` to use any custom parallel pool-executor like object (e.g. a ``dask.distributed`` client or ``mpi4py`` pool) which has a ``submit``/``apply_async`` method, and yields futures with  a ``result``/``get`` method. More specifically, this covers pools with an API matching either ``concurrent.futures`` or an ``ipyparallel`` view. Pools from ``multiprocessing.pool`` are also explicitly handled.
 
 4. Use a :class:`~xyzpy.Crop` to write combos to disk, which can then be 'grown' persistently by any computers with access to the filesystem, such as distributed cluster - see below.
 

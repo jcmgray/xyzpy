@@ -3,6 +3,7 @@
 import functools
 import operator
 import itertools
+import warnings
 import time
 import math
 import sys
@@ -12,6 +13,23 @@ from cytoolz import isiterable
 import numpy as np
 
 from .signal import jitclass, double, int_
+
+
+def _choose_executor_depr_pool(executor, pool):
+    # XXX: remove this eventually
+    if pool is not None:
+
+        if executor is None:
+            msg = ("The 'pool' keyword is deprecated in "
+                   "favour of the more explicit 'executor'.")
+            warnings.warn(msg, FutureWarning)
+            return pool
+
+        else:
+            raise ValueError("Can't specify the deprecated 'pool' "
+                             "option as well as 'executor'")
+
+    return executor
 
 
 def prod(it):
