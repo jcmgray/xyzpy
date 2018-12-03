@@ -48,8 +48,12 @@ extensions = [
     'sphinx.ext.napoleon',
     'sphinx.ext.intersphinx',
     'sphinx.ext.autosectionlabel',
+    'sphinx.ext.extlinks',
     'nbsphinx',
 ]
+
+extlinks = {'issue': ('https://github.com/jcmgray/xyzpy/issues/%s', 'GH'),
+            'pull': ('https://github.com/jcmgray/xyzpy/pull/%s', 'PR')}
 
 napoleon_google_docstring = False
 napoleon_numpy_docstring = True

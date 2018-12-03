@@ -121,6 +121,15 @@ The recommended way of installing these is using the `conda <https://conda.io/mi
     pip install -U git+https://github.com/jcmgray/xyzpy.git
 
 
+Release Notes
+-------------
+
+.. toctree::
+  :maxdepth: 2
+
+  changelog
+
+
 Indices and tables
 ==================
 
