@@ -66,6 +66,7 @@ PLOTTER_DEFAULTS = {
     'xtick_labels': None,
     'xticklabels_hide': False,
     'xlog': False,
+    'xjitter': None,
     'bins': 30,
     # y-axis options
     'ytitle': None,
@@ -76,6 +77,7 @@ PLOTTER_DEFAULTS = {
     'yticklabels_hide': False,
     'yticklabels_right': None,
     'ylog': False,
+    'yjitter': None,
     # Titles and text
     'title': None,
     'panel_label': None,
@@ -365,6 +367,24 @@ class Plotter:
 
                 data['x'] = data['x'][not_null]
                 data['y'] = data['y'][not_null]
+
+                # implement jitter
+                if self.xjitter:
+                    if self.xlog:
+                        data['x'] = data['x'] * np.random.normal(
+                            loc=1, scale=self.xjitter, size=data['x'].shape)
+                    else:
+                        data['x'] = data['x'] + np.random.normal(
+                            loc=0, scale=self.xjitter, size=data['x'].shape)
+
+                if self.yjitter:
+                    if self.ylog:
+                        data['y'] = data['y'] * np.random.normal(
+                            loc=1, scale=self.yjitter, size=data['y'].shape)
+                    else:
+                        data['y'] = data['y'] + np.random.normal(
+                            loc=0, scale=self.yjitter, size=data['y'].shape)
+
                 if 'c' in data:
                     data['c'] = data['c'][not_null]
                 if 'ye' in data:
