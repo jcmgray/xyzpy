@@ -49,6 +49,36 @@ The following guides introduce the main parts of ``xyzpy``:
   gen_parallel
   manipulate
   plotting
+  utilities
+
+
+Quick-start
+-----------
+
+.. code-block:: ipython
+
+    In [1]: import xyzpy as xyz
+       ...: import time as time
+
+    In [2]: def sumdiff(a, b):
+       ...:     time.sleep(0.5)
+       ...:     return a + b, a - b
+       ...:
+
+    In [3]: runner = xyz.Runner(sumdiff, var_names=['sum', 'diff'])
+       ...: combos = {'a': range(1, 10), 'b': range(23, 27)}
+
+    In [4]: runner.run_combos(combos, parallel=True)
+    100%|###########################################| 36/36 [00:04<00:00,  7.96it/s]
+    Out[4]:
+    <xarray.Dataset>
+    Dimensions:  (a: 9, b: 4)
+    Coordinates:
+      * a        (a) int64 1 2 3 4 5 6 7 8 9
+      * b        (b) int64 23 24 25 26
+    Data variables:
+        sum      (a, b) int64 24 25 26 27 25 26 27 28 26 ... 31 32 33 34 32 33 34 35
+        diff     (a, b) int64 -22 -23 -24 -25 -21 -22 ... -17 -18 -14 -15 -16 -17
 
 
 Examples

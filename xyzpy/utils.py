@@ -167,8 +167,8 @@ def _auto_min_time(timer, min_t=0.2, repeats=5, get='min'):
     return min(t / number for t in results)
 
 
-def benchmark(fn, setup=None, n=None, min_t=0.2,
-              repeats=5, get='min', starmap=False):
+def benchmark(fn, setup=None, n=None, min_t=0.1,
+              repeats=3, get='min', starmap=False):
     """Benchmark the time it takes to run ``fn``.
 
     Parameters
@@ -422,15 +422,19 @@ def estimate_from_repeats(fn, *fn_args, rtol=0.02, tol_scale=1.0, get='stats',
         Supplied to ``fn``.
     rtol : float, optional
         Relative tolerance for error on mean.
-    tol_scale, optional
+    tol_scale : float, optional
         The expected 'scale' of the estimate, this modifies the aboslute
         tolerance near zero to ``rtol * tol_scale``, default: 1.0.
     get : {'stats', 'samples', 'mean'}, optional
         Just get the ``RunningStatistics`` object, or the actual samples too,
         or just the actual mean estimate.
     verbosity : { 0, 1, 2}, optional
-        How much informatino to show: ``0``: nothing, ``1``: progress bar just
-        with iteration rate, ``2``: progress bar with running stats displayed.
+        How much information to show:
+
+        - ``0``: nothing
+        - ``1``: progress bar just with iteration rate
+        - ``2``: progress bar with running stats displayed.
+
     min_samples : int, optional
         Take at least this many samples before checking for convergence.
     max_samples : int, optional

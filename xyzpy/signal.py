@@ -10,7 +10,7 @@ from scipy.interpolate import LSQUnivariateSpline
 
 try:
     from numba import njit, guvectorize, double, int_, jitclass
-except ImportError:
+except ImportError:  # pragma: no cover
 
     no_numba_msg = "This function requires ``numba`` to be installed."
 
