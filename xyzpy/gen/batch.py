@@ -157,6 +157,7 @@ class Crop(object):
         self.save_fn = save_fn
         self.batchsize = batchsize
         self.num_batches = num_batches
+        self._batch_remainder = None
 
         # Work out the full directory for the crop
         self.location, self.name, self.parent_dir = \
@@ -234,6 +235,7 @@ class Crop(object):
             'combos': combos,
             'batchsize': self.batchsize,
             'num_batches': self.num_batches,
+            '_batch_remainder': self._batch_remainder,
             'harvester': hrvstr_pkl,
             'runner': runner_pkl,
         }, os.path.join(self.location, INFO_NM))
@@ -254,6 +256,7 @@ class Crop(object):
         settings = self.load_info()
         self.batchsize = settings['batchsize']
         self.num_batches = settings['num_batches']
+        self._batch_remainder = settings['_batch_remainder']
 
         hrvstr_pkl = settings['harvester']
         harvester = None if hrvstr_pkl is None else pickle.loads(hrvstr_pkl)
