@@ -6,7 +6,7 @@ Release notes for ``xyzpy``.
 
 .. _whats-new.0.2.5:
 
-v0.2.5 (unreleased)
+v0.2.5 (3rd December 2018)
 --------------------
 
 **Breaking changes**
@@ -18,7 +18,7 @@ v0.2.5 (unreleased)
 - (:issue:`5`) Support ``multiprocessing.pool`` in ``combo_runner``
 - Document timing and estimation utilities
 - Use ``loky`` as the default parallel executor
-- pltting: add `xjitter` and `yjitter`
+- plotting: add `xjitter` and `yjitter`
 
 **Bug fixes:**
 
