@@ -2,8 +2,10 @@
 Helper functions for generating color spectrums.
 """
 import itertools
+
 import matplotlib.cm as cm
 from matplotlib.colors import BASE_COLORS, CSS4_COLORS, to_rgba
+
 from .xyz_cmaps import _XYZ_CMAPS
 
 

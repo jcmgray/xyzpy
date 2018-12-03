@@ -6,7 +6,9 @@ Functions for plotting datasets nicely.
 # TODO: docs                                                                  #
 
 import functools
+
 import numpy as np
+
 from ..manage import auto_xyz_ds
 from .core import (
     Plotter,

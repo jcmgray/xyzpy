@@ -6,9 +6,11 @@ Helper functions for preparing data to be plotted.
 
 import itertools
 import functools
+
 import numpy as np
 import numpy.ma as ma
 import xarray as xr
+
 from .color import convert_colors, xyz_colormaps, get_default_sequential_cm
 from .marker import _MARKERS, _SINGLE_LINE_MARKER
 

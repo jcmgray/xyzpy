@@ -2,10 +2,10 @@
 """
 import functools
 import multiprocessing
-from concurrent import futures as cf
 
 import numpy as np
 import xarray as xr
+from joblib.externals import loky
 
 from ..utils import (
     unzip,
@@ -143,19 +143,18 @@ def _combo_runner_parallel(fn, combos, constants, n, ndim,
                            num_workers, verbosity=1):
     """Submit and retrieve combos from a ProcessPoolExecutor.
     """
-    with cf.ProcessPoolExecutor(max_workers=num_workers) as executor:
+    executor = loky.get_reusable_executor(num_workers)
 
-        with progbar(total=n, disable=verbosity <= 0) as pbar:
+    with progbar(total=n, disable=verbosity <= 0) as pbar:
 
-            if verbosity >= 2:
-                pbar.set_description(
-                    "Processing with {} workers".format(executor._max_workers)
-                )
+        if verbosity >= 2:
+            desc = "Processing with {} workers".format(executor._max_workers)
+            pbar.set_description(desc)
 
-            futures = nested_submit(fn, combos, constants, executor=executor)
-            for f in cf.as_completed(flatten(futures, ndim)):
-                pbar.update()
-            return nested_get(futures, ndim, default_getter())
+        futures = nested_submit(fn, combos, constants, executor=executor)
+        for f in loky.as_completed(flatten(futures, ndim)):
+            pbar.update()
+        return nested_get(futures, ndim, default_getter())
 
 
 def update_upon_eval(fn, pbar, verbosity=1):

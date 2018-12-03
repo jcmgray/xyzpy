@@ -18,7 +18,6 @@ dependencies:
   - matplotlib
   - bokeh
   - cytoolz
-  - cloudpickle
   - sphinx
   - sphinx_bootstrap_theme
   - nbsphinx

@@ -102,17 +102,19 @@ Installation
 ``xzypy`` is itself a pure python package and can be found on `pypi <https://pypi.org/project/xyzpy/>`_. The core dependencies are:
 
 - `numpy <http://www.numpy.org/>`__
-- `xarray <http://xarray.pydata.org/en/latest/>`__ - labelled ndarrays
+- `xarray <http://xarray.pydata.org/en/latest/>`__ - *labelled ndarrays*
+- `joblib <https://joblib.readthedocs.io/en/latest/index.html>`__ - *serialization and parallel processing*
+- `tqdm <https://tqdm.github.io>`__ - *progress bars*
 
 Processing functions like filtering and differentiating require:
 
 - `scipy <https://www.scipy.org/>`__
-- `numba <http://numba.pydata.org/numba-doc/latest/index.html>`__ - compiled gufuncs
+- `numba <http://numba.pydata.org/numba-doc/latest/index.html>`__ - *compiled gufuncs*
 
 and the plotting functionality is provided by:
 
 - `matplotlib <https://matplotlib.org/>`__
-- `bokeh <https://bokeh.pydata.org/en/latest/>`__ - interactive plotting
+- `bokeh <https://bokeh.pydata.org/en/latest/>`__ - *interactive plotting*
 
 The recommended way of installing these is using the `conda <https://conda.io/miniconda.html>`__ package manager. A development version of ``xyzpy`` can be installed directly from github using the command:
 

@@ -28,7 +28,7 @@ setup(
         'xarray>=0.9.0',
         'h5py>=2.6.0',
         'h5netcdf>=0.2.2',
-        'joblib>=0.10',
+        'joblib>=0.12',
         'tqdm>=4.7.6',
         'matplotlib>=2.2.0',
         'bokeh>=0.12.3',

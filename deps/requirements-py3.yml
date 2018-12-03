@@ -21,7 +21,6 @@ dependencies:
   - ipython
   - cytoolz
   - coverage
-  - cloudpickle
   - coveralls
   - codecov
   - pip:

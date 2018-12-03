@@ -8,15 +8,8 @@ import pickle
 import copy
 import math
 
-try:
-    import joblib
-except ImportError:  # pragma: no cover
-    pass
-
-try:
-    import cloudpickle
-except ImportError:  # pragma: no cover
-    pass
+import joblib
+from joblib.externals import cloudpickle
 
 from ..utils import _get_fn_name, prod, progbar
 from .prepare import _parse_combos, _parse_constants, _parse_attrs
@@ -269,8 +262,6 @@ class Crop(object):
     def save_function_to_disk(self):
         """Save the base function to disk using cloudpickle
         """
-        import cloudpickle
-
         joblib.dump(cloudpickle.dumps(self._fn),
                     os.path.join(self.location, FNCT_NM))
 
@@ -278,8 +269,6 @@ class Crop(object):
         """Load the saved function from disk, and try to re-insert it back into
         Harvester or Runner if present.
         """
-        import cloudpickle
-
         self._fn = cloudpickle.loads(joblib.load(
             os.path.join(self.location, FNCT_NM)))
 

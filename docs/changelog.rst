@@ -17,6 +17,7 @@ v0.2.5 (unreleased)
 
 - (:issue:`5`) Support ``multiprocessing.pool`` in ``combo_runner``
 - Document timing and estimation utilities
+- Use ``loky`` as the default parallel executor
 
 **Bug fixes:**
 

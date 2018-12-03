@@ -4,8 +4,10 @@
 
 import os
 from glob import glob
+
 import numpy as np
 import xarray as xr
+import joblib
 
 
 _DEFAULT_FN_CACHE_PATH = '__xyz_cache__'
@@ -14,7 +16,6 @@ _DEFAULT_FN_CACHE_PATH = '__xyz_cache__'
 def cache_to_disk(fn=None, *, cachedir=_DEFAULT_FN_CACHE_PATH, **kwargs):
     """Cache this function to disk, using joblib.
     """
-    import joblib
     mem = joblib.Memory(cachedir=cachedir, verbose=0, **kwargs)
 
     # bare decorator
