@@ -215,11 +215,11 @@ class PlotterMatplotlib(Plotter):
             # Limit minimum size of markers that appear in legend
             should_auto_scale_legend_markers = (
                 (self.legend_marker_scale is None) and  # not already set
-                hasattr(self, '_markersize') and  # is a valid parameter
-                self._markersize < 3  # and is small
+                hasattr(self, '_marker_size') and  # is a valid parameter
+                self._marker_size < 3  # and is small
             )
             if should_auto_scale_legend_markers:
-                self.legend_marker_scale = 3 / self._markersize
+                self.legend_marker_scale = 3 / self._marker_size
 
             opts = {
                 'title': (self.z_coo if self.ztitle is None else self.ztitle),
@@ -461,7 +461,7 @@ class LinePlot(PlotterMatplotlib, AbstractLinePlot):
                 'c': col,
                 'lw': next(self._lws),
                 'marker': next(self._mrkrs),
-                'markersize': self._markersize,
+                'markersize': self._marker_size,
                 'markeredgecolor': col[:3] + (self.marker_alpha * col[3],),
                 'markerfacecolor': col[:3] + (self.marker_alpha * col[3] / 2,),
                 'label': next(self._zlbls),
@@ -572,7 +572,7 @@ class Scatter(PlotterMatplotlib, AbstractScatter):
             scatter_opts = {
                 'c': col,
                 'marker': next(self._mrkrs),
-                's': self._markersize,
+                's': self._marker_size,
                 'alpha': self.marker_alpha,
                 'label': next(self._zlbls),
                 'zorder': next(self._zordrs),

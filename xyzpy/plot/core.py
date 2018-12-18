@@ -85,7 +85,7 @@ PLOTTER_DEFAULTS = {
     'panel_label_color': 'black',
     # Styling options
     'markers': None,
-    'markersize': None,
+    'marker_size': None,
     'marker_alpha': 1.0,
     'lines': True,
     'line_styles': None,
@@ -522,10 +522,10 @@ class Plotter:
                 self.markers = len(self._ds[self.x_coo]) <= 51
 
         # Could add more logic based on number of xpoints?
-        if self.markersize is None:
-            self._markersize = 5
+        if self.marker_size is None:
+            self._marker_size = 5
         else:
-            self._markersize = self.markersize
+            self._marker_size = self.marker_size
 
         # decide markers automatically
         if self.markers is True:

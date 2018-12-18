@@ -450,7 +450,7 @@ class ILinePlot(PlotterBokeh, AbstractLinePlot):
                     color=col,
                     fill_alpha=0.5,
                     line_width=0.5,
-                    size=self._markersize,
+                    size=self._marker_size,
                 )
                 legend_pics.append(m)
 
@@ -553,7 +553,7 @@ class IScatter(PlotterBokeh, AbstractScatter):
                 color=col,
                 fill_alpha=0.5,
                 line_width=0.5,
-                size=self._markersize,
+                size=self._marker_size,
             )
             legend_pics.append(m)
 
