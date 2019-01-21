@@ -25,6 +25,7 @@ setup(
     install_requires=[
         'numpy>=1.10.0',
         'scipy>=1.0',
+        'numba>=0.39',
         'dask>=0.11.1',
         'xarray>=0.9.0',
         'pandas>=0.20',
