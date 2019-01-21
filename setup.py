@@ -24,6 +24,7 @@ setup(
     packages=find_packages(exclude=['docs', 'test*']),
     install_requires=[
         'numpy>=1.10.0',
+        'scipy>=1.0',
         'dask>=0.11.1',
         'xarray>=0.9.0',
         'pandas>=0.20',
