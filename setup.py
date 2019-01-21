@@ -26,6 +26,7 @@ setup(
         'numpy>=1.10.0',
         'dask>=0.11.1',
         'xarray>=0.9.0',
+        'pandas>=0.20',
         'h5py>=2.6.0',
         'h5netcdf>=0.2.2',
         'joblib>=0.12',

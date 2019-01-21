@@ -3,7 +3,10 @@
 
 import os
 import shutil
+import functools
 
+import numpy as np
+import pandas as pd
 import xarray as xr
 
 from .prepare import (
@@ -20,7 +23,7 @@ from .prepare import (
 from .combo_runner import combo_runner_to_ds
 from .case_runner import case_runner_to_ds
 from .batch import Crop
-from ..manage import load_ds, save_ds
+from ..manage import load_ds, save_ds, load_df, save_df
 
 
 # --------------------------------------------------------------------------- #
@@ -69,8 +72,7 @@ class Runner(object):
                  **default_runner_settings):
         self.fn = fn
         self._var_names = _parse_var_names(var_names)
-        self._fn_args = (_parse_fn_args(fn_args) if fn_args is not None else
-                         None)
+        self._fn_args = _parse_fn_args(fn, fn_args)
         self._var_dims = _parse_var_dims(var_dims, self._var_names)
         self._var_coords = _parse_var_coords(var_coords)
         self._constants = _parse_constants(constants)
@@ -87,7 +89,7 @@ class Runner(object):
         return self._fn_args
 
     def _set_fn_args(self, fn_args):
-        self._fn_args = _parse_fn_args(fn_args)
+        self._fn_args = _parse_fn_args(self.fn, fn_args)
 
     def _del_fn_args(self):
         self._fn_args = None
@@ -186,7 +188,7 @@ class Runner(object):
             **{**self.default_runner_settings, **runner_settings})
         return self.last_ds
 
-    def run_cases(self, cases, constants=(), **runner_settings):
+    def run_cases(self, cases, constants=(), fn_args=None, **runner_settings):
         """Run cases using the function and save to dataset.
 
         Parameters
@@ -200,9 +202,13 @@ class Runner(object):
             Supplied to :func:`~xyzpy.case_runner`.
         """
         cases = _parse_cases(cases)
+
+        if fn_args is None:
+            fn_args = self._fn_args
+
         self.last_ds = case_runner_to_ds(
             fn=self.fn,
-            fn_args=self._fn_args,
+            fn_args=fn_args,
             cases=cases,
             var_names=self._var_names,
             var_dims=self._var_dims,
@@ -256,6 +262,73 @@ class Runner(object):
             string += "    resources: {self._resources_list}\n"
 
         return string.format(self=self)
+
+
+def label(var_names,
+          fn_args=None,
+          var_dims=None,
+          var_coords=None,
+          constants=None,
+          resources=None,
+          attrs=None,
+          **default_runner_settings):
+    """Decorator to automatically wrap a function as a :class:`~xyzpy.Runner`.
+
+    Parameters
+    ----------
+    var_names : str, sequence of str, or None
+        The ordered name(s) of the ouput variable(s) of `fn`. Set this
+        explicitly to None if `fn` outputs already labelled data as a
+        :class:`~xarray.Dataset` or :class:`~xarray.DataArray`.
+    fn_args : str, or sequence of str, optional
+        The ordered name(s) of the input arguments(s) of `fn`. This is only
+        needed if the cases or combos supplied are not dict-like.
+    var_dims : dict-like, optional
+        Mapping of output variables to their named internal dimensions, can be
+        the names of ``constants``.
+    var_coords : dict-like, optional
+        Mapping of output variables named internal dimensions to the actual
+        values they take.
+    constants : dict-like, optional
+        Constants arguments to be supplied to `fn`. These can be used as
+        'var_dims', and will be saved as coords if so, otherwise as attributes.
+    resources : dict-like, optional
+        Like `constants` but not saved to the the dataset, e.g. if very big.
+    attrs : dict-like, optional
+        Any other miscelleous information to be saved with the dataset.
+    default_runner_settings
+        These keyword arguments will be supplied as defaults to any runner.
+
+    Examples
+    --------
+
+    Declare a function as a runner directly::
+
+        >>> import xyzpy as xyz
+
+        >>> @xyz.label(var_names=['sum', 'diff'])
+        ... def foo(x, y):
+        ...     return x + y, x - y
+        ...
+
+        >>> foo
+        <xyzpy.Runner>
+            fn: <function foo at 0x7f1fd8e5b1e0>
+            fn_args: ('x', 'y')
+            var_names: ('sum', 'diff')
+            var_dims: {'sum': (), 'diff': ()}
+
+        >>> foo(1, 2)  # can still call it normally
+        (3, -1)
+
+    """
+    def wrapper(fn):
+        r = Runner(fn, var_names, fn_args=fn_args, var_dims=var_dims,
+                   var_coords=var_coords, constants=constants,
+                   resources=resources, attrs=attrs, **default_runner_settings)
+        return functools.update_wrapper(r, fn)
+
+    return wrapper
 
 
 # --------------------------------------------------------------------------- #
@@ -432,7 +505,7 @@ class Harvester(object):
             # Merge, raising error if the two datasets conflict
             else:
                 new_full_ds = self._full_ds.merge(
-                    new_ds, compat='no_conflicts', inplace=False)
+                    new_ds, compat='no_conflicts')
 
         if sync_with_disk:
             self.save_full_ds(new_full_ds, engine=engine)
@@ -534,6 +607,183 @@ class Harvester(object):
 
     def __repr__(self):
         string = ("<xyzpy.Harvester>\n"
+                  "Runner: {self.runner}"
+                  "Sync file -->\n"
+                  "    {self.data_name}    [{self.engine}]")
+
+        return string.format(self=self)
+
+
+class Sampler:
+    """Like a Harvester, but randomly samples combos and writes the table of
+    results to a ``pandas.DataFrame``.
+
+    Parameters
+    ----------
+    runner : xyzpy.Runner
+        Runner describing a labelled function to run.
+    data_name : str, optional
+        If given, the on-disk file to sync results with.
+    default_combos : dict_like, optional
+        The default combos to sample from (which can be overridden).
+    full_df : pandas.DataFrame, optional
+        If given, use this dataframe as the initial 'full' data.
+    engine : {'pickle', 'csv', 'json', 'hdf', ...}, optional
+        How to save and load the on-disk dataframe. See
+        :func:`~xyzpy.manage.load_df` and :func:`~xyzpy.manage.save_df`.
+
+    Properties
+    ----------
+    full_df : pandas.DataFrame
+        Dataframe describing all data harvested so far.
+    last_df : pandas.Dataframe
+        Dataframe describing the data harvested on the previous run.
+    """
+
+    def __init__(self, runner, data_name=None, default_combos=None,
+                 full_df=None, engine='pickle'):
+        self.runner = runner
+        self.data_name = data_name
+        self.default_combos = ({} if default_combos is None
+                               else dict(default_combos))
+        self._full_df = full_df
+        self._last_df = None
+        self.engine = engine
+
+    def load_full_df(self, engine=None):
+        """Load the on-disk full dataframe into memory.
+        """
+        if engine is None:
+            engine = self.engine
+
+        # Check file exists and can be written to
+        if os.access(self.data_name, os.W_OK):
+            self._full_df = load_df(self.data_name, engine=engine)
+
+        # Do nothing if file does not exist at all
+        elif not os.path.isfile(self.data_name):  # pragma: no cover
+            pass
+
+        # Catch read-only errors etc.
+        else:
+            raise OSError("The file '{}' exists but cannot be written "
+                          "to".format(self.data_name))
+
+    @property
+    def full_df(self):
+        """The dataframe describing all data harvested so far.
+        """
+        if self._full_df is None:
+            self.load_full_df()
+        return self._full_df
+
+    @property
+    def last_df(self):
+        """The dataframe describing the last set of data harvested.
+        """
+        return self._last_df
+
+    def save_full_df(self, new_full_df=None, engine=None):
+        """Save `full_df` onto disk.
+
+        Parameters
+        ----------
+        new_full_df : pandas.DataFrame, optional
+            Save this dataframe as the new full dataframe, else use the
+            current ``full_df``.
+        engine : str, optional
+            Which engine to save the dataframe with.
+        """
+        if engine is None:
+            engine = self.engine
+
+        if new_full_df is not None:
+            if os.path.exists(self.data_name):
+                os.remove(self.data_name)
+            self._full_df = new_full_df
+
+        save_df(self._full_df, self.data_name, engine=engine)
+
+    def delete_df(self, backup=False):
+        """Delete the on-disk dataframe, optionally backing it up first.
+        """
+        if backup:
+            import datetime
+            ts = '{:%Y%m%d-%H%M%S}'.format(datetime.datetime.now())
+            shutil.copy(self.data_name, self.data_name + '.BAK-{}'.format(ts))
+
+        os.remove(self.data_name)
+
+    def add_df(self, new_df, sync=True, engine=None):
+        """Merge a new dataset into the in-memory full dataset.
+
+        Parameters
+        ----------
+        new_df : pandas.DataFrame or dict
+            Data to be appended to the full dataset.
+        sync : bool, optional
+            If True (default), load and save the disk dataframe before
+            and after merging in the new data.
+        engine : str, optional
+            Which engine to save the dataframe with.
+        """
+        if isinstance(new_df, dict):
+            new_df = pd.DataFrame(new_df)
+
+        # only sync with disk if data name present
+        sync_with_disk = sync and self.data_name is not None
+        if sync_with_disk:
+            self.load_full_df(engine=engine)
+
+        if self._full_df is None:
+            # No full df yet, deep copy to maintain distinction between
+            #   'full_df' and 'last_df'.
+            new_full_df = new_df.copy(deep=True)
+        else:
+            new_full_df = pd.concat([self._full_df, new_df],
+                                    ignore_index=True, sort=True)
+
+        if sync_with_disk:
+            self.save_full_df(new_full_df, engine=engine)
+        else:
+            self._full_df = new_full_df
+
+    def sample_combos(self, n, combos=None, engine=None,
+                      **case_runner_settings):
+        """Sample the target function many times, randomly choosing parameter
+        combinations from ``combos`` (or ``SampleHarvester.default_combos``).
+
+        Parameters
+        ----------
+        n : int
+            How many samples to run.
+        combos : dict_like, optional
+            A mapping of function arguments to potential choices. Any keys in
+            here will override ``default_combos``. You can also suppply a
+            callable to manually return a random choice e.g. from a probability
+            distribution.
+        engine : str, optional
+            Which method to use to sync with the on-disk dataframe.
+        combo_runner_settings
+            Supplied to :func:`~xyzpy.case_runner` and so onto
+            :func:`~xyzpy.combo_runner`. This includes ``parallel=True`` etc.
+        """
+        combos = {} if combos is None else dict(combos)
+        combos = {**self.default_combos, **combos}
+
+        cases = tuple(tuple(v() if callable(v) else np.random.choice(v)
+                            for v in combos.values())
+                      for _ in range(n))
+
+        last_df = self.runner.run_cases(cases, fn_args=combos.keys(),
+                                        to_df=True, **case_runner_settings)
+
+        self._last_df = last_df
+        self.add_df(last_df, engine=engine)
+        return last_df
+
+    def __repr__(self):
+        string = ("<xyzpy.Sampler>\n"
                   "Runner: {self.runner}"
                   "Sync file -->\n"
                   "    {self.data_name}    [{self.engine}]")

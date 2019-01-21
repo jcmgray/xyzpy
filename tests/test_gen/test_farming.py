@@ -7,8 +7,8 @@ import pytest
 import numpy as np
 import xarray as xr
 
-from xyzpy.manage import load_ds
-from xyzpy.gen.farming import Runner, Harvester
+from xyzpy.manage import load_ds, load_df
+from xyzpy.gen.farming import Runner, Harvester, Sampler, label
 from xyzpy.gen.batch import grow
 
 
@@ -319,3 +319,43 @@ class TestHarvester:
             assert h.full_ds.identical(fn3_fba_ds)
             assert h.full_ds['sum'].chunks is not None
             h.full_ds.close()
+
+
+class TestSampler:
+
+    @pytest.mark.parametrize("fname,engine", [
+        ('test.pkl', 'pickle'),
+        ('test.csv', 'csv'),
+    ])
+    def test_sample_combos_new(self, fname, engine):
+
+        @label(var_names=['sum', 'diff', 'divisor', 'const'],
+               constants={'c': 42})
+        def sum_diff(a, b, c):
+            return a + b, a - b, a % b == 0, c
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fl_pth = os.path.join(tmpdir, fname)
+            s = Sampler(sum_diff, fl_pth, engine=engine)
+            print(s)
+            combos = (
+                ('a', (1, 2, 3, 4, 5)),
+                ('b', lambda: np.random.randint(10, 20))
+            )
+            s.sample_combos(10, combos)
+            hdf = load_df(fl_pth, engine=engine)
+
+            assert len(hdf) == 10
+            assert s.last_df.equals(hdf)
+            assert s.full_df.equals(hdf)
+
+            s.sample_combos(20, combos)
+            hdf = load_df(fl_pth, engine=engine)
+            assert len(hdf) == 30
+            assert not s.last_df.equals(hdf)
+            assert s.full_df.equals(hdf)
+
+            assert set(s.full_df['const']) == set(s.full_df['c']) == {42}
+
+            for col in ['sum', 'diff', 'divisor', 'const', 'a', 'b', 'c']:
+                assert col in s.full_df

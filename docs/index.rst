@@ -60,16 +60,16 @@ Quick-start
     In [1]: import xyzpy as xyz
        ...: import time as time
 
-    In [2]: def sumdiff(a, b):
+    In [2]: @xyz.label(var_names=['sum', 'diff'])
+       ...: def sumdiff(a, b):
        ...:     time.sleep(0.5)
        ...:     return a + b, a - b
        ...:
 
-    In [3]: runner = xyz.Runner(sumdiff, var_names=['sum', 'diff'])
-       ...: combos = {'a': range(1, 10), 'b': range(23, 27)}
+    In [3]: combos = {'a': range(1, 10), 'b': range(23, 27)}
 
-    In [4]: runner.run_combos(combos, parallel=True)
-    100%|###########################################| 36/36 [00:04<00:00,  7.96it/s]
+    In [4]: sumdiff.run_combos(combos, parallel=True)
+    100%|###########################################| 36/36 [00:06<00:00,  5.33it/s]
     Out[4]:
     <xarray.Dataset>
     Dimensions:  (a: 9, b: 4)

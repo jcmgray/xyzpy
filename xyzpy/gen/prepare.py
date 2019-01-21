@@ -1,5 +1,6 @@
 # TODO: function_str i.e. (a, b, c) -> (x[t], y[t,w], z)
 
+import inspect
 
 from cytoolz import isiterable
 
@@ -21,9 +22,9 @@ def dictify(x):
         return dict()
 
 
-def _parse_fn_args(fn_args):
+def _parse_fn_args(fn, fn_args):
     if fn_args is None:
-        return None
+        return tuple(inspect.signature(fn).parameters)
 
     return _str_2_tuple(fn_args)
 

@@ -280,3 +280,24 @@ def merge_sync_conflict_datasets(base_name, engine='h5netcdf',
     # clean up conflicts
     for fname in fnames[1:]:
         os.remove(fname)
+
+
+def save_df(df, name, engine='pickle', key='df', **kwargs):
+    """Save a dataframe to disk.
+    """
+    meth = "to_{}".format(engine)
+    if engine == 'hdf':
+        kwargs['key'] = key
+    if engine == 'csv':
+        kwargs.setdefault('index', False)
+    getattr(df, meth)(name, **kwargs)
+
+
+def load_df(name, engine='pickle', key='df', **kwargs):
+    """Load a dataframe from disk.
+    """
+    import pandas as pd
+    func = "read_{}".format(engine)
+    if engine == 'hdf':
+        kwargs['key'] = key
+    return getattr(pd, func)(name)

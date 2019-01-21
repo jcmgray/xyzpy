@@ -66,3 +66,5 @@ target/
 dask-worker-space/
 
 docs/_autosummary/
+
+\.vscode/

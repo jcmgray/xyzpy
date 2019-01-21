@@ -4,10 +4,25 @@ Changelog
 Release notes for ``xyzpy``.
 
 
+.. _whats-new.0.2.6:
+
+v0.2.6 (unreleased)
+-------------------
+
+**Breaking changes**
+
+- Changed plot option ``markersize -> marker_size`` to match other keywords.
+
+**Enhancements**
+
+- New :class:`~xyzpy.Sampler` object - sparsely sample ``combos`` into a ``pandas.DataFrame``
+- Decorate functions directly into ``Runner`` instances using :func:`~xyzpy.label`
+
+
 .. _whats-new.0.2.5:
 
 v0.2.5 (3rd December 2018)
---------------------
+--------------------------
 
 **Breaking changes**
 
