@@ -632,7 +632,7 @@ class Sampler:
         How to save and load the on-disk dataframe. See
         :func:`~xyzpy.manage.load_df` and :func:`~xyzpy.manage.save_df`.
 
-    Properties
+    Attributes
     ----------
     full_df : pandas.DataFrame
         Dataframe describing all data harvested so far.
@@ -692,7 +692,7 @@ class Sampler:
             Save this dataframe as the new full dataframe, else use the
             current ``full_df``.
         engine : str, optional
-            Which engine to save the dataframe with.
+            Which engine to save the dataframe with, if None use the default.
         """
         if engine is None:
             engine = self.engine
@@ -764,7 +764,7 @@ class Sampler:
             distribution.
         engine : str, optional
             Which method to use to sync with the on-disk dataframe.
-        combo_runner_settings
+        case_runner_settings
             Supplied to :func:`~xyzpy.case_runner` and so onto
             :func:`~xyzpy.combo_runner`. This includes ``parallel=True`` etc.
         """
