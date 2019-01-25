@@ -4,10 +4,20 @@ Changelog
 Release notes for ``xyzpy``.
 
 
-.. _whats-new.0.2.6:
+.. _whats-new.0.3.1:
 
-v0.2.6 (unreleased)
--------------------
+v0.3.1 (25th January 2019)
+--------------------------
+
+**Bug fixes:**
+
+- Make sure license is included in sdist/wheel distributions (:pr:`6`)
+
+
+.. _whats-new.0.3.0:
+
+v0.3.0 (21st January 2019)
+--------------------------
 
 **Breaking changes**
 
