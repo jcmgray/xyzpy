@@ -259,6 +259,8 @@ class Crop(object):
         self._fn, self.runner, self.harvester = \
             parse_fn_runner_harvester(None, runner, harvester)
 
+        self.load_function()
+
     def save_function_to_disk(self):
         """Save the base function to disk using cloudpickle
         """
@@ -864,7 +866,7 @@ class Reaper(object):
 #                     Automatic Batch Submission Scripts                      #
 # --------------------------------------------------------------------------- #
 
-_BASE_QSUB_SCRIPT = """#!/bin/bash -l
+_SGE_HEADER = """#!/bin/bash -l
 #$ -S /bin/bash
 #$ -l h_rt={hours}:{minutes}:{seconds},mem={gigabytes}G
 #$ -l tmpfs={temp_gigabytes}G
@@ -874,7 +876,17 @@ mkdir -p {output_directory}
 #$ -wd {output_directory}
 #$ -pe {pe} {num_procs}
 #$ -t {run_start}-{run_stop}
-cd {working_directory}
+"""
+
+_PBS_HEADER = """#!/bin/bash -l
+#PBS -lselect=1:ncpus={num_procs}:mem={gigabytes}gb
+#PBS -lwalltime={hours:02}:{minutes:02}:{seconds:02}
+{extra_resources}
+#PBS -N {name}
+#PBS -J {run_start}-{run_stop}
+"""
+
+_BASE = """cd {working_directory}
 export OMP_NUM_THREADS={num_threads}
 tmpfile=$(mktemp .xyzpy-qsub.XXXXXXXX)
 cat <<EOF > $tmpfile
@@ -883,12 +895,23 @@ from xyzpy.gen.batch import grow, Crop
 crop = Crop(name='{name}')
 """
 
-_QSUB_GROW_ALL_SCRIPT = """grow($SGE_TASK_ID, crop=crop, debugging={debugging})
-"""
+_QSUB_SGE_GROW_ALL_SCRIPT = (
+    "grow($SGE_TASK_ID, crop=crop, debugging={debugging})\n"
+)
 
-_QSUB_GROW_PARTIAL_SCRIPT = """batch_ids = {batch_ids}
+_QSUB_PBS_GROW_ALL_SCRIPT = (
+    "grow($PBS_ARRAY_INDEX, crop=crop, debugging={debugging})\n"
+)
+
+_QSUB_SGE_GROW_PARTIAL_SCRIPT = """batch_ids = {batch_ids}
 grow(batch_ids[$SGE_TASK_ID - 1], crop=crop, debugging={debugging})
 """
+
+
+_QSUB_PBS_GROW_PARTIAL_SCRIPT = """batch_ids = {batch_ids}
+grow(batch_ids[$PBS_ARRAY_INDEX - 1], crop=crop, debugging={debugging})
+"""
+
 
 _BASE_QSUB_SCRIPT_END = """EOF
 {launcher} $tmpfile
@@ -896,19 +919,22 @@ rm $tmpfile
 """
 
 
-def gen_qsub_script(crop, batch_ids=None, *,
-                    hours=None,
-                    minutes=None,
-                    seconds=None,
-                    gigabytes=2,
-                    num_procs=1,
-                    launcher='python',
-                    setup="",
-                    mpi=False,
-                    temp_gigabytes=1,
-                    output_directory=None,
-                    extra_resources=None,
-                    debugging=False):
+def gen_qsub_script(
+    crop, batch_ids=None, *,
+    hours=None,
+    minutes=None,
+    seconds=None,
+    gigabytes=2,
+    num_procs=1,
+    launcher='python',
+    setup="#",
+    mpi=False,
+    temp_gigabytes=1,
+    output_directory=None,
+    extra_resources=None,
+    debugging=False,
+    scheduler='sge',
+):
     """Generate a qsub script to grow a Crop.
 
     Parameters
@@ -987,23 +1013,40 @@ def gen_qsub_script(crop, batch_ids=None, *,
         'debugging': debugging,
     }
 
-    script = _BASE_QSUB_SCRIPT
+    if scheduler not in {'sge', 'pbs'}:
+        raise ValueError
+
+    if scheduler == 'sge':
+        script = _SGE_HEADER
+    elif scheduler == 'pbs':
+        script = _PBS_HEADER
+
+    script += _BASE
 
     # grow specific ids
     if batch_ids is not None:
-        script += _QSUB_GROW_PARTIAL_SCRIPT
+        if scheduler == 'sge':
+            script += _QSUB_SGE_GROW_PARTIAL_SCRIPT
+        elif scheduler == 'pbs':
+            script += _QSUB_PBS_GROW_PARTIAL_SCRIPT
         batch_ids = tuple(batch_ids)
         opts['run_stop'] = len(batch_ids)
         opts['batch_ids'] = batch_ids
 
     # grow all ids
     elif crop.num_results == 0:
-        script += _QSUB_GROW_ALL_SCRIPT
+        if scheduler == 'sge':
+            script += _QSUB_SGE_GROW_ALL_SCRIPT
+        elif scheduler == 'pbs':
+            script += _QSUB_PBS_GROW_ALL_SCRIPT
         opts['run_stop'] = crop.num_batches
 
     # grow missing ids only
     else:
-        script += _QSUB_GROW_PARTIAL_SCRIPT
+        if scheduler == 'sge':
+            script += _QSUB_SGE_GROW_PARTIAL_SCRIPT
+        elif scheduler == 'pbs':
+            script += _QSUB_PBS_GROW_PARTIAL_SCRIPT
         batch_ids = crop.missing_results()
         opts['run_stop'] = len(batch_ids)
         opts['batch_ids'] = batch_ids
@@ -1013,19 +1056,22 @@ def gen_qsub_script(crop, batch_ids=None, *,
     return script.format(**opts)
 
 
-def qsub_grow(crop, batch_ids=None, *,
-              hours=None,
-              minutes=None,
-              seconds=None,
-              gigabytes=2,
-              num_procs=1,
-              launcher='python',
-              setup="",
-              mpi=False,
-              temp_gigabytes=1,
-              output_directory=None,
-              extra_resources=None,
-              debugging=False):  # pragma: no cover
+def qsub_grow(
+    crop, batch_ids=None, *,
+    hours=None,
+    minutes=None,
+    seconds=None,
+    gigabytes=2,
+    num_procs=1,
+    launcher='python',
+    setup="#",
+    mpi=False,
+    temp_gigabytes=1,
+    output_directory=None,
+    extra_resources=None,
+    debugging=False,
+    scheduler='sge',
+):  # pragma: no cover
     """Automagically submit SGE jobs to grow all missing results.
 
     Parameters
@@ -1083,6 +1129,7 @@ def qsub_grow(crop, batch_ids=None, *,
         mpi=mpi,
         extra_resources=extra_resources,
         debugging=debugging,
+        scheduler=scheduler,
     )
 
     script_file = os.path.join(crop.location, "__qsub_script__.sh")
