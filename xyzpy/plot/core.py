@@ -105,6 +105,7 @@ PLOTTER_DEFAULTS = {
     'ticks_where': ('bottom', 'left', 'top', 'right'),
     # Font options
     'font': ('CMU Serif', 'PT Serif', 'Liberation Serif', 'DejaVu Serif'),
+    'font_weight': 'roman',
     'fontsize_title': 18,
     'fontsize_ticks': 13,
     'fontsize_xtitle': 18,

@@ -42,6 +42,7 @@ class PlotterMatplotlib(Plotter):
             mpl.rcParams['mathtext.fontset'] = 'cm'
             mpl.rcParams['mathtext.rm'] = 'serif'
         mpl.rcParams['font.family'] = self.font
+        mpl.rcParams['font.weight'] = self.font_weight
         import matplotlib.pyplot as plt
 
         if self.axes_rloc is not None:
