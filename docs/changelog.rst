@@ -4,6 +4,17 @@ Changelog
 Release notes for ``xyzpy``.
 
 
+.. _whats-new.0.3.2:
+
+v0.3.2 (Unreleased)
+--------------------------
+
+**Enhancements**
+
+- Add PBS support to ``qsub_grow`` for distributed crop growing
+- Add ``save_merge_ds`` for manually aggregating datasets to disk
+
+
 .. _whats-new.0.3.1:
 
 v0.3.1 (25th January 2019)

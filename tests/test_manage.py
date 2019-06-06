@@ -1,13 +1,14 @@
 import os
 import tempfile
 
-from pytest import fixture, mark, param
+from pytest import fixture, mark, param, raises
 import numpy as np
 import xarray as xr
 
 from xyzpy.manage import (
     load_ds,
     save_ds,
+    save_merge_ds,
 )
 
 
@@ -106,3 +107,14 @@ class TestSaveAndLoad:
             ds2 = load_ds(os.path.join(tmpdir, "test.h5"))
             assert ds1.identical(ds2)
             ds2.close()
+
+    def test_save_merge_ds(self, ds1, ds2, ds3):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fname = os.path.join(tmpdir, "test.h5")
+            save_merge_ds(ds1, fname)
+            save_merge_ds(ds2, fname)
+            with raises(xr.MergeError):
+                save_merge_ds(ds3, fname)
+            save_merge_ds(ds3, fname, overwrite=True)
+            exp = ds3.combine_first(xr.merge([ds1, ds2]))
+            assert load_ds(fname).identical(exp)

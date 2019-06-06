@@ -131,6 +131,42 @@ def load_ds(file_name,
     return ds
 
 
+def save_merge_ds(ds, fname, overwrite=None):
+    """Save dataset ``ds``, but check for an existing dataset with that name
+    first, and if it exists, merge the two before saving.
+
+    Parameters
+    ----------
+    ds : xarray.Dataset
+        The dataset to save.
+    fname : str
+        The file name.
+    overwrite : {None, False, True}, optional
+        How to merge the dataset with the existing dataset.
+
+            - None: the datasets will be merged in there are no conflicts
+            - False: data will be taken from old dataset if conflicting
+            - True: data will be taken from new dataset if conflicting
+    """
+
+    # check for the existing file
+    if os.path.exists(fname):
+        old_ds = load_ds(fname)
+    else:
+        old_ds = xr.Dataset()
+
+    # merge the new and old
+    if overwrite is True:
+        new_ds = ds.combine_first(old_ds)
+    elif overwrite is False:
+        new_ds = old_ds.combine_first(ds)
+    else:
+        new_ds = xr.merge([old_ds, ds])
+
+    # write to disk
+    save_ds(new_ds, fname)
+
+
 def trimna(obj):
     """Drop values across all dimensions for which all values are NaN.
     """
