@@ -970,6 +970,8 @@ def gen_qsub_script(
         Extra "#$ -l" resources, e.g. 'gpu=1'
     debugging : bool, optional
         Set the python log level to debugging.
+    scheduler : {'sge', 'pbs'}, optional
+        Whether to use a SGE or PBS submission script template.
 
     Returns
     -------
@@ -1107,6 +1109,8 @@ def qsub_grow(
         Extra "#$ -l" resources, e.g. 'gpu=1'
     debugging : bool, optional
         Set the python log level to debugging.
+    scheduler : {'sge', 'pbs'}, optional
+        Whether to use a SGE or PBS submission script template.
     """
     if crop.is_ready_to_reap():
         print("Crop ready to reap: nothing to submit.")
