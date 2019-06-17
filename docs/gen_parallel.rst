@@ -41,7 +41,14 @@ Running combos using the disk as a persistence mechanism requires one more objec
 
 4. Watch the progress. ``Crop.__repr__`` will show how many batches have been completed of the total sown.
 
-5. **'Reap'**. Once all the batches have completed, run ``Crop.reap()`` to collect the results and remove the batches' temporary directory. If the crop originated from a ``Runner`` or ``Harvester``, the data will be labelled, merged and saved accordingly.
+5. **'Reap'**. Once all the batches have completed, run :meth:`xyzpy.Crop.reap` to collect the results and remove the batches' temporary directory. If the crop originated from a ``Runner`` or ``Harvester``, the data will be labelled, merged and saved accordingly.
 
 
 See the full demonstrations in :ref:`Examples`.
+
+
+.. note::
+
+    You can reap an unfinished ``Crop`` as long as there is at least one result by passing the ``allow_incomplete=True`` option to :meth:`~xyzpy.Crop.reap`.
+    Note that missing results will be represented by ``numpy.nan`` which might effect the eventual ``dtype`` of harvested results.
+    To avoid this, consider also setting ``sync=False`` to avoid writing anything to disk until the full ``Crop`` is finished.

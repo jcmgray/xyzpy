@@ -203,7 +203,8 @@ class TestHarvester:
             assert h.full_ds.identical(fn3_fba_ds)
             assert hds.identical(fn3_fba_ds)
 
-    def test_harvest_combos_new_sow_and_reap(self, fn3_fba_runner, fn3_fba_ds):
+    def test_harvest_combos_sow_and_reap_thread_wait(self, fn3_fba_runner,
+                                                     fn3_fba_ds):
         with tempfile.TemporaryDirectory() as tmpdir:
             fl_pth = os.path.join(tmpdir, 'test.h5')
             h = Harvester(fn3_fba_runner, fl_pth)
@@ -225,6 +226,27 @@ class TestHarvester:
         assert h.last_ds.identical(fn3_fba_ds)
         assert h.full_ds.identical(fn3_fba_ds)
         assert hds.identical(fn3_fba_ds)
+
+    def test_harvest_combos_new_sow_reap_incomplete(self, fn3_fba_runner,
+                                                    fn3_fba_ds):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fl_pth = os.path.join(tmpdir, 'test.h5')
+            h = Harvester(fn3_fba_runner, fl_pth)
+            crop = h.Crop(parent_dir=tmpdir, num_batches=3)
+            crop.sow_combos((('a', (1, 2)), ('b', (3, 4))))
+
+            grow(1, crop)
+            crop.reap(allow_incomplete=True)
+            assert not h.full_ds.identical(fn3_fba_ds)
+            hds = load_ds(fl_pth)
+            assert not hds.identical(fn3_fba_ds)
+
+            crop.grow_missing()
+            crop.reap(allow_incomplete=True)
+            h.load_full_ds()
+            assert h.full_ds.equals(fn3_fba_ds)
+            hds = load_ds(fl_pth)
+            assert hds.identical(fn3_fba_ds)
 
     def test_harvest_combos_merge(self, fn3_fba_runner, fn3_fba_ds):
         with tempfile.TemporaryDirectory() as tmpdir:

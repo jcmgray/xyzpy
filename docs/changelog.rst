@@ -13,6 +13,7 @@ v0.3.2 (Unreleased)
 
 - Add PBS support to :meth:`xyzpy.Crop.qsub_grow` for distributed crop growing
 - Add :func:`xyzpy.save_merge_ds` for manually aggregating datasets to disk
+- Add ``allow_incomplete=True`` option to :meth:`xyzpy.Crop.reap` for gathering data even if the crop is not fully grown
 
 
 .. _whats-new.0.3.1:

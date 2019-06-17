@@ -1,9 +1,12 @@
+import os
 from tempfile import TemporaryDirectory
 
 import pytest
-import os
+import numpy as np
+import xarray as xr
+from numpy.testing import assert_allclose
 
-from xyzpy import combo_runner
+from xyzpy import combo_runner, combo_runner_to_ds
 from xyzpy.gen.batch import (
     XYZError,
     Crop,
@@ -11,7 +14,13 @@ from xyzpy.gen.batch import (
     grow,
 )
 
-from . import foo3_scalar
+from . import (
+    foo3_scalar,
+    foo2_scalar,
+    foo2_array,
+    foo2_array_bool,
+    foo2_dataset,
+)
 
 
 def foo_add(a, b, c):
@@ -202,3 +211,80 @@ class TestSowerReaper:
             ds = crop.reap_combos_to_ds(var_names=['sum'])
 
         assert ds['sum'].sel(a=3, b=30, c=1100).data == 33
+
+    @pytest.mark.parametrize('fn', [
+        foo2_scalar,
+        foo2_array,
+        foo2_array_bool,
+        foo2_dataset,
+    ])
+    def test_all_nan_result(self, fn):
+
+        combos = (('a', [1, 2, 3]),
+                  ('b', [10, 20, 30]))
+
+        with TemporaryDirectory() as tdir:
+            crop = Crop(fn=fn, parent_dir=tdir)
+            crop.sow_combos(combos)
+
+            with pytest.raises(XYZError):
+                crop.all_nan_result
+
+            crop.grow(1)
+            nres = crop.all_nan_result
+
+            if fn is foo2_array_bool:
+                assert len(nres) == 2
+                assert_allclose(nres[0], np.broadcast_to(np.nan, [10]))
+                assert_allclose(nres[1], np.broadcast_to(np.nan, []))
+
+            if fn is foo2_dataset:
+                ds_exp = xr.Dataset({'x': (['t1', 't2'],
+                                           np.tile(np.nan, (2, 3)))})
+                assert nres.identical(ds_exp)
+
+    def test_reap_allow_incomplete(self):
+        combos = (('a', [1, 2, 3]),
+                  ('b', [10, 20, 30]),
+                  ('c', range(100, 1101, 100)))
+
+        with TemporaryDirectory() as tdir:
+            crop = Crop(fn=foo_add, parent_dir=tdir)
+            crop.sow_combos(combos)
+            with pytest.raises(XYZError):
+                crop.reap(allow_incomplete=True)
+            for i in range(1, 40):
+                crop.grow(i)
+            res = np.array(crop.reap(allow_incomplete=True))
+            assert np.isnan(res).sum() == 60
+
+    @pytest.mark.parametrize(
+        "fn,var_names,var_dims", [
+            (foo2_scalar, ['x'], None),
+            (foo2_array, ['x'], {'x': 't'}),
+            (foo2_array_bool, ['x', 'y'], {'x': 't'}),
+            (foo2_dataset, None, None),
+        ]
+    )
+    def test_reap_to_ds_allow_incomplete(self, fn, var_names, var_dims):
+        combos = (('a', [1, 2, 3]),
+                  ('b', [10, 20, 30]))
+
+        ds_exp = combo_runner_to_ds(fn, combos, var_names, var_dims=var_dims)
+
+        with TemporaryDirectory() as tdir:
+            crop = Crop(fn=fn, parent_dir=tdir)
+            crop.sow_combos(combos)
+            for i in range(1, 10, 2):
+                crop.grow(i)
+
+            ds = crop.reap_combos_to_ds(var_names=var_names, var_dims=var_dims,
+                                        allow_incomplete=True)
+
+            num_finished = int(ds['x'].size * (5 / 9))
+            assert (ds['x'] == ds_exp['x']).sum() == num_finished
+
+            crop.grow_missing()
+            ds = crop.reap_combos_to_ds(var_names=var_names, var_dims=var_dims,
+                                        allow_incomplete=True)
+            assert ds.identical(ds_exp)

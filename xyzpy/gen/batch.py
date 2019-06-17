@@ -10,6 +10,8 @@ import math
 
 import joblib
 from joblib.externals import cloudpickle
+import numpy as np
+import xarray as xr
 
 from ..utils import _get_fn_name, prod, progbar
 from .prepare import _parse_combos, _parse_constants, _parse_attrs
@@ -84,6 +86,61 @@ def parse_fn_runner_harvester(fn, runner, harvester):
     return fn, runner, harvester
 
 
+def infer_shape(x):
+    """Take a nested sequence and find its shape as if it were an array.
+
+    Examples
+    --------
+
+        >>> x = [[10, 20, 30], [40, 50, 60]]
+        >>> infer_shape(x)
+        (2, 3)
+    """
+    shape = ()
+    try:
+        shape += (len(x),)
+        return shape + infer_shape(x[0])
+    except TypeError:
+        return shape
+
+
+def nan_like_result(res):
+    """Take a single result of a function evaluation and calculate the same
+    sequence of scalars or arrays but filled entirely with ``nan``.
+
+    Examples
+    --------
+
+        >>> res = (True, [[10, 20, 30], [40, 50, 60]], -42.0)
+        >>> nan_like_result(res)
+        (array(nan), array([[nan, nan, nan],
+                            [nan, nan, nan]]), array(nan))
+
+    """
+    if isinstance(res, (xr.Dataset, xr.DataArray)):
+        return xr.full_like(res, np.nan, dtype=float)
+
+    try:
+        return tuple(np.broadcast_to(np.nan, infer_shape(x)) for x in res)
+    except TypeError:
+        return np.nan
+
+
+def calc_clean_up_default_res(crop, clean_up, allow_incomplete):
+    """Logic for choosing whether to automatically clean up a crop, and what,
+    if any, the default all-nan result should be.
+    """
+    if clean_up is None:
+        clean_up = not allow_incomplete
+
+    if allow_incomplete:
+        default_result = crop.all_nan_result
+    else:
+        default_result = None
+
+    return clean_up, default_result
+
+
 class Crop(object):
     """Encapsulates all the details describing a single 'crop', that is,
     its location, name, and batch size/number. Also allows tracking of
@@ -151,6 +208,7 @@ class Crop(object):
         self.batchsize = batchsize
         self.num_batches = num_batches
         self._batch_remainder = None
+        self._all_nan_result = None
 
         # Work out the full directory for the crop
         self.location, self.name, self.parent_dir = \
@@ -342,6 +400,20 @@ class Crop(object):
         # delete everything
         shutil.rmtree(self.location)
 
+    @property
+    def all_nan_result(self):
+        if self._all_nan_result is None:
+            result_files = glob(
+                os.path.join(self.location, "results", RSLT_NM.format("*"))
+            )
+            if not result_files:
+                raise XYZError("To infer an all-nan result requires at least "
+                               "one finished result.")
+            reference_result = joblib.load(result_files[0])[0]
+            self._all_nan_result = nan_like_result(reference_result)
+
+        return self._all_nan_result
+
     def __str__(self):
         # Location and name, underlined
         if not os.path.exists(self.location):
@@ -417,33 +489,43 @@ class Crop(object):
         """
         self.grow(batch_ids=self.missing_results(), **combo_runner_opts)
 
-    def reap_combos(self, wait=False, clean_up=True):
-        """Reap already sown and grow results from specified crop.
+    def reap_combos(self, wait=False, clean_up=None, allow_incomplete=False):
+        """Reap already sown and grown results from this crop.
 
         Parameters
         ----------
         wait : bool, optional
             Whether to wait for results to appear. If false (default) all
             results need to be in place before the reap.
+        clean_up : bool, optional
+            Whether to delete all the batch files once the results have been
+            gathered. If left as ``None`` this will be automatically set to
+            ``not allow_incomplete``.
+        allow_incomplete : bool, optional
+            Allow only partially completed crop results to be reaped,
+            incomplete results will all be filled-in as nan.
 
         Returns
         -------
         results : nested tuple
             'N-dimensional' tuple containing the results.
         """
-        if not (wait or self.is_ready_to_reap()):
-            raise XYZError("This crop is not ready to reap yet - results are"
-                           " missing.")
+        if not (allow_incomplete or wait or self.is_ready_to_reap()):
+            raise XYZError("This crop is not ready to reap "
+                           "yet - results are missing.")
 
-        # Load same combinations as cases saved with
+        clean_up, default_result = calc_clean_up_default_res(
+            self, clean_up, allow_incomplete
+        )
+
+        # load same combinations as cases saved with
         settings = joblib.load(os.path.join(self.location, INFO_NM))
 
         with Reaper(self, num_batches=settings['num_batches'],
-                    wait=wait) as reap_fn:
+                    wait=wait, default_result=default_result) as reap_fn:
 
-            results = _combo_runner(fn=reap_fn,
-                                    combos=settings['combos'],
-                                    constants={})
+            results = _combo_runner(fn=reap_fn, constants={},
+                                    combos=settings['combos'])
 
         if clean_up:
             self.delete_all()
@@ -458,7 +540,8 @@ class Crop(object):
                           attrs=None,
                           parse=True,
                           wait=False,
-                          clean_up=True):
+                          clean_up=None,
+                          allow_incomplete=False):
         """Reap a function over sowed combinations and output to a Dataset.
 
         Parameters
@@ -483,15 +566,26 @@ class Crop(object):
         wait : bool, optional
             Whether to wait for results to appear. If false (default) all
             results need to be in place before the reap.
+        clean_up : bool, optional
+            Whether to delete all the batch files once the results have been
+            gathered. If left as ``None`` this will be automatically set to
+            ``not allow_incomplete``.
+        allow_incomplete : bool, optional
+            Allow only partially completed crop results to be reaped,
+            incomplete results will all be filled-in as nan.
 
         Returns
         -------
         xarray.Dataset
             Multidimensional labelled dataset contatining all the results.
         """
-        if not (wait or self.is_ready_to_reap()):
-            raise XYZError(
-                "This crop is not ready to reap yet - results are missing.")
+        if not (allow_incomplete or wait or self.is_ready_to_reap()):
+            raise XYZError("This crop is not ready to reap "
+                           "yet - results are missing.")
+
+        clean_up, default_result = calc_clean_up_default_res(
+            self, clean_up, allow_incomplete
+        )
 
         # Load exact same combinations as cases saved with
         settings = joblib.load(os.path.join(self.location, INFO_NM))
@@ -501,7 +595,7 @@ class Crop(object):
             attrs = _parse_attrs(attrs)
 
         with Reaper(self, num_batches=settings['num_batches'],
-                    wait=wait) as reap_fn:
+                    wait=wait, default_result=default_result) as reap_fn:
 
             # Move constants into attrs, so as not to pass them to the Reaper
             #   when if fact they were meant for the original function.
@@ -520,7 +614,8 @@ class Crop(object):
 
         return ds
 
-    def reap_runner(self, runner, wait=False, clean_up=True):
+    def reap_runner(self, runner, wait=False,
+                    clean_up=None, allow_incomplete=False):
         """Reap a Crop over sowed combos and save to a dataset defined by a
         Runner.
         """
@@ -534,22 +629,26 @@ class Crop(object):
             attrs=runner._attrs,
             parse=False,
             wait=wait,
-            clean_up=clean_up)
+            clean_up=clean_up,
+            allow_incomplete=allow_incomplete)
         runner.last_ds = ds
         return ds
 
     def reap_harvest(self, harvester, wait=False, sync=True, overwrite=None,
-                     clean_up=True):
-        """
+                     clean_up=None, allow_incomplete=False):
+        """Reap a Crop over sowed combos and merge with the dataset defined by
+        a Harvester.
         """
         if harvester is None:
             raise ValueError("Cannot reap and harvest if no Harvester is set.")
 
-        ds = self.reap_runner(harvester.runner, wait=wait, clean_up=clean_up)
+        ds = self.reap_runner(harvester.runner, wait=wait, clean_up=clean_up,
+                              allow_incomplete=allow_incomplete)
         self.harvester.add_ds(ds, sync=sync, overwrite=overwrite)
         return ds
 
-    def reap(self, wait=False, sync=True, overwrite=None, clean_up=True):
+    def reap(self, wait=False, sync=True, overwrite=None,
+             clean_up=None, allow_incomplete=False):
         """Reap sown and grown combos from disk. Return a dataset if a runner
         or harvester is set, otherwise, the raw nested tuple.
 
@@ -568,19 +667,26 @@ class Crop(object):
             new conflicting data.
         clean_up : bool, optional
             Whether to delete all the batch files once the results have been
-            gathered.
+            gathered. If left as ``None`` this will be automatically set to
+            ``not allow_incomplete``.
+        allow_incomplete : bool, optional
+            Allow only partially completed crop results to be reaped,
+            incomplete results will all be filled-in as nan.
 
         Returns
         -------
         nested tuple or xarray.Dataset
         """
+        opts = dict(clean_up=clean_up, wait=wait,
+                    allow_incomplete=allow_incomplete)
+
         if self.harvester is not None:
-            return self.reap_harvest(self.harvester, clean_up=clean_up,
-                                     wait=wait, sync=sync, overwrite=overwrite)
+            opts['overwrite'] = overwrite
+            return self.reap_harvest(self.harvester, **opts)
         elif self.runner is not None:
-            return self.reap_runner(self.runner, wait=wait, clean_up=clean_up)
+            return self.reap_runner(self.runner, **opts)
         else:
-            return self.reap_combos(wait=wait, clean_up=clean_up)
+            return self.reap_combos(**opts)
 
     def check_bad(self, delete_bad=True):
         """Check that the result dumps are not bad -> sometimes length does not
@@ -818,7 +924,7 @@ class Reaper(object):
     grow results.
     """
 
-    def __init__(self, crop, num_batches, wait=False):
+    def __init__(self, crop, num_batches, wait=False, default_result=None):
         """Class for retrieving the batched, flat, 'grown' results.
 
         Parameters
@@ -828,11 +934,25 @@ class Reaper(object):
         """
         self.crop = crop
 
-        files = (os.path.join(self.crop.location, "results", RSLT_NM.format(i))
-                 for i in range(1, num_batches + 1))
+        files = (
+            os.path.join(self.crop.location, "results", RSLT_NM.format(i + 1))
+            for i in range(num_batches)
+        )
 
         def _load(x):
-            res = joblib.load(x)
+
+            use_default = (
+                (default_result is not None) and
+                (not wait) and
+                (not os.path.isfile(x))
+            )
+
+            # actual result doesn't exist yet - use the default if specified
+            if use_default:
+                res = (default_result,) * crop.batchsize
+            else:
+                res = joblib.load(x)
+
             if (res is None) or len(res) == 0:
                 raise ValueError("Something not right: result {} contains "
                                  "no data upon joblib.load".format(x))
