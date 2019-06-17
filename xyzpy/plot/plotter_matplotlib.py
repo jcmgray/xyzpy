@@ -95,7 +95,7 @@ class PlotterMatplotlib(Plotter):
                                             if self._axes_loc is None else
                                             self._axes_loc)
         self._axes.set_title("" if self.title is None else self.title,
-                             fontsize=self.fontsize_title)
+                             fontsize=self.fontsize_title, pad=self.title_pad)
 
     def set_axes_labels(self):
         if self._xtitle:
@@ -227,6 +227,7 @@ class PlotterMatplotlib(Plotter):
                 'loc': self.legend_loc,
                 'fontsize': self.fontsize_zlabels,
                 'frameon': self.legend_frame,
+                'framealpha': self.legend_frame_alpha,
                 'numpoints': 1,
                 'scatterpoints': 1,
                 'handlelength': self.legend_handlelength,

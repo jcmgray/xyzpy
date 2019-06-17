@@ -55,6 +55,7 @@ PLOTTER_DEFAULTS = {
     'legend_label_spacing': None,
     'legend_column_spacing': 1,
     'legend_frame': False,
+    'legend_frame_alpha': 0.5,
     'legend_handlelength': None,
     'legend_reverse': False,
     'legend_marker_alpha': None,
@@ -80,6 +81,7 @@ PLOTTER_DEFAULTS = {
     'yjitter': None,
     # Titles and text
     'title': None,
+    'title_pad': None,
     'panel_label': None,
     'panel_label_loc': (0.05, 0.93),
     'panel_label_color': 'black',
