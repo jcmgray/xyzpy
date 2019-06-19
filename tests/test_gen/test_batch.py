@@ -6,7 +6,7 @@ import numpy as np
 import xarray as xr
 from numpy.testing import assert_allclose
 
-from xyzpy import combo_runner, combo_runner_to_ds
+from xyzpy import combo_runner, combo_runner_to_ds, Runner, Harvester
 from xyzpy.gen.batch import (
     XYZError,
     Crop,
@@ -288,3 +288,37 @@ class TestSowerReaper:
             ds = crop.reap_combos_to_ds(var_names=var_names, var_dims=var_dims,
                                         allow_incomplete=True)
             assert ds.identical(ds_exp)
+
+    def test_new_ds_crop_loads_info_incomplete(self):
+        def fn(a, b):
+            return xr.Dataset({'sum': a + b, 'diff': a - b})
+
+        with TemporaryDirectory() as tdir:
+            disk_ds = os.path.join(tdir, 'test.h5')
+
+            combos = dict(a=[1], b=[1, 2, 3])
+            runner = Runner(fn, var_names=None)
+            harvester = Harvester(runner, disk_ds)
+            crop = harvester.Crop(name='fn', batchsize=1, parent_dir=tdir)
+            crop.sow_combos(combos)
+            for i in range(1, 3):
+                crop.grow(i)
+
+            # try creating crop from fresh
+            c = Crop(name='fn', parent_dir=tdir)
+            # crop's harvester should be loaded from disk
+            assert c.harvester is not None
+            assert c.harvester is not harvester
+            ds = c.reap(allow_incomplete=True)
+            assert isinstance(ds, xr.Dataset)
+            assert ds['diff'].isnull().sum() == 1
+            assert harvester.full_ds['diff'].isnull().sum() == 1
+
+            # try creating crop from harvester
+            c = harvester.Crop('fn', parent_dir=tdir)
+            # crop's harvester should still be harvester
+            assert c.harvester is not None
+            assert c.harvester is harvester
+            ds = c.reap(allow_incomplete=True)
+            assert isinstance(ds, xr.Dataset)
+            assert ds['diff'].isnull().sum() == 1

@@ -141,6 +141,15 @@ def calc_clean_up_default_res(crop, clean_up, allow_incomplete):
     return clean_up, default_result
 
 
+def check_ready_to_reap(crop, allow_incomplete, wait):
+    if not (allow_incomplete or wait or crop.is_ready_to_reap()):
+        raise XYZError("This crop is not ready to reap yet - results are "
+                       "missing. You can reap only finished batches by setting"
+                       " ``allow_incomplete=True``, but be aware this will "
+                       "represent all missing batches with ``np.nan`` and thus"
+                       " might effect data-types.")
+
+
 class Crop(object):
     """Encapsulates all the details describing a single 'crop', that is,
     its location, name, and batch size/number. Also allows tracking of
@@ -213,6 +222,10 @@ class Crop(object):
         # Work out the full directory for the crop
         self.location, self.name, self.parent_dir = \
             parse_crop_details(self._fn, self.name, self.parent_dir)
+
+        # try loading crop information if it exists
+        if autoload and self.is_prepared():
+            self._sync_info_from_disk()
 
         # Save function so it can be automatically loaded with all deps?
         if (fn is None) and (save_fn is True):
@@ -301,7 +314,7 @@ class Crop(object):
         else:
             return joblib.load(sfile)
 
-    def _sync_info_from_disk(self):
+    def _sync_info_from_disk(self, only_missing=True):
         """Load information about the saved cases.
         """
         settings = self.load_info()
@@ -314,10 +327,18 @@ class Crop(object):
         runner_pkl = settings['runner']
         runner = None if runner_pkl is None else pickle.loads(runner_pkl)
 
-        self._fn, self.runner, self.harvester = \
+        fn, runner, harvester = \
             parse_fn_runner_harvester(None, runner, harvester)
 
-        self.load_function()
+        # if crop already has a harvester/runner. (e.g. was instantiated from
+        # one) by default don't overwrite from disk
+        if (self.runner is None) or (not only_missing):
+            self.runner = runner
+        if (self.harvester) is None or (not only_missing):
+            self.harvester = harvester
+
+        if self.fn is None:
+            self.load_function()
 
     def save_function_to_disk(self):
         """Save the base function to disk using cloudpickle
@@ -510,9 +531,7 @@ class Crop(object):
         results : nested tuple
             'N-dimensional' tuple containing the results.
         """
-        if not (allow_incomplete or wait or self.is_ready_to_reap()):
-            raise XYZError("This crop is not ready to reap "
-                           "yet - results are missing.")
+        check_ready_to_reap(self, allow_incomplete, wait)
 
         clean_up, default_result = calc_clean_up_default_res(
             self, clean_up, allow_incomplete
@@ -579,9 +598,7 @@ class Crop(object):
         xarray.Dataset
             Multidimensional labelled dataset contatining all the results.
         """
-        if not (allow_incomplete or wait or self.is_ready_to_reap()):
-            raise XYZError("This crop is not ready to reap "
-                           "yet - results are missing.")
+        check_ready_to_reap(self, allow_incomplete, wait)
 
         clean_up, default_result = calc_clean_up_default_res(
             self, clean_up, allow_incomplete
