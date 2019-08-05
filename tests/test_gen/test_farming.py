@@ -381,3 +381,28 @@ class TestSampler:
 
             for col in ['sum', 'diff', 'divisor', 'const', 'a', 'b', 'c']:
                 assert col in s.full_df
+
+    @pytest.mark.parametrize('batchsize', [1, 3])
+    def test_sow_reap_samples(self, batchsize):
+
+        @label(var_names=['sum', 'diff', 'divisor', 'const'],
+               constants={'c': 42})
+        def sum_diff(a, b, c):
+            return a + b, a - b, a % b == 0, c
+
+        default_combos = (
+            ('a', (1, 2, 3, 4, 5)),
+            ('b', lambda: np.random.randint(10, 20))
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fl_pth = os.path.join(tmpdir, 'test.pkl')
+            s = Sampler(sum_diff, fl_pth, default_combos=default_combos)
+            c = s.Crop('test-crop-def', batchsize=batchsize, parent_dir=tmpdir)
+            c.sow_samples(10)
+            c.grow_missing()
+            c.reap()
+            hdf = load_df(fl_pth)
+            assert len(hdf) == 10
+            assert s.last_df.equals(hdf)
+            assert s.full_df.equals(hdf)

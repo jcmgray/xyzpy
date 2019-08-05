@@ -14,8 +14,21 @@ import numpy as np
 import xarray as xr
 
 from ..utils import _get_fn_name, prod, progbar
-from .prepare import _parse_combos, _parse_constants, _parse_attrs
-from .combo_runner import _combo_runner, combo_runner_to_ds
+from .combo_runner import (
+    _combo_runner,
+    combo_runner_to_ds,
+)
+from .case_runner import (
+    _case_runner,
+    case_runner_to_ds,
+)
+from .prepare import (
+    _parse_combos,
+    _parse_constants,
+    _parse_attrs,
+    _parse_cases,
+)
+from .farming import Runner, Harvester, Sampler
 
 
 BTCH_NM = "xyz-batch-{}.jbdmp"
@@ -63,27 +76,14 @@ def parse_crop_details(fn, crop_name, crop_parent):
     return crop_location, crop_name, crop_parent
 
 
-def parse_fn_runner_harvester(fn, runner, harvester):
-    """
-    """
-    if harvester is not None:
-        if (runner is not None) or (fn is not None):
-            warnings.warn(
-                "If `harvester` is set `runner` and `fn` are ignored.")
-        harvester = harvester
-        runner = harvester.runner
-        fn = harvester.runner.fn
-    elif runner is not None:
+def _parse_fn_farmer(fn, farmer):
+    if farmer is not None:
         if fn is not None:
-            warnings.warn("If `runner` is set `fn` is ignored.")
-        harvester = None
-        runner = runner
-        fn = runner.fn
-    else:
-        harvester = None
-        runner = None
-        fn = fn
-    return fn, runner, harvester
+            warnings.warn("'fn' is ignored if a 'Runner', 'Harvester', or "
+                          "'Sampler' is supplied as the 'farmer' kwarg.")
+        fn = farmer.fn
+
+    return fn, farmer
 
 
 def infer_shape(x):
@@ -155,8 +155,8 @@ class Crop(object):
     its location, name, and batch size/number. Also allows tracking of
     crop's progress, and experimentally, automatic submission of
     workers to grid engine to complete un-grown cases. Can also be instantiated
-    directly from a :class:`~xyzpy.Runner` or :class:`~xyzpy.Harvester`
-    instance.
+    directly from a :class:`~xyzpy.Runner` or :class:`~xyzpy.Harvester` or
+    :class:`~Sampler.Crop` instance.
 
     Parameters
     ----------
@@ -180,21 +180,17 @@ class Crop(object):
     num_batches : int, optional
         How many total batches to aim for, cannot be specified if
         `batchsize` is.
-    runner : xyzpy.Runner, optional
-        A Runner instance, from which the `fn` can be inferred and
-        which can also allow the Crop to reap itself straight to a
-        dataset.
-    harvester : xyzpy.Harvester, optional
-        A Harvester instance, from which the `fn` can be inferred and
-        which can also allow the Crop to reap itself straight to a
-        on-disk dataset.
+    farmer : {xyzpy.Runner, xyzpy.Harvester, xyzpy.Sampler}, optional
+        A Runner, Harvester or Sampler, instance, from which the `fn` can be
+        inferred and which can also allow the Crop to reap itself straight to a
+        dataset or dataframe.
     autoload : bool, optional
         If True, check for the existence of a Crop written to disk
         with the same location, and if found, load it.
 
     See Also
     --------
-    Runner.Crop, Harvester.Crop
+    Runner.Crop, Harvester.Crop, Sampler.Crop
     """
 
     def __init__(self, *,
@@ -204,12 +200,10 @@ class Crop(object):
                  save_fn=None,
                  batchsize=None,
                  num_batches=None,
-                 runner=None,
-                 harvester=None,
+                 farmer=None,
                  autoload=True):
 
-        self._fn, self.runner, self.harvester = \
-            parse_fn_runner_harvester(fn, runner, harvester)
+        self._fn, self.farmer = _parse_fn_farmer(fn, farmer)
 
         self.name = name
         self.parent_dir = parent_dir
@@ -232,13 +226,28 @@ class Crop(object):
             raise ValueError("Must specify a function for it to be saved!")
         self.save_fn = save_fn is not False
 
+    @property
+    def runner(self):
+        if isinstance(self.farmer, Runner):
+            return self.farmer
+        elif isinstance(self.farmer, (Harvester, Sampler)):
+            return self.farmer.runner
+        else:
+            return None
+
     # ------------------------------- methods ------------------------------- #
 
-    def choose_batch_settings(self, combos):
+    def choose_batch_settings(self, *, combos=None, cases=None):
         """Work out how to divide all cases into batches, i.e. ensure
         that ``batchsize * num_batches >= num_cases``.
         """
-        n = prod(len(x) for _, x in combos)
+        if int(combos is not None) + int(cases is not None) != 1:
+            raise ValueError("Can only supply one of 'combos' or 'cases'.")
+
+        if combos is not None:
+            n = prod(len(x) for _, x in combos)
+        else:
+            n = len(cases)
 
         if (self.batchsize is not None) and (self.num_batches is not None):
             # Check that they are set correctly
@@ -276,32 +285,26 @@ class Crop(object):
         os.makedirs(os.path.join(self.location, "batches"), exist_ok=True)
         os.makedirs(os.path.join(self.location, "results"), exist_ok=True)
 
-    def save_info(self, combos):
+    def save_info(self, combos=None, cases=None, fn_args=None):
         """Save information about the sowed cases.
         """
         # If saving Harvester or Runner, strip out function information so
         #   as just to use pickle.
-        if self.harvester is not None:
-            harvester_copy = copy.deepcopy(self.harvester)
-            harvester_copy.runner.fn = None
-            hrvstr_pkl = pickle.dumps(harvester_copy)
-            runner_pkl = None
-        elif self.runner is not None:
-            hrvstr_pkl = None
-            runner_copy = copy.deepcopy(self.runner)
-            runner_copy.fn = None
-            runner_pkl = pickle.dumps(runner_copy)
+        if self.farmer is not None:
+            farmer_copy = copy.deepcopy(self.farmer)
+            farmer_copy.fn = None
+            farmer_pkl = cloudpickle.dumps(farmer_copy)
         else:
-            hrvstr_pkl = None
-            runner_pkl = None
+            farmer_pkl = None
 
         joblib.dump({
             'combos': combos,
+            'cases': cases,
+            'fn_args': fn_args,
             'batchsize': self.batchsize,
             'num_batches': self.num_batches,
             '_batch_remainder': self._batch_remainder,
-            'harvester': hrvstr_pkl,
-            'runner': runner_pkl,
+            'farmer': farmer_pkl,
         }, os.path.join(self.location, INFO_NM))
 
     def load_info(self):
@@ -322,20 +325,15 @@ class Crop(object):
         self.num_batches = settings['num_batches']
         self._batch_remainder = settings['_batch_remainder']
 
-        hrvstr_pkl = settings['harvester']
-        harvester = None if hrvstr_pkl is None else pickle.loads(hrvstr_pkl)
-        runner_pkl = settings['runner']
-        runner = None if runner_pkl is None else pickle.loads(runner_pkl)
+        farmer_pkl = settings['farmer']
+        farmer = None if farmer_pkl is None else pickle.loads(farmer_pkl)
 
-        fn, runner, harvester = \
-            parse_fn_runner_harvester(None, runner, harvester)
+        fn, farmer = _parse_fn_farmer(None, farmer)
 
         # if crop already has a harvester/runner. (e.g. was instantiated from
         # one) by default don't overwrite from disk
-        if (self.runner is None) or (not only_missing):
-            self.runner = runner
-        if (self.harvester) is None or (not only_missing):
-            self.harvester = harvester
+        if (self.farmer) is None or (not only_missing):
+            self.farmer = farmer
 
         if self.fn is None:
             self.load_function()
@@ -353,33 +351,23 @@ class Crop(object):
         self._fn = cloudpickle.loads(joblib.load(
             os.path.join(self.location, FNCT_NM)))
 
-        if self.harvester is not None:
-            if self.harvester.runner.fn is None:
-                self.harvester.runner.fn = self._fn
+        if self.farmer is not None:
+            if self.farmer.fn is None:
+                self.farmer.fn = self._fn
             else:
                 # TODO: check equality?
                 raise XYZError("Trying to load this Crop's function, {}, from "
-                               "disk but its Harvester already has a function "
-                               "set: {}.".format(self._fn,
-                                                 self.harvester.runner.fn))
-        elif self.runner is not None:
-            if self.runner.fn is None:
-                self.runner.fn = self._fn
-            else:
-                # TODO: check equality?
-                raise XYZError("Trying to load this Crop's function, {}, from "
-                               "disk but its Runner already has a function "
-                               "set: {}.".format(self._fn,
-                                                 self.runner.fn))
+                               "disk but its farmer already has a function "
+                               "set: {}.".format(self._fn, self.farmer.fn))
 
-    def prepare(self, combos):
+    def prepare(self, combos=None, cases=None, fn_args=None):
         """Write information about this crop and the supplied combos to disk.
         Typically done at start of sow, not when Crop instantiated.
         """
         self.ensure_dirs_exists()
         if self.save_fn:
             self.save_function_to_disk()
-        self.save_info(combos)
+        self.save_info(combos=combos, cases=cases, fn_args=fn_args)
 
     def is_prepared(self):
         """Check whether this crop has been written to disk.
@@ -477,23 +465,48 @@ class Crop(object):
         msg = "<Crop(name='{}', progress={}, batchsize={})>"
         return msg.format(self.name, progress, self.batchsize)
 
-    def sow_combos(self, combos, constants=None, verbosity=1):
-        """Sow to disk.
-        """
-        combos = _parse_combos(combos)
+    def parse_constants(self, constants=None):
         constants = _parse_constants(constants)
 
         if self.runner is not None:
             constants = {**self.runner._constants, **constants}
             constants = {**self.runner._resources, **constants}
 
+        return constants
+
+    def sow_combos(self, combos, constants=None, verbosity=1):
+        """Sow to disk.
+        """
+        combos = _parse_combos(combos)
+        constants = self.parse_constants(constants)
+
         # Sort to ensure order remains same for reaping results
         #   (don't want to hash kwargs)
         combos = sorted(combos, key=lambda x: x[0])
 
-        with Sower(self, combos) as sow_fn:
+        self.choose_batch_settings(combos=combos)
+        self.prepare(combos=combos)
+
+        with Sower(self) as sow_fn:
             _combo_runner(fn=sow_fn, combos=combos, constants=constants,
                           verbosity=verbosity)
+
+    def sow_cases(self, fn_args, cases, constants=None, verbosity=1):
+        cases = _parse_cases(cases)
+
+        constants = self.parse_constants(constants)
+
+        self.choose_batch_settings(cases=cases)
+        self.prepare(fn_args=fn_args, cases=cases)
+
+        with Sower(self) as sow_fn:
+            _case_runner(fn=sow_fn, fn_args=fn_args, cases=cases,
+                         constants=constants, verbosity=verbosity)
+
+    def sow_samples(self, n, combos=None, constants=None, verbosity=1):
+        fn_args, cases = self.farmer.gen_cases_fnargs(n, combos)
+        self.sow_cases(fn_args, cases,
+                       constants=constants, verbosity=verbosity)
 
     def grow(self, batch_ids, **combo_runner_opts):
         """Grow specific batch numbers using this process.
@@ -595,7 +608,7 @@ class Crop(object):
 
         Returns
         -------
-        xarray.Dataset
+        xarray.Dataset or pandas.Dataframe
             Multidimensional labelled dataset contatining all the results.
         """
         check_ready_to_reap(self, allow_incomplete, wait)
@@ -616,20 +629,30 @@ class Crop(object):
 
             # Move constants into attrs, so as not to pass them to the Reaper
             #   when if fact they were meant for the original function.
-            ds = combo_runner_to_ds(fn=reap_fn,
-                                    combos=settings['combos'],
-                                    var_names=var_names,
-                                    var_dims=var_dims,
-                                    var_coords=var_coords,
-                                    constants={},
-                                    resources={},
-                                    attrs={**attrs, **constants},
-                                    parse=parse)
+            opts = dict(
+                fn=reap_fn,
+                var_names=var_names,
+                var_dims=var_dims,
+                var_coords=var_coords,
+                constants={},
+                resources={},
+                parse=parse
+            )
+
+            if settings['combos'] is not None:
+                opts['combos'] = settings['combos']
+                opts['attrs'] = {**attrs, **constants}
+                data = combo_runner_to_ds(**opts)
+            else:
+                opts['fn_args'] = settings['fn_args']
+                opts['cases'] = settings['cases']
+                opts['to_df'] = True
+                data = case_runner_to_ds(**opts)
 
         if clean_up:
             self.delete_all()
 
-        return ds
+        return data
 
     def reap_runner(self, runner, wait=False,
                     clean_up=None, allow_incomplete=False):
@@ -661,8 +684,20 @@ class Crop(object):
 
         ds = self.reap_runner(harvester.runner, wait=wait, clean_up=clean_up,
                               allow_incomplete=allow_incomplete)
-        self.harvester.add_ds(ds, sync=sync, overwrite=overwrite)
+        harvester.add_ds(ds, sync=sync, overwrite=overwrite)
         return ds
+
+    def reap_samples(self, sampler, wait=False, sync=True,
+                     clean_up=None, allow_incomplete=False):
+        if sampler is None:
+            raise ValueError("Cannot reap samples without a 'Sampler'.")
+
+        df = self.reap_runner(sampler.runner, wait=wait, clean_up=clean_up,
+                              allow_incomplete=allow_incomplete)
+
+        sampler._last_df = df
+        sampler.add_df(df, sync=sync)
+        return df
 
     def reap(self, wait=False, sync=True, overwrite=None,
              clean_up=None, allow_incomplete=False):
@@ -697,13 +732,17 @@ class Crop(object):
         opts = dict(clean_up=clean_up, wait=wait,
                     allow_incomplete=allow_incomplete)
 
-        if self.harvester is not None:
+        if isinstance(self.farmer, Runner):
+            return self.reap_runner(self.farmer, **opts)
+
+        if isinstance(self.farmer, Harvester):
             opts['overwrite'] = overwrite
-            return self.reap_harvest(self.harvester, **opts)
-        elif self.runner is not None:
-            return self.reap_runner(self.runner, **opts)
-        else:
-            return self.reap_combos(**opts)
+            return self.reap_harvest(self.farmer, **opts)
+
+        if isinstance(self.farmer, Sampler):
+            return self.reap_samples(self.farmer, **opts)
+
+        return self.reap_combos(**opts)
 
     def check_bad(self, delete_bad=True):
         """Check that the result dumps are not bad -> sometimes length does not
@@ -791,19 +830,14 @@ class Sower(object):
     number of workers sharing the filesystem) and then reap.
     """
 
-    def __init__(self, crop, combos):
+    def __init__(self, crop):
         """
         Parameters
         ----------
             crop : xyzpy.batch.Crop instance
                 Description of where and how to store the cases and results.
-            combos : mapping_like
-                Description of combinations from which to sow cases from.
-
         """
-        self.combos = combos
         self.crop = crop
-        self.crop.choose_batch_settings(combos)
         # Internal:
         self._batch_cases = []  # collects cases to be written in single batch
         self._counter = 0  # counts how many cases are in batch so far
@@ -823,7 +857,6 @@ class Sower(object):
     # Context manager #
 
     def __enter__(self):
-        self.crop.prepare(self.combos)
         return self
 
     def __call__(self, **kwargs):

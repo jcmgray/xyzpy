@@ -22,8 +22,8 @@ from .prepare import (
 )
 from .combo_runner import combo_runner_to_ds
 from .case_runner import case_runner_to_ds
-from .batch import Crop
 from ..manage import load_ds, save_ds, load_df, save_df
+from . import batch
 
 
 # --------------------------------------------------------------------------- #
@@ -234,12 +234,12 @@ class Runner(object):
         -------
         Crop
         """
-        return Crop(runner=self,
-                    name=name,
-                    parent_dir=parent_dir,
-                    save_fn=save_fn,
-                    batchsize=batchsize,
-                    num_batches=num_batches)
+        return batch.Crop(farmer=self,
+                          name=name,
+                          parent_dir=parent_dir,
+                          save_fn=save_fn,
+                          batchsize=batchsize,
+                          num_batches=num_batches)
 
     def __repr__(self):
         string = "<xyzpy.Runner>\n"
@@ -369,6 +369,14 @@ class Harvester(object):
         self.engine = engine
         self.chunks = chunks
         self._full_ds = full_ds
+
+    @property
+    def fn(self):
+        return self.runner.fn
+
+    @fn.setter
+    def fn(self, fn):
+        self.runner.fn = fn
 
     @property
     def last_ds(self):
@@ -598,12 +606,12 @@ class Harvester(object):
         -------
         Crop
         """
-        return Crop(harvester=self,
-                    name=name,
-                    parent_dir=parent_dir,
-                    save_fn=save_fn,
-                    batchsize=batchsize,
-                    num_batches=num_batches)
+        return batch.Crop(farmer=self,
+                          name=name,
+                          parent_dir=parent_dir,
+                          save_fn=save_fn,
+                          batchsize=batchsize,
+                          num_batches=num_batches)
 
     def __repr__(self):
         string = ("<xyzpy.Harvester>\n"
@@ -649,6 +657,14 @@ class Sampler:
         self._full_df = full_df
         self._last_df = None
         self.engine = engine
+
+    @property
+    def fn(self):
+        return self.runner.fn
+
+    @fn.setter
+    def fn(self, fn):
+        self.runner.fn = fn
 
     def load_full_df(self, engine=None):
         """Load the on-disk full dataframe into memory.
@@ -748,6 +764,19 @@ class Sampler:
         else:
             self._full_df = new_full_df
 
+    def gen_cases_fnargs(self, n, combos=None):
+        """
+        """
+        combos = {} if combos is None else dict(combos)
+        combos = {**self.default_combos, **combos}
+        cases = tuple(
+            tuple(
+                v() if callable(v) else np.random.choice(v)
+                for v in combos.values()
+            ) for _ in range(n)
+        )
+        return tuple(combos.keys()), cases
+
     def sample_combos(self, n, combos=None, engine=None,
                       **case_runner_settings):
         """Sample the target function many times, randomly choosing parameter
@@ -768,19 +797,33 @@ class Sampler:
             Supplied to :func:`~xyzpy.case_runner` and so onto
             :func:`~xyzpy.combo_runner`. This includes ``parallel=True`` etc.
         """
-        combos = {} if combos is None else dict(combos)
-        combos = {**self.default_combos, **combos}
-
-        cases = tuple(tuple(v() if callable(v) else np.random.choice(v)
-                            for v in combos.values())
-                      for _ in range(n))
-
-        last_df = self.runner.run_cases(cases, fn_args=combos.keys(),
+        fn_args, cases = self.gen_cases_fnargs(n, combos)
+        last_df = self.runner.run_cases(cases, fn_args=fn_args,
                                         to_df=True, **case_runner_settings)
-
         self._last_df = last_df
         self.add_df(last_df, engine=engine)
         return last_df
+
+    def Crop(self,
+             name=None,
+             parent_dir=None,
+             save_fn=None,
+             batchsize=None,
+             num_batches=None):
+        """Return a Crop instance with this Sampler, from which `fn`
+        will be set, and then samples can be sown, grown, and reaped into the
+        ``Sampler.full_df``. See :class:`~xyzpy.Crop`.
+
+        Returns
+        -------
+        Crop
+        """
+        return batch.Crop(farmer=self,
+                          name=name,
+                          parent_dir=parent_dir,
+                          save_fn=save_fn,
+                          batchsize=batchsize,
+                          num_batches=num_batches)
 
     def __repr__(self):
         string = ("<xyzpy.Sampler>\n"

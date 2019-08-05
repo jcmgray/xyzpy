@@ -59,28 +59,28 @@ class TestSowerReaper:
 
         with pytest.raises(TypeError):
             c = Crop(fn=foo_add, save_fn=False, batchsize=0.5)
-            c.choose_batch_settings([('a', [1, 2])])
+            c.choose_batch_settings(combos=[('a', [1, 2])])
 
         with pytest.raises(ValueError):
             c = Crop(fn=foo_add, save_fn=False, batchsize=-1)
-            c.choose_batch_settings([('a', [1, 2])])
+            c.choose_batch_settings(combos=[('a', [1, 2])])
 
         with pytest.raises(ValueError):
             c = Crop(fn=foo_add, save_fn=False, batchsize=1, num_batches=2)
-            c.choose_batch_settings([('a', [1, 2, 3])])
+            c.choose_batch_settings(combos=[('a', [1, 2, 3])])
 
         with pytest.raises(ValueError):
             c = Crop(fn=foo_add, save_fn=False, batchsize=2, num_batches=3)
-            c.choose_batch_settings([('a', [1, 2, 3])])
+            c.choose_batch_settings(combos=[('a', [1, 2, 3])])
 
         c = Crop(fn=foo_add, save_fn=False, batchsize=1, num_batches=3)
-        c.choose_batch_settings([('a', [1, 2, 3])])
+        c.choose_batch_settings(combos=[('a', [1, 2, 3])])
 
         c = Crop(fn=foo_add, save_fn=False, batchsize=2, num_batches=2)
-        c.choose_batch_settings([('a', [1, 2, 3])])
+        c.choose_batch_settings(combos=[('a', [1, 2, 3])])
 
         c = Crop(fn=foo_add, save_fn=False, batchsize=3, num_batches=1)
-        c.choose_batch_settings([('a', [1, 2, 3])])
+        c.choose_batch_settings(combos=[('a', [1, 2, 3])])
 
         with pytest.raises(XYZError):
             grow(1)
@@ -307,8 +307,8 @@ class TestSowerReaper:
             # try creating crop from fresh
             c = Crop(name='fn', parent_dir=tdir)
             # crop's harvester should be loaded from disk
-            assert c.harvester is not None
-            assert c.harvester is not harvester
+            assert c.farmer is not None
+            assert c.farmer is not harvester
             ds = c.reap(allow_incomplete=True)
             assert isinstance(ds, xr.Dataset)
             assert ds['diff'].isnull().sum() == 1
@@ -317,8 +317,8 @@ class TestSowerReaper:
             # try creating crop from harvester
             c = harvester.Crop('fn', parent_dir=tdir)
             # crop's harvester should still be harvester
-            assert c.harvester is not None
-            assert c.harvester is harvester
+            assert c.farmer is not None
+            assert c.farmer is harvester
             ds = c.reap(allow_incomplete=True)
             assert isinstance(ds, xr.Dataset)
             assert ds['diff'].isnull().sum() == 1

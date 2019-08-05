@@ -501,8 +501,11 @@ def estimate_from_repeats(fn, *fn_args, rtol=0.02, tol_scale=1.0, get='stats',
     except KeyboardInterrupt:
         pass
 
+    finally:
+        if verbosity >= 1:
+            repeats.close()
+
     if verbosity >= 1:
-        repeats.close()
         sys.stderr.flush()
         print("<RunningStatistics(mean={:.{prec}f}, err={:.{prec}f}, "
               "count={})>".format(rs.mean, rs.err, rs.count, prec=prec))
