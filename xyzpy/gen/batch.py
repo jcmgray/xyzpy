@@ -1058,6 +1058,8 @@ _PBS_HEADER = """#!/bin/bash -l
 
 _BASE = """cd {working_directory}
 export OMP_NUM_THREADS={num_threads}
+export MKL_NUM_THREADS={num_threads}
+export OPENBLAS_NUM_THREADS={num_threads}
 tmpfile=$(mktemp .xyzpy-qsub.XXXXXXXX)
 cat <<EOF > $tmpfile
 {setup}
