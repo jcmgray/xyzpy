@@ -28,6 +28,7 @@ from .gen.case_runner import (
 from .gen.batch import (
     Crop,
     grow,
+    load_crops,
 )
 from .gen.farming import (
     Runner,

@@ -52,3 +52,5 @@ See the full demonstrations in :ref:`Examples`.
     You can reap an unfinished ``Crop`` as long as there is at least one result by passing the ``allow_incomplete=True`` option to :meth:`~xyzpy.Crop.reap`.
     Note that missing results will be represented by ``numpy.nan`` which might effect the eventual ``dtype`` of harvested results.
     To avoid this, consider also setting ``sync=False`` to avoid writing anything to disk until the full ``Crop`` is finished.
+
+You can automatically load all crops in the current directory (or a specific one) to a dictionary by calling the function :func:`xyzpy.load_crops`.

@@ -15,6 +15,7 @@ v0.3.2 (Unreleased)
 - Add :func:`xyzpy.save_merge_ds` for manually aggregating datasets to disk
 - Add ``allow_incomplete=True`` option to :meth:`xyzpy.Crop.reap` for gathering data even if the crop is not fully grown (:issue:`7` )
 - Make new :class:`~xyzpy.Crop` instances by default automatically load information from disk if they have been already prepared/sown (:issue:`7` )
+- Automatically load Crops in the current (or specified) directory with :func:`xyzpy.load_crops`.
 
 
 .. _whats-new.0.3.1:

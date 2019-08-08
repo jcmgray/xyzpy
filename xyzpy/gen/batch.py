@@ -825,6 +825,34 @@ class Crop(object):
         return self._num_results
 
 
+def load_crops(directory='.'):
+    """Automatically load all the crops found in the current directory.
+
+    Parameters
+    ----------
+    directory : str, optional
+        Which directory to load the crops from, defaults to '.' - the current.
+
+    Returns
+    -------
+    dict[str, Crop]
+        Mapping of the crop name to the Crop.
+    """
+    import os
+    import re
+
+    folders = next(os.walk(directory))[1]
+    crop_rgx = re.compile('^\.xyz-(.+)')
+
+    names = []
+    for folder in folders:
+        match = crop_rgx.match(folder)
+        if match:
+            names.append(match.groups(1)[0])
+
+    return {name: Crop(name=name) for name in names}
+
+
 class Sower(object):
     """Class for sowing a 'crop' of batched combos to then 'grow' (on any
     number of workers sharing the filesystem) and then reap.

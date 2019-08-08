@@ -12,6 +12,7 @@ from xyzpy.gen.batch import (
     Crop,
     parse_crop_details,
     grow,
+    load_crops,
 )
 
 from . import (
@@ -322,3 +323,29 @@ class TestSowerReaper:
             ds = c.reap(allow_incomplete=True)
             assert isinstance(ds, xr.Dataset)
             assert ds['diff'].isnull().sum() == 1
+
+    def test_load_crops(self):
+
+        combos = (('a', [1, 2, 3]),
+                  ('b', [10, 20, 30]),
+                  ('c', range(100, 1101, 100)))
+
+        with TemporaryDirectory() as tdir:
+
+            c1 = Crop(name='Alice', fn=foo_add, parent_dir=tdir)
+            c2 = Crop(name='Bob', fn=foo_add, parent_dir=tdir)
+
+            c1.sow_combos(combos)
+            c2.sow_combos(combos)
+
+            crops = load_crops(tdir)
+            assert 'Alice' in crops
+            assert 'Bob' in crops
+            assert len(crops) == 2
+
+            c1.grow_missing()
+            c2.grow_missing()
+
+            assert (c1.reap_combos() ==
+                    c2.reap_combos() ==
+                    combo_runner(foo_add, combos))
