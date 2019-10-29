@@ -1,38 +1,66 @@
-@import url('https://fonts.googleapis.com/css?family=Roboto+Mono')
-@import url('https://fonts.googleapis.com/css?family=Roboto');
+@import url('https://fonts.googleapis.com/css?family=Inconsolata');
+@import url('https://fonts.googleapis.com/css?family=Fira+Sans');
+@import url('https://fonts.googleapis.com/css?family=Fira+Mono');
+
+div.body {
+    max-width: 1200px;
+}
 
 code {
-    font-family: 'Roboto Mono', monospace;
+    font-family: 'Inconsolata', monospace;
     font-size: 15px;
-    line-height: 24px;
+    line-height: 25px;
+    color: #dd3636;
+    background-color: #fbe9e9;
 }
 
 code, kbd, pre, samp {
-    font-family: 'Roboto Mono', monospace;
-    font-size: 15px;
-    line-height: 24px;
+    font-family: 'Inconsolata', monospace;
+    font-size: 17px;
+    line-height: 25px;
 }
 
 blockquote {
-    font-size: 16px;
+    font-family: 'Fira Sans', sans-serif;
+    font-size: 17px;
+    line-height: 31px;
 }
 
 body {
-    font-family: 'Roboto', sans-serif;
-    font-size: 16px;
-    line-height: 24px;
+    font-family: 'Fira Sans', sans-serif;
+    font-size: 17px;
+    line-height: 31px;
 }
 
-
-h2 {
-    font-size: 28px;
-    font-weight: bold;
+:root{
+    --headercolor: rgb(100, 120, 130);
 }
-
 
 h1 {
-    font-size: 46px;
+    font-family: 'Fira Mono', monospace;
+    font-size: 45px;
     font-weight: bold;
+    line-height: 50px;
+    margin-top: 40px;
+    color: var(--headercolor);
+}
+
+h2 {
+    font-family: 'Fira Mono', monospace;
+    font-size: 35px;
+    font-weight: bold;
+    line-height: 50px;
+    margin-top: 40px;
+    color: var(--headercolor);
+}
+
+h3 {
+    font-family: 'Fira Mono', monospace;
+    font-size: 25px;
+    font-weight: bold;
+    line-height: 50px;
+    margin-top: 40px;
+    color: var(--headercolor);
 }
 
 
