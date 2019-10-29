@@ -118,6 +118,7 @@ __all__ = [
     "fill_missing_cases",
     "Crop",
     "grow",
+    "load_crops",
     "cache_to_disk",
     "save_ds",
     "load_ds",
