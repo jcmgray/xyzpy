@@ -1256,7 +1256,7 @@ def gen_qsub_script(
     script += _BASE_QSUB_SCRIPT_END
     script = script.format(**opts)
 
-    if scheduler == 'pbs' and len(batch_ids) == 1:
+    if (scheduler == 'pbs') and batch_ids and len(batch_ids) == 1:
         # PBS can't handle arrays jobs of size 1...
         script = (script.replace('#PBS -J 1-1\n', "")
                         .replace("$PBS_ARRAY_INDEX", '1'))
