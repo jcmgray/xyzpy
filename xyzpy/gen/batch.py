@@ -1088,6 +1088,7 @@ _BASE = """cd {working_directory}
 export OMP_NUM_THREADS={num_threads}
 export MKL_NUM_THREADS={num_threads}
 export OPENBLAS_NUM_THREADS={num_threads}
+{shell_setup}
 tmpfile=$(mktemp .xyzpy-qsub.XXXXXXXX)
 cat <<EOF > $tmpfile
 {setup}
@@ -1128,6 +1129,7 @@ def gen_qsub_script(
     num_procs=1,
     launcher='python',
     setup="#",
+    shell_setup="",
     mpi=False,
     temp_gigabytes=1,
     output_directory=None,
@@ -1160,6 +1162,9 @@ def gen_qsub_script(
         Python script to run before growing, for things that shouldnt't be put
         in the crop function itself, e.g. one-time imports with side-effects
         like: ``"import tensorflow as tf; tf.enable_eager_execution()``".
+    shell_setup : str, optional
+        Commands to be run by the shell before the python script is executed.
+        E.g. ``conda activate my_env``.
     mpi : bool, optional
         Request MPI processes not threaded processes.
     temp_gigabytes : int, optional
@@ -1207,6 +1212,7 @@ def gen_qsub_script(
         'run_start': 1,
         'launcher': launcher,
         'setup': setup,
+        'shell_setup': shell_setup,
         'pe': 'mpi' if mpi else 'smp',
         'temp_gigabytes': temp_gigabytes,
         'output_directory': output_directory,
@@ -1273,6 +1279,7 @@ def qsub_grow(
     num_procs=1,
     launcher='python',
     setup="#",
+    shell_setup="",
     mpi=False,
     temp_gigabytes=1,
     output_directory=None,
@@ -1305,6 +1312,9 @@ def qsub_grow(
         Python script to run before growing, for things that shouldnt't be put
         in the crop function itself, e.g. one-time imports with side-effects
         like: ``"import tensorflow as tf; tf.enable_eager_execution()``".
+    shell_setup : str, optional
+        Commands to be run by the shell before the python script is executed.
+        E.g. ``conda activate my_env``.
     mpi : bool, optional
         Request MPI processes not threaded processes.
     temp_gigabytes : int, optional
@@ -1336,6 +1346,7 @@ def qsub_grow(
         num_procs=num_procs,
         launcher=launcher,
         setup=setup,
+        shell_setup=shell_setup,
         mpi=mpi,
         extra_resources=extra_resources,
         debugging=debugging,
