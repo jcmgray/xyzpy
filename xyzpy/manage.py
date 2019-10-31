@@ -29,48 +29,66 @@ def cache_to_disk(fn=None, *, cachedir=_DEFAULT_FN_CACHE_PATH, **kwargs):
         return cache_to_disk_decorator
 
 
-def _auto_add_extension(file_name, engine):
+_engine_extensions = {
+    'h5netcdf': '.h5',
+    'netcdf4': '.nc',
+    'joblib': '.dmp',
+    'zarr': '.zarr',
+}
+
+
+def auto_add_extension(file_name, engine):
     """Make sure a file name has an extension that reflects its
     file type.
     """
-    if (".h5" not in file_name) and (".nc" not in file_name):
-        extension = ".h5" if engine == "h5netcdf" else ".nc"
+    if not any(ext in file_name for ext in _engine_extensions.values()):
+        extension = _engine_extensions[engine]
         file_name += extension
     return file_name
 
 
-def save_ds(ds, file_name, engine="h5netcdf"):
+def save_ds(ds, file_name, engine="h5netcdf", **kwargs):
     """Saves a xarray dataset.
 
     Parameters
     ----------
-        ds: Dataset to save
-        file_name: name of file to save to
-        engine: engine used to save file
+    ds : xarray.Dataset
+        The dataset to save.
+    file_name : str
+        Name of the file to save to.
+    engine : {'h5netcdf', 'netcdf4', 'joblib', 'zarr'}, optional
+        Engine used to save file with.
 
     Returns
     -------
         None
     """
-    file_name = _auto_add_extension(file_name, engine)
+    file_name = auto_add_extension(file_name, engine)
 
     # Parse out 'bad' netcdf types (only attributes -> values not so important)
-    for attr, val in ds.attrs.items():
-        if val is None:
-            ds.attrs[attr] = "None"
-        if val is True:
-            ds.attrs[attr] = "True"
-        if val is False:
-            ds.attrs[attr] = "False"
+    if engine not in {'joblib', 'zarr'}:
+        for attr, val in ds.attrs.items():
+            if val is None:
+                ds.attrs[attr] = "None"
+            if val is True:
+                ds.attrs[attr] = "True"
+            if val is False:
+                ds.attrs[attr] = "False"
 
-    ds.to_netcdf(file_name, engine=engine)
+    if engine == 'joblib':
+        joblib.dump(ds, file_name, **kwargs)
+    elif engine == 'zarr':
+        ds.to_zarr(file_name, **kwargs)
+    else:
+        ds.to_netcdf(file_name, engine=engine, **kwargs)
 
 
 def load_ds(file_name,
             engine="h5netcdf",
             load_to_mem=None,
             create_new=False,
-            chunks=None):
+            chunks=None,
+            **kwargs):
     """Loads a xarray dataset. Basically ``xarray.open_dataset`` with some
     different defaults and convenient behaviour.
 
@@ -78,7 +96,7 @@ def load_ds(file_name,
     ----------
     file_name : str
         Name of file to open.
-    engine : str, optional
+    engine : {'h5netcdf', 'netcdf4', 'joblib', 'zarr'}, optional
         Engine used to load file.
     load_to_mem : bool, optional
         Ince opened, load from disk into memory. Defaults to ``True`` if
@@ -95,7 +113,13 @@ def load_ds(file_name,
     ds : xarray.Dataset
         Loaded Dataset.
     """
-    file_name = _auto_add_extension(file_name, engine)
+    file_name = auto_add_extension(file_name, engine)
+
+    if not os.path.exists(file_name) and create_new:
+        return xr.Dataset()
+
+    if engine == 'joblib':
+        return joblib.load(file_name, **kwargs)
 
     if (load_to_mem is None) and (chunks is None):
         load_to_mem = True
@@ -105,33 +129,29 @@ def load_ds(file_name,
         else:
             load_to_mem = False
 
-    try:
-        try:
-            ds = xr.open_dataset(file_name,
-                                 engine=engine,
-                                 chunks=chunks)
+    if engine == 'zarr':
+        ds = xr.open_zarr(file_name, chunks=chunks, **kwargs)
 
+    else:
+        opts = dict(engine=engine, chunks=chunks, **kwargs)
+
+        try:
+            ds = xr.open_dataset(file_name, **opts)
         except AttributeError as e1:
             if "object has no attribute" in str(e1) and engine == 'h5netcdf':
-                ds = xr.open_dataset(file_name,
-                                     engine="netcdf4",
-                                     chunks=chunks)
+                opts['engine'] = 'netcdf4'
+                ds = xr.open_dataset(file_name, **opts)
             else:
                 raise e1
 
-        if load_to_mem:
-            ds.load()
-            ds.close()
+    if load_to_mem:
+        ds.load()
+        ds.close()
 
-    except (RuntimeError, OSError) as e2:
-        if "o such" in str(e2) and create_new:
-            ds = xr.Dataset()
-        else:
-            raise e2
     return ds
 
 
-def save_merge_ds(ds, fname, overwrite=None):
+def save_merge_ds(ds, fname, overwrite=None, **kwargs):
     """Save dataset ``ds``, but check for an existing dataset with that name
     first, and if it exists, merge the two before saving.
 
@@ -164,7 +184,7 @@ def save_merge_ds(ds, fname, overwrite=None):
         new_ds = xr.merge([old_ds, ds])
 
     # write to disk
-    save_ds(new_ds, fname)
+    save_ds(new_ds, fname, **kwargs)
 
 
 def trimna(obj):

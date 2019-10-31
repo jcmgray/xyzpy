@@ -17,6 +17,7 @@ v0.3.2 (Unreleased)
 - Add ``allow_incomplete=True`` option to :meth:`xyzpy.Crop.reap` for gathering data even if the crop is not fully grown (:issue:`7` )
 - Make new :class:`~xyzpy.Crop` instances by default automatically load information from disk if they have been already prepared/sown (:issue:`7` )
 - Automatically load Crops in the current (or specified) directory with :func:`xyzpy.load_crops`.
+- Add `'joblib'` and `'zarr'` as possible engines for saving and loading datasets
 
 
 .. _whats-new.0.3.1:

@@ -66,6 +66,8 @@ class TestSaveAndLoad:
     @mark.parametrize(("engine_save, engine_load"),
                       [('h5netcdf', 'h5netcdf'),
                        ('h5netcdf', 'netcdf4'),
+                       ('zarr', 'zarr'),
+                       ('joblib', 'joblib'),
                        param('netcdf4', 'h5netcdf', marks=mark.xfail),
                        param('netcdf4', 'netcdf4', marks=mark.xfail)])
     def test_io_only_real(self, ds_real, engine_save, engine_load):
@@ -77,6 +79,8 @@ class TestSaveAndLoad:
 
     @mark.parametrize(("engine_save, engine_load"),
                       [('h5netcdf', 'h5netcdf'),
+                       ('zarr', 'zarr'),
+                       ('joblib', 'joblib'),
                        param('h5netcdf', 'netcdf4', marks=mark.xfail),
                        param('netcdf4', 'h5netcdf', marks=mark.xfail),
                        param('netcdf4', 'netcdf4', marks=mark.xfail)])
@@ -87,8 +91,7 @@ class TestSaveAndLoad:
             assert ds1.identical(ds2)
 
     @mark.parametrize(("engine_load"),
-                      ['h5netcdf',
-                       'netcdf4'])
+                      ['h5netcdf', 'netcdf4'])
     def test_dask_load(self, ds_real, engine_load):
         with tempfile.TemporaryDirectory() as tmpdir:
             save_ds(ds_real, os.path.join(tmpdir, "test.nc"))

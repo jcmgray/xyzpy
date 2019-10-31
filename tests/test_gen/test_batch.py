@@ -181,10 +181,9 @@ class TestSowerReaper:
             crop = Crop(fn=foo3_scalar, parent_dir=tdir, batchsize=5)
             crop.sow_combos(combos)
 
-            # check on disk repr works and gen qsub_script works
+            # check on disk repr works
             print(crop)
             repr(crop)
-            assert crop.gen_qsub_script() is not None
 
             # grow seeds
             for i in range(1, 6):
@@ -349,3 +348,33 @@ class TestSowerReaper:
             assert (c1.reap_combos() ==
                     c2.reap_combos() ==
                     combo_runner(foo_add, combos))
+
+    @pytest.mark.parametrize("scheduler", ['sge', 'pbs'])
+    def test_gen_qsub_script(self, scheduler):
+        combos = [
+            ('a', [10, 20, 30]),
+            ('b', [4, 5, 6, 7]),
+        ]
+
+        with TemporaryDirectory() as tdir:
+
+            # sow seeds
+            crop = Crop(fn=foo_add, parent_dir=tdir)
+            crop.sow_combos(combos, constants={'c': True})
+
+            # test script to grow all
+            s1 = crop.gen_qsub_script(scheduler=scheduler, minutes=20)
+            print(s1)
+
+            # test script to grow specified
+            s2 = crop.gen_qsub_script([0, 1], scheduler=scheduler)
+            print(s2)
+
+            # test script to grow missing
+            crop.grow((1, 3, 5))
+            s3 = crop.gen_qsub_script(scheduler=scheduler)
+            print(s3)
+
+            assert s1 != s2
+            assert s1 != s3
+            assert s2 != s3

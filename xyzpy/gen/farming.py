@@ -440,7 +440,10 @@ class Harvester(object):
 
         if new_full_ds is not None:
             if os.path.exists(self.data_name):
-                os.remove(self.data_name)
+                if engine == 'zarr':
+                    shutil.rmtree(self.data_name)
+                else:
+                    os.remove(self.data_name)
             self._full_ds = new_full_ds
 
         save_ds(self._full_ds, self.data_name, engine=engine)
@@ -448,12 +451,19 @@ class Harvester(object):
     def delete_ds(self, backup=False):
         """Delete the on-disk dataset, optionally backing it up first.
         """
+        from ..manage import auto_add_extension
+
+        file_name = auto_add_extension(self.data_name, self.engine)
+
         if backup:
             import datetime
             ts = '{:%Y%m%d-%H%M%S}'.format(datetime.datetime.now())
-            shutil.copy(self.data_name, self.data_name + '.BAK-{}'.format(ts))
+            shutil.copy(file_name, file_name + '.BAK-{}'.format(ts))
 
-        os.remove(self.data_name)
+        if self.engine == 'zarr':
+            shutil.rmtree(file_name)
+        else:
+            os.remove(file_name)
 
     def add_ds(self, new_ds,
                sync=True,
@@ -494,7 +504,7 @@ class Harvester(object):
             new_ds = new_ds.chunk(chunks)
 
         # only sync with disk if data name present
-        sync_with_disk = sync and self.data_name is not None
+        sync_with_disk = sync and (self.data_name is not None)
         if sync_with_disk:
             self.load_full_ds(chunks=chunks, engine=engine)
 
@@ -747,7 +757,7 @@ class Sampler:
             new_df = pd.DataFrame(new_df)
 
         # only sync with disk if data name present
-        sync_with_disk = sync and self.data_name is not None
+        sync_with_disk = sync and (self.data_name is not None)
         if sync_with_disk:
             self.load_full_df(engine=engine)
 

@@ -310,14 +310,15 @@ class TestHarvester:
             h.harvest_cases([(1, 3)], overwrite=True)
             assert h.full_ds.equals(fn3_fba_ds)
 
-    def test_harvest_cases_merge_dask(self, fn3_fba_runner, fn3_fba_ds):
-
+    @pytest.mark.parametrize('engine', ['h5netcdf', 'netcdf4', 'zarr'])
+    def test_harvest_cases_merge_dask(self, fn3_fba_runner,
+                                      fn3_fba_ds, engine):
         import dask
         dask.config.set(scheduler='threads')
 
         with tempfile.TemporaryDirectory() as tmpdir:
             fl_pth = os.path.join(tmpdir, 'test.h5')
-            h = Harvester(fn3_fba_runner, fl_pth, engine='netcdf4')
+            h = Harvester(fn3_fba_runner, fl_pth, engine=engine)
             h.harvest_cases([(1, 3), (2, 4)], chunks=1)
             h.harvest_cases([(1, 4), (2, 3)], chunks=1)
             assert not h.last_ds.identical(fn3_fba_ds)

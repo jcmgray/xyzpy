@@ -684,7 +684,10 @@ class Crop(object):
 
         ds = self.reap_runner(harvester.runner, wait=wait, clean_up=clean_up,
                               allow_incomplete=allow_incomplete)
-        harvester.add_ds(ds, sync=sync, overwrite=overwrite)
+
+        if sync:
+            harvester.add_ds(ds, sync=sync, overwrite=overwrite)
+
         return ds
 
     def reap_samples(self, sampler, wait=False, sync=True,
@@ -695,8 +698,10 @@ class Crop(object):
         df = self.reap_runner(sampler.runner, wait=wait, clean_up=clean_up,
                               allow_incomplete=allow_incomplete)
 
-        sampler._last_df = df
-        sampler.add_df(df, sync=sync)
+        if sync:
+            sampler._last_df = df
+            sampler.add_df(df, sync=sync)
+
         return df
 
     def reap(self, wait=False, sync=True, overwrite=None,
@@ -710,8 +715,8 @@ class Crop(object):
             Whether to wait for results to appear. If false (default) all
             results need to be in place before the reap.
         sync : bool, optional
-            Immediately sync the new dataset with the on-disk full dataset
-            if a harvester is used.
+            Immediately sync the new dataset with the on-disk full dataset or
+            dataframe if a harvester or sampler is used.
         overwrite : bool, optional
             How to compare data when syncing to on-disk dataset.
             If ``None``, (default) merge as long as no conflicts.
