@@ -23,5 +23,6 @@ dependencies:
   - coverage
   - coveralls
   - codecov
+  - zarr
   - pip:
     - codeclimate-test-reporter

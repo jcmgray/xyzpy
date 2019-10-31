@@ -31,7 +31,7 @@ else
   conda update -q conda
   conda info -a
   source activate $ENV
-  conda update -q --file $DIR/requirements-py3.yml
+  conda update -q --file $DIR/requirements-py3.yml python=$TRAVIS_PYTHON_VERSION
 
   # update non-conda packages
   pip install -U codeclimate-test-reporter
