@@ -3,3 +3,5 @@ include xyzpy/_version.py
 include README.rst
 include setup.cfg
 include LICENSE
+graft tests
+graft deps
