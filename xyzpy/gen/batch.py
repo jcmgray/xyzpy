@@ -1082,7 +1082,7 @@ mkdir -p {output_directory}
 """
 
 _PBS_HEADER = """#!/bin/bash -l
-#PBS -lselect=1:ncpus={num_procs}:mem={gigabytes}gb
+#PBS -lselect={num_nodes}:ncpus={num_procs}:mem={gigabytes}gb
 #PBS -lwalltime={hours:02}:{minutes:02}:{seconds:02}
 {extra_resources}
 #PBS -N {name}
@@ -1132,6 +1132,8 @@ def gen_qsub_script(
     seconds=None,
     gigabytes=2,
     num_procs=1,
+    num_threads=None,
+    num_nodes=1,
     launcher='python',
     setup="#",
     shell_setup="",
@@ -1206,6 +1208,12 @@ def gen_qsub_script(
     else:
         extra_resources = "#$ -l {}".format(extra_resources)
 
+    if num_threads is None:
+        if mpi:
+            num_threads = 1
+        else:
+            num_threads = num_procs
+
     opts = {
         'hours': hours,
         'minutes': minutes,
@@ -1213,7 +1221,8 @@ def gen_qsub_script(
         'gigabytes': gigabytes,
         'name': crop.name,
         'num_procs': num_procs,
-        'num_threads': 1 if mpi else num_procs,
+        'num_threads': num_threads,
+        'num_nodes': num_nodes,
         'run_start': 1,
         'launcher': launcher,
         'setup': setup,
@@ -1248,6 +1257,7 @@ def gen_qsub_script(
 
     # grow all ids
     elif crop.num_results == 0:
+        batch_ids = tuple(range(crop.num_batches))
         if scheduler == 'sge':
             script += _QSUB_SGE_GROW_ALL_SCRIPT
         elif scheduler == 'pbs':
@@ -1267,7 +1277,7 @@ def gen_qsub_script(
     script += _BASE_QSUB_SCRIPT_END
     script = script.format(**opts)
 
-    if (scheduler == 'pbs') and batch_ids and len(batch_ids) == 1:
+    if (scheduler == 'pbs') and len(batch_ids) == 1:
         # PBS can't handle arrays jobs of size 1...
         script = (script.replace('#PBS -J 1-1\n', "")
                         .replace("$PBS_ARRAY_INDEX", '1'))
@@ -1282,6 +1292,8 @@ def qsub_grow(
     seconds=None,
     gigabytes=2,
     num_procs=1,
+    num_threads=None,
+    num_nodes=1,
     launcher='python',
     setup="#",
     shell_setup="",
@@ -1349,6 +1361,8 @@ def qsub_grow(
         temp_gigabytes=temp_gigabytes,
         output_directory=output_directory,
         num_procs=num_procs,
+        num_threads=num_threads,
+        num_nodes=num_nodes,
         launcher=launcher,
         setup=setup,
         shell_setup=shell_setup,
