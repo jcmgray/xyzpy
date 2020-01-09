@@ -1,4 +1,5 @@
 import os
+import pathlib
 import shutil
 from itertools import chain
 from time import sleep
@@ -1089,7 +1090,8 @@ _PBS_HEADER = """#!/bin/bash -l
 #PBS -J {run_start}-{run_stop}
 """
 
-_BASE = """export OMP_NUM_THREADS={num_threads}
+_BASE = """cd {working_directory}
+export OMP_NUM_THREADS={num_threads}
 export MKL_NUM_THREADS={num_threads}
 export OPENBLAS_NUM_THREADS={num_threads}
 {shell_setup}
@@ -1213,13 +1215,15 @@ def gen_qsub_script(
         else:
             num_threads = num_procs
 
+    full_parent_dir = str(pathlib.Path(crop.parent_dir).expanduser().resolve()) # get absolute path
+
     opts = {
         'hours': hours,
         'minutes': minutes,
         'seconds': seconds,
         'gigabytes': gigabytes,
         'name': crop.name,
-        'parent_dir': os.path.abspath(crop.parent_dir),
+        'parent_dir': full_parent_dir,
         'num_procs': num_procs,
         'num_threads': num_threads,
         'num_nodes': num_nodes,
@@ -1230,7 +1234,7 @@ def gen_qsub_script(
         'pe': 'mpi' if mpi else 'smp',
         'temp_gigabytes': temp_gigabytes,
         'output_directory': output_directory,
-        'working_directory': crop.parent_dir,
+        'working_directory': full_parent_dir,
         'extra_resources': extra_resources,
         'debugging': debugging,
     }
