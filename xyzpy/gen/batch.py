@@ -1089,8 +1089,7 @@ _PBS_HEADER = """#!/bin/bash -l
 #PBS -J {run_start}-{run_stop}
 """
 
-_BASE = """cd {working_directory}
-export OMP_NUM_THREADS={num_threads}
+_BASE = """export OMP_NUM_THREADS={num_threads}
 export MKL_NUM_THREADS={num_threads}
 export OPENBLAS_NUM_THREADS={num_threads}
 {shell_setup}
@@ -1098,7 +1097,7 @@ tmpfile=$(mktemp .xyzpy-qsub.XXXXXXXX)
 cat <<EOF > $tmpfile
 {setup}
 from xyzpy.gen.batch import grow, Crop
-crop = Crop(name='{name}')
+crop = Crop(name='{name}', parent_dir='{parent_dir}')
 """
 
 _QSUB_SGE_GROW_ALL_SCRIPT = (
@@ -1220,6 +1219,7 @@ def gen_qsub_script(
         'seconds': seconds,
         'gigabytes': gigabytes,
         'name': crop.name,
+        'parent_dir': os.path.abspath(crop.parent_dir),
         'num_procs': num_procs,
         'num_threads': num_threads,
         'num_nodes': num_nodes,
