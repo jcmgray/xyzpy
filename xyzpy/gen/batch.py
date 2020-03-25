@@ -1206,6 +1206,12 @@ def gen_qsub_script(
     -------
     str
     """
+
+    scheduler = scheduler.lower()  # be case-insensitive for scheduler
+
+    if scheduler not in {'sge', 'pbs', 'slurm'}:
+        raise ValueError
+
     if hours is minutes is seconds is None:
         hours, minutes, seconds = 1, 0, 0
     else:
@@ -1224,7 +1230,7 @@ def gen_qsub_script(
         extra_resources = ""
     elif scheduler == 'slurm':
         extra_resources = '#SBATCH --' + \
-        '\n#SBATCH --'.join(extra_resources.split(','))
+            '\n#SBATCH --'.join(extra_resources.split(','))
     else:
         extra_resources = "#$ -l {}".format(extra_resources)
 
@@ -1258,9 +1264,6 @@ def gen_qsub_script(
         'extra_resources': extra_resources,
         'debugging': debugging,
     }
-
-    if scheduler not in {'sge', 'pbs', 'slurm'}:
-        raise ValueError
 
     if scheduler == 'sge':
         script = _SGE_HEADER
