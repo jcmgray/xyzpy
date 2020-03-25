@@ -1090,6 +1090,16 @@ _PBS_HEADER = """#!/bin/bash -l
 #PBS -J {run_start}-{run_stop}
 """
 
+_SLURM_HEADER = """#!/bin/bash -l
+#SBATCH --nodes={num_nodes}
+#SBATCH --mem={gigabytes}gb
+#SBATCH --cpus-per-task={num_procs}
+#SBATCH --time={hours:02}:{minutes:02}:{seconds:02}
+{extra_resources}
+#SBATCH --job-name={name}
+#SBATCH --array={run_start}-{run_stop}
+"""
+
 _BASE = """cd {working_directory}
 export OMP_NUM_THREADS={num_threads}
 export MKL_NUM_THREADS={num_threads}
@@ -1110,15 +1120,21 @@ _QSUB_PBS_GROW_ALL_SCRIPT = (
     "grow($PBS_ARRAY_INDEX, crop=crop, debugging={debugging})\n"
 )
 
+_QSUB_SLURM_GROW_ALL_SCRIPT = (
+    "grow($SLURM_ARRAY_TASK_ID, crop=crop, debugging={debugging})\n"
+)
+
 _QSUB_SGE_GROW_PARTIAL_SCRIPT = """batch_ids = {batch_ids}
 grow(batch_ids[$SGE_TASK_ID - 1], crop=crop, debugging={debugging})
 """
-
 
 _QSUB_PBS_GROW_PARTIAL_SCRIPT = """batch_ids = {batch_ids}
 grow(batch_ids[$PBS_ARRAY_INDEX - 1], crop=crop, debugging={debugging})
 """
 
+_QSUB_SLURM_GROW_PARTIAL_SCRIPT = """batch_ids = {batch_ids}
+grow(batch_ids[$SLURM_ARRAY_TASK_ID - 1], crop=crop, debugging={debugging})
+"""
 
 _BASE_QSUB_SCRIPT_END = """EOF
 {launcher} $tmpfile
@@ -1183,8 +1199,8 @@ def gen_qsub_script(
         Extra "#$ -l" resources, e.g. 'gpu=1'
     debugging : bool, optional
         Set the python log level to debugging.
-    scheduler : {'sge', 'pbs'}, optional
-        Whether to use a SGE or PBS submission script template.
+    scheduler : {'sge', 'pbs', 'slurm'}, optional
+        Whether to use a SGE, PBS or slurm submission script template.
 
     Returns
     -------
@@ -1206,6 +1222,9 @@ def gen_qsub_script(
 
     if extra_resources is None:
         extra_resources = ""
+    elif scheduler == 'slurm':
+        extra_resources = '#SBATCH --' + \
+        '\n#SBATCH --'.join(extra_resources.split(','))
     else:
         extra_resources = "#$ -l {}".format(extra_resources)
 
@@ -1215,7 +1234,8 @@ def gen_qsub_script(
         else:
             num_threads = num_procs
 
-    full_parent_dir = str(pathlib.Path(crop.parent_dir).expanduser().resolve()) # get absolute path
+    # get absolute path
+    full_parent_dir = str(pathlib.Path(crop.parent_dir).expanduser().resolve())
 
     opts = {
         'hours': hours,
@@ -1239,13 +1259,15 @@ def gen_qsub_script(
         'debugging': debugging,
     }
 
-    if scheduler not in {'sge', 'pbs'}:
+    if scheduler not in {'sge', 'pbs', 'slurm'}:
         raise ValueError
 
     if scheduler == 'sge':
         script = _SGE_HEADER
     elif scheduler == 'pbs':
         script = _PBS_HEADER
+    elif scheduler == 'slurm':
+        script = _SLURM_HEADER
 
     script += _BASE
 
@@ -1255,6 +1277,8 @@ def gen_qsub_script(
             script += _QSUB_SGE_GROW_PARTIAL_SCRIPT
         elif scheduler == 'pbs':
             script += _QSUB_PBS_GROW_PARTIAL_SCRIPT
+        elif scheduler == 'slurm':
+            script += _QSUB_SLURM_GROW_PARTIAL_SCRIPT
         batch_ids = tuple(batch_ids)
         opts['run_stop'] = len(batch_ids)
         opts['batch_ids'] = batch_ids
@@ -1266,6 +1290,8 @@ def gen_qsub_script(
             script += _QSUB_SGE_GROW_ALL_SCRIPT
         elif scheduler == 'pbs':
             script += _QSUB_PBS_GROW_ALL_SCRIPT
+        elif scheduler == 'slurm':
+            script += _QSUB_SLURM_GROW_ALL_SCRIPT
         opts['run_stop'] = crop.num_batches
 
     # grow missing ids only
@@ -1274,6 +1300,8 @@ def gen_qsub_script(
             script += _QSUB_SGE_GROW_PARTIAL_SCRIPT
         elif scheduler == 'pbs':
             script += _QSUB_PBS_GROW_PARTIAL_SCRIPT
+        elif scheduler == 'slurm':
+            script += _QSUB_SLURM_GROW_PARTIAL_SCRIPT
         batch_ids = crop.missing_results()
         opts['run_stop'] = len(batch_ids)
         opts['batch_ids'] = batch_ids
@@ -1381,7 +1409,10 @@ def qsub_grow(
     with open(script_file, mode='w') as f:
         f.write(script)
 
-    subprocess.run(['qsub', script_file])
+    if scheduler in {'sge', 'pbs'}:
+        subprocess.run(['qsub', script_file])
+    elif scheduler == 'slurm':
+        subprocess.run(['sbatch', script_file])
 
     os.remove(script_file)
 
