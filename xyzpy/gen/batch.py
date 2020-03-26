@@ -8,6 +8,8 @@ import warnings
 import pickle
 import copy
 import math
+import functools
+import warnings
 
 import joblib
 from joblib.externals import cloudpickle
@@ -1112,38 +1114,38 @@ from xyzpy.gen.batch import grow, Crop
 crop = Crop(name='{name}', parent_dir='{parent_dir}')
 """
 
-_QSUB_SGE_GROW_ALL_SCRIPT = (
+_CLUSTER_SGE_GROW_ALL_SCRIPT = (
     "grow($SGE_TASK_ID, crop=crop, debugging={debugging})\n"
 )
 
-_QSUB_PBS_GROW_ALL_SCRIPT = (
+_CLUSTER_PBS_GROW_ALL_SCRIPT = (
     "grow($PBS_ARRAY_INDEX, crop=crop, debugging={debugging})\n"
 )
 
-_QSUB_SLURM_GROW_ALL_SCRIPT = (
+_CLUSTER_SLURM_GROW_ALL_SCRIPT = (
     "grow($SLURM_ARRAY_TASK_ID, crop=crop, debugging={debugging})\n"
 )
 
-_QSUB_SGE_GROW_PARTIAL_SCRIPT = """batch_ids = {batch_ids}
+_CLUSTER_SGE_GROW_PARTIAL_SCRIPT = """batch_ids = {batch_ids}
 grow(batch_ids[$SGE_TASK_ID - 1], crop=crop, debugging={debugging})
 """
 
-_QSUB_PBS_GROW_PARTIAL_SCRIPT = """batch_ids = {batch_ids}
+_CLUSTER_PBS_GROW_PARTIAL_SCRIPT = """batch_ids = {batch_ids}
 grow(batch_ids[$PBS_ARRAY_INDEX - 1], crop=crop, debugging={debugging})
 """
 
-_QSUB_SLURM_GROW_PARTIAL_SCRIPT = """batch_ids = {batch_ids}
+_CLUSTER_SLURM_GROW_PARTIAL_SCRIPT = """batch_ids = {batch_ids}
 grow(batch_ids[$SLURM_ARRAY_TASK_ID - 1], crop=crop, debugging={debugging})
 """
 
-_BASE_QSUB_SCRIPT_END = """EOF
+_BASE_CLUSTER_SCRIPT_END = """EOF
 {launcher} $tmpfile
 rm $tmpfile
 """
 
 
-def gen_qsub_script(
-    crop, batch_ids=None, *,
+def gen_cluster_script(
+    crop, scheduler, batch_ids=None, *,
     hours=None,
     minutes=None,
     seconds=None,
@@ -1159,14 +1161,15 @@ def gen_qsub_script(
     output_directory=None,
     extra_resources=None,
     debugging=False,
-    scheduler='sge',
 ):
-    """Generate a qsub script to grow a Crop.
+    """Generate a cluster script to grow a Crop.
 
     Parameters
     ----------
     crop : Crop
         The crop to grow.
+    scheduler : {'sge', 'pbs', 'slurm'}
+        Whether to use a SGE, PBS or slurm submission script template.
     batch_ids : int or tuple[int]
         Which batch numbers to grow, defaults to all missing batches.
     hours : int
@@ -1199,8 +1202,6 @@ def gen_qsub_script(
         Extra "#$ -l" resources, e.g. 'gpu=1'
     debugging : bool, optional
         Set the python log level to debugging.
-    scheduler : {'sge', 'pbs', 'slurm'}, optional
-        Whether to use a SGE, PBS or slurm submission script template.
 
     Returns
     -------
@@ -1210,7 +1211,7 @@ def gen_qsub_script(
     scheduler = scheduler.lower()  # be case-insensitive for scheduler
 
     if scheduler not in {'sge', 'pbs', 'slurm'}:
-        raise ValueError
+        raise ValueError("scheduler must be one of 'sge', 'pbs', or 'slurm'")
 
     if hours is minutes is seconds is None:
         hours, minutes, seconds = 1, 0, 0
@@ -1277,11 +1278,11 @@ def gen_qsub_script(
     # grow specific ids
     if batch_ids is not None:
         if scheduler == 'sge':
-            script += _QSUB_SGE_GROW_PARTIAL_SCRIPT
+            script += _CLUSTER_SGE_GROW_PARTIAL_SCRIPT
         elif scheduler == 'pbs':
-            script += _QSUB_PBS_GROW_PARTIAL_SCRIPT
+            script += _CLUSTER_PBS_GROW_PARTIAL_SCRIPT
         elif scheduler == 'slurm':
-            script += _QSUB_SLURM_GROW_PARTIAL_SCRIPT
+            script += _CLUSTER_SLURM_GROW_PARTIAL_SCRIPT
         batch_ids = tuple(batch_ids)
         opts['run_stop'] = len(batch_ids)
         opts['batch_ids'] = batch_ids
@@ -1290,26 +1291,26 @@ def gen_qsub_script(
     elif crop.num_results == 0:
         batch_ids = tuple(range(crop.num_batches))
         if scheduler == 'sge':
-            script += _QSUB_SGE_GROW_ALL_SCRIPT
+            script += _CLUSTER_SGE_GROW_ALL_SCRIPT
         elif scheduler == 'pbs':
-            script += _QSUB_PBS_GROW_ALL_SCRIPT
+            script += _CLUSTER_PBS_GROW_ALL_SCRIPT
         elif scheduler == 'slurm':
-            script += _QSUB_SLURM_GROW_ALL_SCRIPT
+            script += _CLUSTER_SLURM_GROW_ALL_SCRIPT
         opts['run_stop'] = crop.num_batches
 
     # grow missing ids only
     else:
         if scheduler == 'sge':
-            script += _QSUB_SGE_GROW_PARTIAL_SCRIPT
+            script += _CLUSTER_SGE_GROW_PARTIAL_SCRIPT
         elif scheduler == 'pbs':
-            script += _QSUB_PBS_GROW_PARTIAL_SCRIPT
+            script += _CLUSTER_PBS_GROW_PARTIAL_SCRIPT
         elif scheduler == 'slurm':
-            script += _QSUB_SLURM_GROW_PARTIAL_SCRIPT
+            script += _CLUSTER_SLURM_GROW_PARTIAL_SCRIPT
         batch_ids = crop.missing_results()
         opts['run_stop'] = len(batch_ids)
         opts['batch_ids'] = batch_ids
 
-    script += _BASE_QSUB_SCRIPT_END
+    script += _BASE_CLUSTER_SCRIPT_END
     script = script.format(**opts)
 
     if (scheduler == 'pbs') and len(batch_ids) == 1:
@@ -1320,8 +1321,8 @@ def gen_qsub_script(
     return script
 
 
-def qsub_grow(
-    crop, batch_ids=None, *,
+def grow_cluster(
+    crop, scheduler, batch_ids=None, *,
     hours=None,
     minutes=None,
     seconds=None,
@@ -1337,14 +1338,16 @@ def qsub_grow(
     output_directory=None,
     extra_resources=None,
     debugging=False,
-    scheduler='sge',
 ):  # pragma: no cover
-    """Automagically submit SGE jobs to grow all missing results.
+    """Automagically submit SGE, PBS, or slurm jobs to grow all missing
+    results.
 
     Parameters
     ----------
     crop : Crop
         The crop to grow.
+    scheduler : {'sge', 'pbs', 'slurm'}
+        Whether to use a SGE, PBS or slurm submission script template.
     batch_ids : int or tuple[int]
         Which batch numbers to grow, defaults to all missing batches.
     hours : int
@@ -1377,8 +1380,6 @@ def qsub_grow(
         Extra "#$ -l" resources, e.g. 'gpu=1'
     debugging : bool, optional
         Set the python log level to debugging.
-    scheduler : {'sge', 'pbs'}, optional
-        Whether to use a SGE or PBS submission script template.
     """
     if crop.is_ready_to_reap():
         print("Crop ready to reap: nothing to submit.")
@@ -1386,9 +1387,8 @@ def qsub_grow(
 
     import subprocess
 
-    script = gen_qsub_script(
-        crop,
-        batch_ids=batch_ids,
+    script = gen_cluster_script(
+        crop, scheduler, batch_ids=batch_ids,
         hours=hours,
         minutes=minutes,
         seconds=seconds,
@@ -1404,7 +1404,6 @@ def qsub_grow(
         mpi=mpi,
         extra_resources=extra_resources,
         debugging=debugging,
-        scheduler=scheduler,
     )
 
     script_file = os.path.join(crop.location, "__qsub_script__.sh")
@@ -1419,6 +1418,125 @@ def qsub_grow(
 
     os.remove(script_file)
 
+def gen_qsub_script(
+    crop, batch_ids=None, *, scheduler='sge',
+    **kwargs
+    ):  # pragma: no cover
+    """Generate a qsub script to grow a Crop. Deprecated in favour of
+    `gen_cluster_script` and will be removed in the future.
+
+    Parameters
+    ----------
+    crop : Crop
+        The crop to grow.
+    batch_ids : int or tuple[int]
+        Which batch numbers to grow, defaults to all missing batches.
+    scheduler : {'sge', 'pbs'}, optional
+        Whether to use a SGE or PBS submission script template.
+    kwargs
+        See `gen_cluster_script` for all other parameters.
+    """
+    warnings.warn("'gen_qsub_script' is deprecated in favour of "
+    "`gen_cluster_script` and will be removed in the future",
+    DeprecationWarning)
+    return gen_cluster_script(crop, scheduler, batch_ids=batch_ids, **kwargs)
+
+def qsub_grow(
+    crop, batch_ids=None, *, scheduler='sge',
+    **kwargs
+    ):  # pragma: no cover
+    """Automagically submit SGE or PBS jobs to grow all missing results.
+    Deprecated in favour of `grow_cluster` and will be removed in the future.
+
+    Parameters
+    ----------
+    crop : Crop
+        The crop to grow.
+    batch_ids : int or tuple[int]
+        Which batch numbers to grow, defaults to all missing batches.
+    scheduler : {'sge', 'pbs'}, optional
+        Whether to use a SGE or PBS submission script template.
+    kwargs
+        See `grow_cluster` for all other parameters.
+    """
+    warnings.warn("'qsub_grow' is deprecated in favour of "
+    "`grow_cluster` and will be removed in the future",
+    DeprecationWarning)
+    grow_cluster(crop, scheduler, batch_ids=batch_ids, **kwargs)
 
 Crop.gen_qsub_script = gen_qsub_script
 Crop.qsub_grow = qsub_grow
+Crop.gen_cluster_script = gen_cluster_script
+Crop.grow_cluster = grow_cluster
+
+_specific_scheduler_gen_cluster_script_doc = \
+    """Generate a {scheduler} script to grow a Crop.
+
+    Parameters
+    ----------
+    crop : Crop
+        The crop to grow.
+    batch_ids : int or tuple[int]
+        Which batch numbers to grow, defaults to all missing batches.
+    kwargs
+        See `gen_cluster_script` for all other parameters (except for
+        `scheduler` which is not needed here).
+    """
+
+def gen_sge_script(crop, batch_ids=None, **kwargs):  # pragma: no cover
+    return gen_cluster_script(crop, 'sge', batch_ids=batch_ids, **kwargs)
+
+gen_sge_script.__doc__ = \
+    _specific_scheduler_gen_cluster_script_doc.format(scheduler = 'SGE')
+
+def gen_pbs_script(crop, batch_ids=None, **kwargs):  # pragma: no cover
+    return gen_cluster_script(crop, 'pbs', batch_ids=batch_ids, **kwargs)
+
+gen_pbs_script.__doc__ = \
+    _specific_scheduler_gen_cluster_script_doc.format(scheduler = 'PBS')
+
+def gen_slurm_script(crop, batch_ids=None, **kwargs):  # pragma: no cover
+    return gen_cluster_script(crop, 'slurm', batch_ids=batch_ids, **kwargs)
+
+gen_slurm_script.__doc__ = \
+    _specific_scheduler_gen_cluster_script_doc.format(scheduler = 'slurm')
+
+Crop.gen_sge_script = gen_sge_script
+Crop.gen_pbs_script = gen_pbs_script
+Crop.gen_slurm_script = gen_slurm_script
+
+_specific_scheduler_grow_cluster_doc = \
+    """Automagically submit {scheduler} jobs to grow all missing results.
+
+    Parameters
+    ----------
+    crop : Crop
+        The crop to grow.
+    batch_ids : int or tuple[int]
+        Which batch numbers to grow, defaults to all missing batches.
+    kwargs
+        See `grow_cluster` for all other parameters (except for
+        `scheduler` which is not needed here).
+    """
+
+def grow_sge(crop, batch_ids=None, **kwargs):  # pragma: no cover
+    grow_cluster(crop, 'sge', batch_ids=batch_ids, **kwargs)
+
+grow_sge.__doc__ = \
+    _specific_scheduler_grow_cluster_doc.format(scheduler = 'SGE')
+
+def grow_pbs(crop, batch_ids=None, **kwargs):  # pragma: no cover
+    grow_cluster(crop, 'pbs', batch_ids=batch_ids, **kwargs)
+
+grow_pbs.__doc__ = \
+    _specific_scheduler_grow_cluster_doc.format(scheduler = 'PBS')
+
+def grow_slurm(crop, batch_ids=None, **kwargs):  # pragma: no cover
+    grow_cluster(crop, 'slurm', batch_ids=batch_ids, **kwargs)
+
+grow_slurm.__doc__ = \
+    _specific_scheduler_grow_cluster_doc.format(scheduler = 'slurm')
+
+Crop.grow_sge = grow_sge
+Crop.grow_pbs = grow_pbs
+Crop.grow_slurm = grow_slurm
