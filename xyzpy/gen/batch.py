@@ -1418,10 +1418,11 @@ def grow_cluster(
 
     os.remove(script_file)
 
+
 def gen_qsub_script(
     crop, batch_ids=None, *, scheduler='sge',
     **kwargs
-    ):  # pragma: no cover
+):  # pragma: no cover
     """Generate a qsub script to grow a Crop. Deprecated in favour of
     `gen_cluster_script` and will be removed in the future.
 
@@ -1437,14 +1438,15 @@ def gen_qsub_script(
         See `gen_cluster_script` for all other parameters.
     """
     warnings.warn("'gen_qsub_script' is deprecated in favour of "
-    "`gen_cluster_script` and will be removed in the future",
-    DeprecationWarning)
+                  "`gen_cluster_script` and will be removed in the future",
+                  DeprecationWarning)
     return gen_cluster_script(crop, scheduler, batch_ids=batch_ids, **kwargs)
+
 
 def qsub_grow(
     crop, batch_ids=None, *, scheduler='sge',
     **kwargs
-    ):  # pragma: no cover
+):  # pragma: no cover
     """Automagically submit SGE or PBS jobs to grow all missing results.
     Deprecated in favour of `grow_cluster` and will be removed in the future.
 
@@ -1460,9 +1462,10 @@ def qsub_grow(
         See `grow_cluster` for all other parameters.
     """
     warnings.warn("'qsub_grow' is deprecated in favour of "
-    "`grow_cluster` and will be removed in the future",
-    DeprecationWarning)
+                  "`grow_cluster` and will be removed in the future",
+                  DeprecationWarning)
     grow_cluster(crop, scheduler, batch_ids=batch_ids, **kwargs)
+
 
 Crop.gen_qsub_script = gen_qsub_script
 Crop.qsub_grow = qsub_grow
@@ -1483,23 +1486,29 @@ _specific_scheduler_gen_cluster_script_doc = \
         `scheduler` which is not needed here).
     """
 
+
 def gen_sge_script(crop, batch_ids=None, **kwargs):  # pragma: no cover
     return gen_cluster_script(crop, 'sge', batch_ids=batch_ids, **kwargs)
 
+
 gen_sge_script.__doc__ = \
-    _specific_scheduler_gen_cluster_script_doc.format(scheduler = 'SGE')
+    _specific_scheduler_gen_cluster_script_doc.format(scheduler='SGE')
+
 
 def gen_pbs_script(crop, batch_ids=None, **kwargs):  # pragma: no cover
     return gen_cluster_script(crop, 'pbs', batch_ids=batch_ids, **kwargs)
 
+
 gen_pbs_script.__doc__ = \
-    _specific_scheduler_gen_cluster_script_doc.format(scheduler = 'PBS')
+    _specific_scheduler_gen_cluster_script_doc.format(scheduler='PBS')
+
 
 def gen_slurm_script(crop, batch_ids=None, **kwargs):  # pragma: no cover
     return gen_cluster_script(crop, 'slurm', batch_ids=batch_ids, **kwargs)
 
+
 gen_slurm_script.__doc__ = \
-    _specific_scheduler_gen_cluster_script_doc.format(scheduler = 'slurm')
+    _specific_scheduler_gen_cluster_script_doc.format(scheduler='slurm')
 
 Crop.gen_sge_script = gen_sge_script
 Crop.gen_pbs_script = gen_pbs_script
@@ -1519,23 +1528,29 @@ _specific_scheduler_grow_cluster_doc = \
         `scheduler` which is not needed here).
     """
 
+
 def grow_sge(crop, batch_ids=None, **kwargs):  # pragma: no cover
     grow_cluster(crop, 'sge', batch_ids=batch_ids, **kwargs)
 
+
 grow_sge.__doc__ = \
-    _specific_scheduler_grow_cluster_doc.format(scheduler = 'SGE')
+    _specific_scheduler_grow_cluster_doc.format(scheduler='SGE')
+
 
 def grow_pbs(crop, batch_ids=None, **kwargs):  # pragma: no cover
     grow_cluster(crop, 'pbs', batch_ids=batch_ids, **kwargs)
 
+
 grow_pbs.__doc__ = \
-    _specific_scheduler_grow_cluster_doc.format(scheduler = 'PBS')
+    _specific_scheduler_grow_cluster_doc.format(scheduler='PBS')
+
 
 def grow_slurm(crop, batch_ids=None, **kwargs):  # pragma: no cover
     grow_cluster(crop, 'slurm', batch_ids=batch_ids, **kwargs)
 
+
 grow_slurm.__doc__ = \
-    _specific_scheduler_grow_cluster_doc.format(scheduler = 'slurm')
+    _specific_scheduler_grow_cluster_doc.format(scheduler='slurm')
 
 Crop.grow_sge = grow_sge
 Crop.grow_pbs = grow_pbs
