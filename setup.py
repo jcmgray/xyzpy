@@ -7,7 +7,7 @@ def readme():
         import re
         long_desc = f.read()
         # strip out the raw html images
-        long_desc = re.sub('\.\. raw::[\S\s]*?>\n\n', "", long_desc)
+        long_desc = re.sub(r'\.\. raw::[\S\s]*?>\n\n', "", long_desc)
         return long_desc
 
 
@@ -19,7 +19,7 @@ setup(
     version=versioneer.get_version(),
     cmdclass=versioneer.get_cmdclass(),
     author='Johnnie Gray',
-    author_email="john.gray.14@ucl.ac.uk",
+    author_email="johnniemcgray@gmail.com",
     license='MIT',
     packages=find_packages(exclude=['docs', 'test*']),
     install_requires=[
@@ -45,7 +45,7 @@ setup(
         ],
         'docs': [
             'sphinx',
-            'sphinx_bootstrap_theme',
+            'pydata-sphinx-theme',
             'nbsphinx',
             'ipython',
         ]
@@ -58,5 +58,7 @@ setup(
         'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3.5',
         'Programming Language :: Python :: 3.6',
+        'Programming Language :: Python :: 3.7',
+        'Programming Language :: Python :: 3.8',
     ],
 )

@@ -42,14 +42,9 @@ Overview
 The following guides introduce the main parts of ``xyzpy``:
 
 .. toctree::
-  :numbered:
   :maxdepth: 2
 
-  generate
-  gen_parallel
-  manipulate
-  plotting
-  utilities
+  index_guides
 
 
 Quick-start
@@ -81,19 +76,15 @@ Quick-start
         diff     (a, b) int64 -22 -23 -24 -25 -21 -22 ... -17 -18 -14 -15 -16 -17
 
 
-Examples
---------
+Detailed Examples
+-----------------
 
 These following examples are generated from the notebooks in ``docs/examples``. They demonstrate more complete usage or advanced features of ``xyzpy``.
 
 .. toctree::
-  :maxdepth: 1
+  :maxdepth: 2
 
-  examples/basic output example
-  examples/complex output example
-  examples/farming example
-  examples/crop example
-  examples/dask distributed example
+  index_examples
 
 
 Installation

@@ -16,13 +16,12 @@
 # import sys
 # sys.path.insert(0, os.path.abspath('.'))
 
-import sphinx_bootstrap_theme
 import xyzpy
 
 # -- Project information -----------------------------------------------------
 
 project = 'xyzpy'
-copyright = '2018, Johnnie Gray'
+copyright = '2020, Johnnie Gray'
 author = 'Johnnie Gray'
 
 # The full version, including alpha/beta/rc tags.
@@ -95,27 +94,15 @@ pygments_style = 'pastie'
 
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
-
-# html_theme = 'alabaster'
-
-html_theme = 'bootstrap'
-html_theme_path = sphinx_bootstrap_theme.get_html_theme_path()
-html_theme_options = {
-    'bootswatch_theme': "paper",
-    'navbar_site_name': "Site",
-    'navbar_title': " ",
-    'nosidebar': True,
-    'source_link_position': "",
-    'navbar_links': [
-        ("<b>Github</b>", "https://github.com/jcmgray/xyzpy", True),
-    ],
-}
+html_theme = "pydata_sphinx_theme"
 
 # Theme options are theme-specific and customize the look and feel of a theme
 # further.  For a list of options available for each theme, see the
 # documentation.
 #
-# html_theme_options = {}
+html_theme_options = {
+    "github_url": "https://github.com/jcmgray/xyzpy",
+}
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
@@ -124,7 +111,7 @@ html_static_path = ['_static']
 
 
 def setup(app):
-    app.add_stylesheet("my-styles.css")
+    app.add_css_file("my-styles.css")
 
 
 html_logo = "_static/xyzpy-logo-title.png"
@@ -202,8 +189,8 @@ texinfo_documents = [
 
 
 intersphinx_mapping = {
-    'python': ('https://docs.python.org/3.6/', None),
-    'numpy': ('http://docs.scipy.org/doc/numpy/', None),
+    'python': ('https://docs.python.org/3/', None),
+    'numpy': ('https://numpy.org/doc/stable/', None),
     'xarray': ('http://xarray.pydata.org/en/stable/', None),
-    'scipy': ('http://docs.scipy.org/doc/scipy/reference', None),
+    'scipy': ('https://docs.scipy.org/doc/scipy/reference/', None),
 }

@@ -1,69 +1,50 @@
-@import url('https://fonts.googleapis.com/css?family=Inconsolata');
-@import url('https://fonts.googleapis.com/css?family=Fira+Sans');
 @import url('https://fonts.googleapis.com/css?family=Fira+Mono');
 
-div.body {
-    max-width: 1200px;
-}
-
 code {
-    font-family: 'Inconsolata', monospace;
-    font-size: 15px;
-    line-height: 25px;
-    color: #dd3636;
-    background-color: #fbe9e9;
-}
-
-code, kbd, pre, samp {
-    font-family: 'Inconsolata', monospace;
-    font-size: 17px;
-    line-height: 25px;
-}
-
-blockquote {
-    font-family: 'Fira Sans', sans-serif;
-    font-size: 17px;
-    line-height: 31px;
-}
-
-body {
-    font-family: 'Fira Sans', sans-serif;
-    font-size: 17px;
-    line-height: 31px;
+    color: #dd3636 !important;
+    background-color: #fbe9e9 !important;
 }
 
 :root{
     --headercolor: rgb(100, 120, 130);
+    --highlightcolor: #126189;
 }
+
 
 h1 {
     font-family: 'Fira Mono', monospace;
-    font-size: 45px;
     font-weight: bold;
-    line-height: 50px;
-    margin-top: 40px;
-    color: var(--headercolor);
+    color: var(--headercolor) !important;
 }
 
 h2 {
     font-family: 'Fira Mono', monospace;
-    font-size: 35px;
     font-weight: bold;
-    line-height: 50px;
-    margin-top: 40px;
-    color: var(--headercolor);
+    color: var(--headercolor) !important;
 }
 
 h3 {
     font-family: 'Fira Mono', monospace;
-    font-size: 25px;
     font-weight: bold;
-    line-height: 50px;
-    margin-top: 40px;
-    color: var(--headercolor);
+    color: var(--headercolor) !important;
 }
 
+.navbar-nav > .active > .nav-link {
+    color: var(--highlightcolor) !important;
+}
 
-.wy-nav-content {
-    max-width: 800px !important;
+.toc-entry > .nav-link.active {
+    color: var(--highlightcolor) !important;
+}
+
+.bd-sidebar .nav > .active:hover > a, .bd-sidebar .nav > .active > a {
+    color: var(--highlightcolor) !important;
+}
+
+.toc-entry a {
+    padding: 0.4rem 1.0rem;
+}
+
+.container, .container-lg, .container-md, .container-sm, .container-xl {
+    max-width: 1600px;
 }
