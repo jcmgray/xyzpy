@@ -1439,7 +1439,7 @@ def gen_qsub_script(
     """
     warnings.warn("'gen_qsub_script' is deprecated in favour of "
                   "`gen_cluster_script` and will be removed in the future",
-                  DeprecationWarning)
+                  FutureWarning)
     return gen_cluster_script(crop, scheduler, batch_ids=batch_ids, **kwargs)
 
 
@@ -1463,7 +1463,7 @@ def qsub_grow(
     """
     warnings.warn("'qsub_grow' is deprecated in favour of "
                   "`grow_cluster` and will be removed in the future",
-                  DeprecationWarning)
+                  FutureWarning)
     grow_cluster(crop, scheduler, batch_ids=batch_ids, **kwargs)
 
 
@@ -1472,86 +1472,14 @@ Crop.qsub_grow = qsub_grow
 Crop.gen_cluster_script = gen_cluster_script
 Crop.grow_cluster = grow_cluster
 
-_specific_scheduler_gen_cluster_script_doc = \
-    """Generate a {scheduler} script to grow a Crop.
+Crop.gen_sge_script = functools.partialmethod(Crop.gen_cluster_script,
+                                              scheduler='sge')
+Crop.grow_sge = functools.partialmethod(Crop.grow_cluster, scheduler='sge')
 
-    Parameters
-    ----------
-    crop : Crop
-        The crop to grow.
-    batch_ids : int or tuple[int]
-        Which batch numbers to grow, defaults to all missing batches.
-    kwargs
-        See `gen_cluster_script` for all other parameters (except for
-        `scheduler` which is not needed here).
-    """
+Crop.gen_pbs_script = functools.partialmethod(Crop.gen_cluster_script,
+                                              scheduler='pbs')
+Crop.grow_pbs = functools.partialmethod(Crop.grow_cluster, scheduler='pbs')
 
-
-def gen_sge_script(crop, batch_ids=None, **kwargs):  # pragma: no cover
-    return gen_cluster_script(crop, 'sge', batch_ids=batch_ids, **kwargs)
-
-
-gen_sge_script.__doc__ = \
-    _specific_scheduler_gen_cluster_script_doc.format(scheduler='SGE')
-
-
-def gen_pbs_script(crop, batch_ids=None, **kwargs):  # pragma: no cover
-    return gen_cluster_script(crop, 'pbs', batch_ids=batch_ids, **kwargs)
-
-
-gen_pbs_script.__doc__ = \
-    _specific_scheduler_gen_cluster_script_doc.format(scheduler='PBS')
-
-
-def gen_slurm_script(crop, batch_ids=None, **kwargs):  # pragma: no cover
-    return gen_cluster_script(crop, 'slurm', batch_ids=batch_ids, **kwargs)
-
-
-gen_slurm_script.__doc__ = \
-    _specific_scheduler_gen_cluster_script_doc.format(scheduler='slurm')
-
-Crop.gen_sge_script = gen_sge_script
-Crop.gen_pbs_script = gen_pbs_script
-Crop.gen_slurm_script = gen_slurm_script
-
-_specific_scheduler_grow_cluster_doc = \
-    """Automagically submit {scheduler} jobs to grow all missing results.
-
-    Parameters
-    ----------
-    crop : Crop
-        The crop to grow.
-    batch_ids : int or tuple[int]
-        Which batch numbers to grow, defaults to all missing batches.
-    kwargs
-        See `grow_cluster` for all other parameters (except for
-        `scheduler` which is not needed here).
-    """
-
-
-def grow_sge(crop, batch_ids=None, **kwargs):  # pragma: no cover
-    grow_cluster(crop, 'sge', batch_ids=batch_ids, **kwargs)
-
-
-grow_sge.__doc__ = \
-    _specific_scheduler_grow_cluster_doc.format(scheduler='SGE')
-
-
-def grow_pbs(crop, batch_ids=None, **kwargs):  # pragma: no cover
-    grow_cluster(crop, 'pbs', batch_ids=batch_ids, **kwargs)
-
-
-grow_pbs.__doc__ = \
-    _specific_scheduler_grow_cluster_doc.format(scheduler='PBS')
-
-
-def grow_slurm(crop, batch_ids=None, **kwargs):  # pragma: no cover
-    grow_cluster(crop, 'slurm', batch_ids=batch_ids, **kwargs)
-
-
-grow_slurm.__doc__ = \
-    _specific_scheduler_grow_cluster_doc.format(scheduler='slurm')
-
-Crop.grow_sge = grow_sge
-Crop.grow_pbs = grow_pbs
-Crop.grow_slurm = grow_slurm
+Crop.gen_slurm_script = functools.partialmethod(Crop.gen_cluster_script,
+                                                scheduler='slurm')
+Crop.grow_slurm = functools.partialmethod(Crop.grow_cluster, scheduler='slurm')
