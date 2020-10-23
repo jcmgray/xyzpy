@@ -19,7 +19,7 @@ dependencies:
   - bokeh
   - cytoolz
   - sphinx
-  - sphinx_bootstrap_theme
+  - pydata-sphinx-theme
   - nbsphinx
   - ipython
   - versioneer

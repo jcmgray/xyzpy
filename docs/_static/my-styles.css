@@ -1,4 +1,6 @@
-@import url('https://fonts.googleapis.com/css?family=Fira+Mono');
+@import url('https://fontlibrary.org/face/aardvark-sans');
+@import url('https://fonts.googleapis.com/css2?family=Commissioner&display=swap');
+@import url('https://fontlibrary.org/face/code-new-roman');
 
 code {
     color: #dd3636 !important;
@@ -6,27 +8,23 @@ code {
 }
 
 :root{
-    --headercolor: rgb(100, 120, 130);
-    --highlightcolor: #126189;
+    --headercolor: #1a5777;
+    --highlightcolor: #1a5777;
 }
 
 
-h1 {
-    font-family: 'Fira Mono', monospace;
+h1, h2, h3 {
+    font-family: 'AardvarkFixedRegular', monospace;
     font-weight: bold;
     color: var(--headercolor) !important;
 }
 
-h2 {
-    font-family: 'Fira Mono', monospace;
-    font-weight: bold;
-    color: var(--headercolor) !important;
+body {
+    font-family: 'Commissioner', sans-serif;
 }
 
-h3 {
-    font-family: 'Fira Mono', monospace;
-    font-weight: bold;
-    color: var(--headercolor) !important;
+code, kbd, pre, samp {
+    font-family: 'CodeNewRomanRegular', monospace;
 }
 
 .navbar-nav > .active > .nav-link {
