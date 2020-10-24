@@ -1,5 +1,5 @@
 channels:
-  - anaconda
+  - defaults
   - conda-forge
 dependencies:
   - numpy
@@ -24,5 +24,3 @@ dependencies:
   - coveralls
   - codecov
   - zarr
-  - pip:
-    - codeclimate-test-reporter

@@ -1,0 +1,21 @@
+steps:
+
+- template: install.yml
+
+- bash: |
+    source activate xyzpy-tests
+    python -c "import xyzpy"
+  displayName: "Import xyzpy"
+
+- bash: |
+    source activate xyzpy-tests
+    pytest \
+    --cov=xyzpy tests/ \
+    --cov-report=xml \
+    tests
+  condition: eq(variables['which_tests'], 'all')
+  displayName: "Run all tests"
+
+- bash: |
+    bash <(curl -s https://codecov.io/bash)
+  displayName: "Upload coverage to codecov.io"

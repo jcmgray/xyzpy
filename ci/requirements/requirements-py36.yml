@@ -2,7 +2,6 @@ channels:
   - defaults
   - conda-forge
 dependencies:
-  - python=3.6
   - numpy
   - numba
   - scipy
@@ -14,12 +13,14 @@ dependencies:
   - hdf4
   - h5py
   - h5netcdf
+  - pytest
+  - pytest-cov
   - tqdm
   - matplotlib
   - bokeh
-  - cytoolz
-  - sphinx
-  - pydata-sphinx-theme
-  - nbsphinx
   - ipython
-  - versioneer
+  - cytoolz
+  - coverage
+  - coveralls
+  - codecov
+  - zarr
