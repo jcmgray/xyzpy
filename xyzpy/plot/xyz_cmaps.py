@@ -1,10 +1,4 @@
-from matplotlib import cm
 from matplotlib.colors import ListedColormap, LinearSegmentedColormap
-
-
-def reverse_colourmap(cmap, name):
-    return LinearSegmentedColormap(name, cm.revcmap(cmap._segmentdata))
-
 
 xyz_data = {
     #    0.00    #0034a1    rgb(0,    52, 161)
@@ -29,7 +23,7 @@ xyz_data = {
              (1.00, 67 / 255, 67 / 255))
 }
 xyz_cm = LinearSegmentedColormap('xyz', xyz_data)
-xyz_r_cm = reverse_colourmap(xyz_cm, 'xyz_r')
+xyz_r_cm = xyz_cm.reversed()
 
 
 neon_data = {
@@ -56,7 +50,7 @@ neon_data = {
              (1.00, 115 / 255, 115 / 255))
 }
 neon_cm = LinearSegmentedColormap('neon', neon_data)
-neon_r_cm = reverse_colourmap(neon_cm, 'neon_r')
+neon_r_cm = neon_cm.reversed()
 
 anti_data = {
     #    0.00    #1b32b6    rgb( 27,  50, 182)
@@ -81,7 +75,7 @@ anti_data = {
              (1.00, 150 / 255, 150 / 255))
 }
 anti_cm = LinearSegmentedColormap('anti', anti_data)
-anti_r_cm = reverse_colourmap(anti_cm, 'anti_r')
+anti_r_cm = anti_cm.reversed()
 
 fruity_data = [[1.16359026e-04, 1.43226766e-01, 4.80894151e-01],
                [1.60020817e-02, 1.44621737e-01, 4.81032552e-01],
