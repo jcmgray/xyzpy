@@ -9,7 +9,6 @@ import pickle
 import copy
 import math
 import functools
-import warnings
 
 import joblib
 from joblib.externals import cloudpickle
@@ -850,7 +849,7 @@ def load_crops(directory='.'):
     import re
 
     folders = next(os.walk(directory))[1]
-    crop_rgx = re.compile('^\.xyz-(.+)')
+    crop_rgx = re.compile(r'^\.xyz-(.+)')
 
     names = []
     for folder in folders:
@@ -1072,76 +1071,77 @@ class Reaper(object):
 #                     Automatic Batch Submission Scripts                      #
 # --------------------------------------------------------------------------- #
 
-_SGE_HEADER = """#!/bin/bash -l
-#$ -S /bin/bash
-#$ -l h_rt={hours}:{minutes}:{seconds},mem={gigabytes}G
-#$ -l tmpfs={temp_gigabytes}G
-{extra_resources}
-#$ -N {name}
-mkdir -p {output_directory}
-#$ -wd {output_directory}
-#$ -pe {pe} {num_procs}
-#$ -t {run_start}-{run_stop}
-"""
+_SGE_HEADER = (
+    "#!/bin/bash -l\n"
+    "#$ -S /bin/bash\n"
+    "#$ -l h_rt={hours}:{minutes}:{seconds},mem={gigabytes}G\n"
+    "#$ -l tmpfs={temp_gigabytes}G\n"
+    "{extra_resources}\n"
+    "#$ -N {name}\n"
+    "mkdir -p {output_directory}\n"
+    "#$ -wd {output_directory}\n"
+    "#$ -pe {pe} {num_procs}\n"
+    "#$ -t {run_start}-{run_stop}\n")
 
-_PBS_HEADER = """#!/bin/bash -l
-#PBS -lselect={num_nodes}:ncpus={num_procs}:mem={gigabytes}gb
-#PBS -lwalltime={hours:02}:{minutes:02}:{seconds:02}
-{extra_resources}
-#PBS -N {name}
-#PBS -J {run_start}-{run_stop}
-"""
+_PBS_HEADER = (
+    "#!/bin/bash -l\n"
+    "#PBS -lselect={num_nodes}:ncpus={num_procs}:mem={gigabytes}gb\n"
+    "#PBS -lwalltime={hours:02}:{minutes:02}:{seconds:02}\n"
+    "{extra_resources}\n"
+    "#PBS -N {name}\n"
+    "#PBS -J {run_start}-{run_stop}\n")
 
-_SLURM_HEADER = """#!/bin/bash -l
-#SBATCH --nodes={num_nodes}
-#SBATCH --mem={gigabytes}gb
-#SBATCH --cpus-per-task={num_procs}
-#SBATCH --time={hours:02}:{minutes:02}:{seconds:02}
-{extra_resources}
-#SBATCH --job-name={name}
-#SBATCH --array={run_start}-{run_stop}
-"""
+_SLURM_HEADER = (
+    "#!/bin/bash -l\n"
+    "#SBATCH --nodes={num_nodes}\n"
+    "#SBATCH --mem={gigabytes}gb\n"
+    "#SBATCH --cpus-per-task={num_procs}\n"
+    "#SBATCH --time={hours:02}:{minutes:02}:{seconds:02}\n"
+    "{extra_resources}\n"
+    "#SBATCH --job-name={name}\n"
+    "#SBATCH --array={run_start}-{run_stop}\n")
 
-_BASE = """cd {working_directory}
-export OMP_NUM_THREADS={num_threads}
-export MKL_NUM_THREADS={num_threads}
-export OPENBLAS_NUM_THREADS={num_threads}
-{shell_setup}
-tmpfile=$(mktemp .xyzpy-qsub.XXXXXXXX)
-cat <<EOF > $tmpfile
-{setup}
-from xyzpy.gen.batch import grow, Crop
-crop = Crop(name='{name}', parent_dir='{parent_dir}')
-"""
+_BASE = (
+    "cd {working_directory}\n"
+    "export OMP_NUM_THREADS={num_threads}\n"
+    "export MKL_NUM_THREADS={num_threads}\n"
+    "export OPENBLAS_NUM_THREADS={num_threads}\n"
+    "{shell_setup}\n"
+    "tmpfile=$(mktemp .xyzpy-qsub.XXXXXXXX)\n"
+    "cat <<EOF > $tmpfile\n"
+    "{setup}\n"
+    "from xyzpy.gen.batch import grow, Crop\n"
+    "if __name__ == '__main__':\n"
+    "    crop = Crop(name='{name}', parent_dir='{parent_dir}')\n")
 
 _CLUSTER_SGE_GROW_ALL_SCRIPT = (
-    "grow($SGE_TASK_ID, crop=crop, debugging={debugging})\n"
-)
+    "    grow($SGE_TASK_ID, crop=crop, debugging={debugging})\n")
 
 _CLUSTER_PBS_GROW_ALL_SCRIPT = (
-    "grow($PBS_ARRAY_INDEX, crop=crop, debugging={debugging})\n"
-)
+    "    grow($PBS_ARRAY_INDEX, crop=crop, debugging={debugging})\n")
 
 _CLUSTER_SLURM_GROW_ALL_SCRIPT = (
-    "grow($SLURM_ARRAY_TASK_ID, crop=crop, debugging={debugging})\n"
-)
+    "    grow($SLURM_ARRAY_TASK_ID, crop=crop, debugging={debugging})\n")
 
-_CLUSTER_SGE_GROW_PARTIAL_SCRIPT = """batch_ids = {batch_ids}
-grow(batch_ids[$SGE_TASK_ID - 1], crop=crop, debugging={debugging})
-"""
+_CLUSTER_SGE_GROW_PARTIAL_SCRIPT = (
+    "    batch_ids = {batch_ids}]\n"
+    "    grow(batch_ids[$SGE_TASK_ID - 1], crop=crop, "
+    "debugging={debugging})\n")
 
-_CLUSTER_PBS_GROW_PARTIAL_SCRIPT = """batch_ids = {batch_ids}
-grow(batch_ids[$PBS_ARRAY_INDEX - 1], crop=crop, debugging={debugging})
-"""
+_CLUSTER_PBS_GROW_PARTIAL_SCRIPT = (
+    "    batch_ids = {batch_ids}\n"
+    "    grow(batch_ids[$PBS_ARRAY_INDEX - 1], crop=crop, "
+    "debugging={debugging})\n")
 
-_CLUSTER_SLURM_GROW_PARTIAL_SCRIPT = """batch_ids = {batch_ids}
-grow(batch_ids[$SLURM_ARRAY_TASK_ID - 1], crop=crop, debugging={debugging})
-"""
+_CLUSTER_SLURM_GROW_PARTIAL_SCRIPT = (
+    "    batch_ids = {batch_ids}\n"
+    "    grow(batch_ids[$SLURM_ARRAY_TASK_ID - 1], crop=crop, "
+    "debugging={debugging})\n")
 
-_BASE_CLUSTER_SCRIPT_END = """EOF
-{launcher} $tmpfile
-rm $tmpfile
-"""
+_BASE_CLUSTER_SCRIPT_END = (
+    "EOF\n"
+    "{launcher} $tmpfile\n"
+    "rm $tmpfile\n")
 
 
 def gen_cluster_script(
