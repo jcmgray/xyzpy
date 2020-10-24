@@ -10,8 +10,6 @@ steps:
     conda env create -n xyzpy-tests --file ${{ parameters.env_file }}
   displayName: Install conda dependencies
 
-- template: install-slepc4py.yml
-
 - bash: |
     source activate xyzpy-tests
     python -m pip install --no-deps -e .
