@@ -3,6 +3,7 @@ import functools
 import pytest
 import numpy as np
 from dask import delayed
+from numpy.testing import assert_allclose
 
 import xyzpy as xyz
 from xyzpy.utils import _get_fn_name
@@ -125,6 +126,30 @@ class TestRunningStatistics:
         assert rs.mean == pytest.approx(43.0)
         assert rs.std == pytest.approx(1.0)
         assert rs.rel_err == pytest.approx(1. / (43 * 8**0.5))
+
+
+class TestRunningCovariance:
+
+    def test_matches_numpy(self):
+        xs = np.random.randn(100)
+        ys = np.random.randn(100)
+        rc = xyz.RunningCovariance()
+        rc.update(xs[0], ys[0])
+        rc.update(xs[1], ys[1])
+        rc.update(xs[2], ys[2])
+        assert rc.sample_covar == pytest.approx(np.cov(xs[:3], ys[:3])[0, 1])
+        rc.update_from_it(xs[3:], ys[3:])
+        assert rc.sample_covar == pytest.approx(np.cov(xs, ys)[0, 1])
+        assert rc.covar == pytest.approx(np.cov(xs, ys, bias=True)[0, 1])
+
+    def test_matrix_form(self):
+        xs = np.random.rand(1000)
+        ys = 0.2 * xs * np.random.rand(1000)
+        zs = 0.4 * ys * np.random.rand(1000)
+        rcm = xyz.RunningCovarianceMatrix(n=3)
+        rcm.update_from_it(xs, ys, zs)
+        assert_allclose(np.cov([xs, ys, zs]), rcm.sample_covar_matrix)
+        assert_allclose(np.cov([xs, ys, zs], bias=True), rcm.covar_matrix)
 
 
 class TestFromRepeats:

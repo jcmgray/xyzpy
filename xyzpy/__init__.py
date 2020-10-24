@@ -11,6 +11,8 @@ from .utils import (
     benchmark,
     Benchmarker,
     RunningStatistics,
+    RunningCovariance,
+    RunningCovarianceMatrix,
     estimate_from_repeats,
 )
 from .gen.combo_runner import (
@@ -162,6 +164,8 @@ __all__ = [
     "benchmark",
     "Benchmarker",
     "RunningStatistics",
+    "RunningCovariance",
+    "RunningCovarianceMatrix",
     "estimate_from_repeats",
     "xr_diff_fornberg",
     "xr_diff_u",

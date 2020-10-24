@@ -441,6 +441,139 @@ class RunningStatistics:  # pragma: no cover
         return self.err / abs(self.mean)
 
 
+@jitclass([
+    ('count', int_),
+    ('xmean', double),
+    ('ymean', double),
+    ('C', double)
+])
+class RunningCovariance:  # pragma: no cover
+    """Numba compiled running covariance class.
+    """
+
+    def __init__(self):
+        self.count = 0
+        self.xmean = 0.0
+        self.ymean = 0.0
+        self.C = 0.0
+
+    def update(self, x, y):
+        self.count += 1
+        dx = x - self.xmean
+        dy = y - self.ymean
+        self.xmean += dx / self.count
+        self.ymean += dy / self.count
+        self.C += dx * (y - self.ymean)
+
+    def update_from_it(self, xs, ys):
+        for x, y in zip(xs, ys):
+            self.update(x, y)
+
+    @property
+    def covar(self):
+        """The covariance.
+        """
+        return self.C / self.count
+
+    @property
+    def sample_covar(self):
+        """The covariance with "Bessel's correction".
+        """
+        return self.C / (self.count - 1)
+
+
+class RunningCovarianceMatrix:
+
+    def __init__(self, n=2):
+        self.n = n
+        self.rcs = {}
+        for i in range(self.n):
+            for j in range(i, self.n):
+                self.rcs[i, j] = RunningCovariance()
+
+    def update(self, *x):
+        for i in range(self.n):
+            for j in range(i, self.n):
+                self.rcs[i, j].update(x[i], x[j])
+
+    def update_from_it(self, *xs):
+        for i in range(self.n):
+            for j in range(i, self.n):
+                self.rcs[i, j].update_from_it(xs[i], xs[j])
+
+    @property
+    def count(self):
+        return self.rcs[0, 0].count
+
+    @property
+    def covar_matrix(self):
+        covar_matrix = np.empty((self.n, self.n))
+        for i in range(self.n):
+            for j in range(self.n):
+                if j >= i:
+                    covar_matrix[i, j] = self.rcs[i, j].covar
+                else:
+                    covar_matrix[i, j] = self.rcs[j, i].covar
+        return covar_matrix
+
+    @property
+    def sample_covar_matrix(self):
+        covar_matrix = np.empty((self.n, self.n))
+        for i in range(self.n):
+            for j in range(self.n):
+                if j >= i:
+                    covar_matrix[i, j] = self.rcs[i, j].sample_covar
+                else:
+                    covar_matrix[i, j] = self.rcs[j, i].sample_covar
+        return covar_matrix
+
+    def to_uncertainties(self, bias=True):
+        """Convert the accumulated statistics to correlated uncertainties,
+        from which new quantities can be calculated with error automatically
+        propagated.
+
+        Parameters
+        ----------
+        bias : bool, optional
+            If False, use the sample covariance with "Bessel's correction".
+
+        Return
+        ------
+        values : tuple of uncertainties.ufloat
+            The sequence of correlated variables.
+
+        Examples
+        --------
+
+        Estimate quantities of two perfectly correlated sequences.
+
+            >>> rcm = xyz.RunningCovarianceMatrix()
+            >>> rcm.update_from_it((1, 3, 2), (2, 6, 4))
+            >>> x, y = rcm.to_uncertainties(rcm)
+
+        Calculated quantities like sums have the error propagated:
+
+            >>> x + y
+            6.0+/-2.4494897427831783
+
+        But the covariance is also taken into account, meaning the ratio here
+        can be estimated with zero error:
+
+            >>> x / y
+            0.5+/-0
+
+        """
+        import uncertainties
+
+        means = [self.rcs[i, i].xmean for i in range(self.n)]
+        if bias:
+            covar = self.covar_matrix
+        else:
+            covar = self.sample_covar_matrix
+
+        return uncertainties.correlated_values(means, covar)
+
+
 def estimate_from_repeats(fn, *fn_args, rtol=0.02, tol_scale=1.0, get='stats',
                           verbosity=0, min_samples=5, max_samples=1000000,
                           **fn_kwargs):
