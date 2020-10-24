@@ -9,7 +9,8 @@ from xarray.core.computation import apply_ufunc
 from scipy.interpolate import LSQUnivariateSpline
 
 try:
-    from numba import njit, guvectorize, double, int_, jitclass
+    from numba import njit, guvectorize, double, int_
+    from numba.experimental import jitclass
 except ImportError:  # pragma: no cover
 
     no_numba_msg = "This function requires ``numba`` to be installed."
