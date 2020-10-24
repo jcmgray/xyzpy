@@ -35,7 +35,7 @@ Running combos using the disk as a persistence mechanism requires one more objec
 
     * In another different process, navigate to the same directory and run for example ``python -c "import xyzpy; c = xyzpy.Crop(name=...); xyzpy.grow(i, crop=c)"`` to grow the ith batch of crop with specified name. See :func:`~xyzpy.grow` for other options. This could manually be put in a script to run on a batch system.
 
-    * Use :meth:`xyzpy.Crop.qsub_grow` - experimental! This automatically generates and submits a script using qsub. See its options and :func:`xyzpy.Crop.gen_qsub_script` for the template script.
+    * Use :meth:`xyzpy.Crop.grow_cluster` - experimental! This automatically generates and submits a script using SGE, PBS or SLURM. See its options and :func:`xyzpy.Crop.gen_cluster_script` for the template scripts.
 
     * Use :meth:`xyzpy.Crop.grow` or :meth:`xyzpy.Crop.grow_missing` to complete some or all of the batches locally. This can be useful to a) finish up a few missing/errored runs b) run all the combos with persistent progress, so that one can restart the runs at a completely different time/ with updated functions etc.
 

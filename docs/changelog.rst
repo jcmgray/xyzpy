@@ -11,13 +11,16 @@ v0.3.2 (Unreleased)
 
 **Enhancements**
 
-- Add PBS support to :meth:`xyzpy.Crop.qsub_grow` for distributed crop growing
+- Generalize (and deprecate) :meth:`xyzpy.Crop.qsub_grow` to :meth:`xyzpy.Crop.grow_cluster` (:pull:`10`)
+- Add SLURM support to :meth:`xyzpy.Crop.grow_cluster` (:pull:`10`)
+- Add PBS support to :meth:`xyzpy.Crop.grow_cluster`
 - Fix PBS crop submission for job arrays of size 1
 - Add :func:`xyzpy.save_merge_ds` for manually aggregating datasets to disk
-- Add ``allow_incomplete=True`` option to :meth:`xyzpy.Crop.reap` for gathering data even if the crop is not fully grown (:issue:`7` )
-- Make new :class:`~xyzpy.Crop` instances by default automatically load information from disk if they have been already prepared/sown (:issue:`7` )
+- Add ``allow_incomplete=True`` option to :meth:`xyzpy.Crop.reap` for gathering data even if the crop is not fully grown (:issue:`7`)
+- Make new :class:`~xyzpy.Crop` instances by default automatically load information from disk if they have been already prepared/sown (:issue:`7`)
 - Automatically load Crops in the current (or specified) directory with :func:`xyzpy.load_crops`.
 - Add `'joblib'` and `'zarr'` as possible engines for saving and loading datasets
+- Keep a running track of covariance using :class:`~xyzpy.utils.RunningCovariance`.
 
 
 .. _whats-new.0.3.1:
