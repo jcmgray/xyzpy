@@ -136,3 +136,15 @@ class TestFromRepeats:
 
         rs = xyz.estimate_from_repeats(fn, 10, verbosity=2)
         assert rs.mean == pytest.approx(5, rel=0.1)
+
+
+class TestGetSizeOf:
+
+    def test_nested_list(self):
+        import sys
+        obj = [[1]]
+        assert sys.getsizeof(obj) == 80
+        assert xyz.getsizeof(obj) == 188
+        obj = [[1 << 100 - 1]]
+        assert sys.getsizeof(obj) == 80
+        assert xyz.getsizeof(obj) == 200

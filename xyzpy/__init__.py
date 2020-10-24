@@ -6,6 +6,7 @@ import xarray as xr
 from .utils import (
     unzip,
     progbar,
+    getsizeof,
     Timer,
     benchmark,
     Benchmarker,
@@ -156,6 +157,7 @@ __all__ = [
     "visualize_matrix",
     "unzip",
     "progbar",
+    "getsizeof",
     "Timer",
     "benchmark",
     "Benchmarker",

@@ -20,6 +20,7 @@ v0.3.2 (Unreleased)
 - Make new :class:`~xyzpy.Crop` instances by default automatically load information from disk if they have been already prepared/sown (:issue:`7`)
 - Automatically load Crops in the current (or specified) directory with :func:`xyzpy.load_crops`.
 - Add `'joblib'` and `'zarr'` as possible engines for saving and loading datasets
+- Add utility :func:`xyzpy.getsizeof` to quite accurately get a python objects size
 - Keep a running track of covariance using :class:`~xyzpy.utils.RunningCovariance`.
 
 
