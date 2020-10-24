@@ -167,9 +167,7 @@ class TestGetSizeOf:
 
     def test_nested_list(self):
         import sys
-        obj = [[1]]
-        assert sys.getsizeof(obj) == 80
-        assert xyz.getsizeof(obj) == 188
-        obj = [[1 << 100 - 1]]
-        assert sys.getsizeof(obj) == 80
-        assert xyz.getsizeof(obj) == 200
+        obj1 = [[1]]
+        obj2 = [[1 << 100 - 1]]
+        assert sys.getsizeof(obj1) == sys.getsizeof(obj2)
+        assert xyz.getsizeof(obj1) != xyz.getsizeof(obj2)
