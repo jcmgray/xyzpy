@@ -439,7 +439,10 @@ class Harvester(object):
             engine = self.engine
 
         if new_full_ds is not None:
-            self._full_ds.close()
+
+            if self._full_ds is not None:
+                self._full_ds.close()
+
             if os.path.exists(self.data_name):
                 if engine == 'zarr':
                     shutil.rmtree(self.data_name)
@@ -460,6 +463,9 @@ class Harvester(object):
             import datetime
             ts = '{:%Y%m%d-%H%M%S}'.format(datetime.datetime.now())
             shutil.copy(file_name, file_name + '.BAK-{}'.format(ts))
+
+        if self._full_ds is not None:
+            self._full_ds.close()
 
         if self.engine == 'zarr':
             shutil.rmtree(file_name)
