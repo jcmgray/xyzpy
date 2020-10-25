@@ -30,7 +30,8 @@ with a high number of possible parameters. This means:
 - you don't have to remember which arrays/dimensions belong to which variables/parameters
 - you don't have to parallelize over or distribute runs yourself
 - you don't have to worry about loading, saving and merging disjoint data
-- you don't need to guess when a set of runs is going to finish
+- you don't have to guess when a set of runs is going to finish
+- you don't have to write batch submission scripts or leave the notebook to use SGE, PBS or SLURM
 
 As well as the ability to automatically parallelize over runs, ``xyzpy``
 provides the ``Crop`` object that allows runs and results to be written to disk,
