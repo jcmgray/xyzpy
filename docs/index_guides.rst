@@ -8,6 +8,5 @@ User Guide
 
   generate
   gen_parallel
-  manipulate
   plotting
   utilities

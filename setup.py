@@ -24,8 +24,6 @@ setup(
     packages=find_packages(exclude=['docs', 'test*']),
     install_requires=[
         'numpy>=1.10.0',
-        'scipy>=1.0',
-        'numba>=0.39',
         'dask>=0.11.1',
         'xarray>=0.9.0',
         'pandas>=0.20',
@@ -33,15 +31,16 @@ setup(
         'h5netcdf>=0.2.2',
         'joblib>=0.12',
         'tqdm>=4.7.6',
-        'matplotlib>=2.2.0',
-        'bokeh>=0.12.3',
-        'cytoolz>=0.8',
     ],
     extras_require={
         'tests': [
             'coverage',
             'pytest',
             'pytest-cov',
+        ],
+        'plotting': [
+            'matplotlib',
+            'bokeh',
         ],
         'docs': [
             'sphinx',

@@ -4,7 +4,6 @@ channels:
 dependencies:
   - numpy
   - numba
-  - scipy
   - xarray
   - dask
   - zict
@@ -19,7 +18,6 @@ dependencies:
   - matplotlib
   - bokeh
   - ipython
-  - cytoolz
   - coverage
   - coveralls
   - codecov

@@ -6,10 +6,12 @@
 Welcome to xyzpy's documentation!
 =================================
 
-.. image:: https://travis-ci.org/jcmgray/xyzpy.svg?branch=master
-  :target: https://travis-ci.org/jcmgray/xyzpy
+.. image:: https://dev.azure.com/xyzpy-org/xyzpy/_apis/build/status/jcmgray.xyzpy?branchName=develop
+  :target: https://dev.azure.com/xyzpy-org/xyzpy
+  :alt: Azure CI
 .. image:: https://codecov.io/gh/jcmgray/xyzpy/branch/master/graph/badge.svg
   :target: https://codecov.io/gh/jcmgray/xyzpy
+  :alt: Code Coverage
 .. image:: https://img.shields.io/lgtm/grade/python/g/jcmgray/xyzpy.svg
   :target: https://lgtm.com/projects/g/jcmgray/xyzpy/
   :alt: LGTM Grade
@@ -17,11 +19,16 @@ Welcome to xyzpy's documentation!
   :target: http://xyzpy.readthedocs.io/en/latest/?badge=latest
   :alt: Documentation Status
 
-----------------------------------------------------------------------------------
+-------------------------------------------------------------------------------
 
-`xyzpy <https://github.com/jcmgray/xyzpy>`__ is python library for efficiently generating, manipulating and plotting data with a lot of dimensions, of the type that often occurs in numerical simulations. It stands wholly atop the labelled N-dimensional array library `xarray <http://xarray.pydata.org/en/stable/>`__. The project is hosted on `github <https://github.com/jcmgray/xyzpy>`__, please do submit any issues or PRs there.
+`xyzpy <https://github.com/jcmgray/xyzpy>`__ is python library for efficiently
+generating, manipulating and plotting data with a lot of dimensions, of the
+type that often occurs in numerical simulations. It stands wholly atop the
+labelled N-dimensional array library `xarray <http://xarray.pydata.org/en/stable/>`__.
+The project's documentation is hosted on `readthedocs <http://xyzpy.readthedocs.io/>`__.
 
-The aim is to take the pain and errors out of generating and exploring data with a high number of possible parameters. This means:
+The aim is to take the pain and errors out of generating and exploring data
+with a high number of possible parameters. This means:
 
 - you don't have to write super nested for loops
 - you don't have to remember which arrays/dimensions belong to which variables/parameters
@@ -29,11 +36,19 @@ The aim is to take the pain and errors out of generating and exploring data with
 - you don't have to worry about loading, saving and merging disjoint data
 - you don't need to guess when a set of runs is going to finish
 
-As well as the ability to automatically parallelize over runs, ``xyzpy`` provides the :class:`~xyzpy.Crop` object that allows runs and results to be written to disk, these can then be run by any process with access to the files - e.g. a batch system - or just serve as a convenient persistent progress mechanism.
+As well as the ability to automatically parallelize over runs, ``xyzpy``
+provides the ``Crop`` object that allows runs and results to be written to disk,
+these can then be run by any process with access to the files - e.g. a batch system
+such as SGE, PBS or SLURM - or just serve as a convenient persistent progress mechanism.
 
-In terms of post-processing, as well as all the power of `xarray <http://xarray.pydata.org/en/stable/>`__, ``xyzpy`` adds uneven step differentiation and error propagation, filtering and interpolation - along any axis just specified by name.
-
-The aim of the plotting functionality is to keep the same interface between interactively plotting the data using `bokeh <https://bokeh.pydata.org/en/latest/>`__, and static, publication ready figures using `matplotlib <https://matplotlib.org/>`__, whilst being able to see the dependence on up to 4 dimensions at once.
+Once your data has been aggregated into a ``xarray.Dataset`` or ``pandas.DataFrame``
+there exists many powerful visualization tools such as
+`seaborn <https://seaborn.pydata.org/>`_, `altair <https://altair-viz.github.io/>`_, and
+`holoviews <https://holoviews.org/#>`_ / `hvplot <https://hvplot.holoviz.org/>`_.
+To these ``xyzpy`` adds also a simple 'oneliner' interface for interactively plotting the data
+using `bokeh <https://bokeh.pydata.org/en/latest/>`__, or for static, publication ready figures
+using `matplotlib <https://matplotlib.org/>`__, whilst being able to see the dependence on
+up to 4 dimensions at once.
 
 
 Overview
@@ -97,12 +112,7 @@ Installation
 - `joblib <https://joblib.readthedocs.io/en/latest/index.html>`__ - *serialization and parallel processing*
 - `tqdm <https://tqdm.github.io>`__ - *progress bars*
 
-Processing functions like filtering and differentiating require:
-
-- `scipy <https://www.scipy.org/>`__
-- `numba <http://numba.pydata.org/numba-doc/latest/index.html>`__ - *compiled gufuncs*
-
-and the plotting functionality is provided by:
+and the optional plotting functionality is provided by:
 
 - `matplotlib <https://matplotlib.org/>`__
 - `bokeh <https://bokeh.pydata.org/en/latest/>`__ - *interactive plotting*

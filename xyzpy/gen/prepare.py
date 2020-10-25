@@ -2,7 +2,7 @@
 
 import inspect
 
-from cytoolz import isiterable
+from ..utils import isiterable
 
 
 def _str_2_tuple(x):

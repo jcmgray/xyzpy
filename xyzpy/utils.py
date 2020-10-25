@@ -7,12 +7,14 @@ import warnings
 import time
 import math
 import sys
+from collections.abc import Iterable
 
 import tqdm
-from cytoolz import isiterable
 import numpy as np
 
-from .signal import jitclass, double, int_
+
+def isiterable(obj):
+    return isinstance(obj, Iterable)
 
 
 def _choose_executor_depr_pool(executor, pool):
@@ -346,13 +348,8 @@ class Benchmarker:
         return self.ds.xyz.ilineplot('n', 'time', 'kernel', **plot_opts)
 
 
-@jitclass([
-    ('count', int_),
-    ('mean', double),
-    ('M2', double),
-])
 class RunningStatistics:  # pragma: no cover
-    """Numba-compiled running mean & standard deviation using Welford's
+    """Running mean & standard deviation using Welford's
     algorithm. This is a very efficient way of keeping track of the error on
     the mean for example.
 
@@ -441,14 +438,8 @@ class RunningStatistics:  # pragma: no cover
         return self.err / abs(self.mean)
 
 
-@jitclass([
-    ('count', int_),
-    ('xmean', double),
-    ('ymean', double),
-    ('C', double)
-])
 class RunningCovariance:  # pragma: no cover
-    """Numba compiled running covariance class.
+    """Running covariance class.
     """
 
     def __init__(self):

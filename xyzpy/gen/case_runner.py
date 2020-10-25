@@ -6,7 +6,6 @@ import itertools
 
 import numpy as np
 import xarray as xr
-from cytoolz import concat
 
 from ..utils import progbar, _choose_executor_depr_pool
 from .prepare import (
@@ -189,8 +188,8 @@ def _cases_to_df(results, fn_args, cases, var_names, var_dims=None,
 def _cases_to_ds(results, fn_args, cases, var_names, add_to_ds=None,
                  var_dims=None, var_coords=None, constants=None, attrs=None,
                  overwrite=False):
-    """ Take a list of results and configurations that generate them and turn it
-    into a `xarray.Dataset`.
+    """ Take a list of results and configurations that generate them and turn
+    it into a `xarray.Dataset`.
 
     Parameters
     ----------
@@ -420,7 +419,7 @@ def fill_missing_cases(ds, fn, var_names,
     resources = _parse_resources(resources)
 
     # Gather all internal dimensions
-    ignore_dims = set(concat(var_dims.values()))
+    ignore_dims = set(itertools.chain.from_iterable(var_dims.values()))
 
     # Find missing cases
     fn_args, missing_cases = find_missing_cases(ds, ignore_dims=ignore_dims)

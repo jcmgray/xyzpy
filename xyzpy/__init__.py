@@ -53,18 +53,6 @@ from .manage import (
     merge_sync_conflict_datasets,
     post_fix,
 )
-from .signal import (
-    xr_diff_fornberg,
-    xr_diff_u,
-    xr_diff_u_err,
-    xr_interp,
-    xr_interp_pchip,
-    xr_filter_wiener,
-    xr_filtfilt_butter,
-    xr_filtfilt_bessel,
-    xr_unispline,
-    xr_polyfit,
-)
 from .plot.color import (
     convert_colors,
 )
@@ -167,16 +155,6 @@ __all__ = [
     "RunningCovariance",
     "RunningCovarianceMatrix",
     "estimate_from_repeats",
-    "xr_diff_fornberg",
-    "xr_diff_u",
-    "xr_diff_u_err",
-    "xr_interp",
-    "xr_interp_pchip",
-    "xr_filter_wiener",
-    "xr_filtfilt_butter",
-    "xr_filtfilt_bessel",
-    "xr_unispline",
-    "xr_polyfit",
 ]
 
 
@@ -239,48 +217,6 @@ class XYZPY(object):
     @functools.wraps(post_fix)
     def post_fix(self, postfix):
         return post_fix(self._obj, postfix)
-
-    @functools.wraps(xr_diff_fornberg)
-    def diff_fornberg(self, dim, ix=100, order=1, mode='points', window=5):
-        return xr_diff_fornberg(self._obj, dim=dim, ix=ix, order=order,
-                                mode=mode, window=window)
-
-    @functools.wraps(xr_diff_u)
-    def diff_u(self, dim):
-        return xr_diff_u(self._obj, dim=dim)
-
-    @functools.wraps(xr_diff_u_err)
-    def diff_u_err(self, dim):
-        return xr_diff_u_err(self._obj, dim=dim)
-
-    @functools.wraps(xr_interp)
-    def interp(self, dim, ix=100, order=3):
-        return xr_interp(self._obj, dim=dim, ix=ix, order=order)
-
-    @functools.wraps(xr_interp_pchip)
-    def interp_pchip(self, dim, ix=100):
-        return xr_interp_pchip(self._obj, dim=dim, ix=ix)
-
-    @functools.wraps(xr_filter_wiener)
-    def filter_wiener(self, dim, mysize=5, noise=1e-2):
-        return xr_filter_wiener(self._obj, dim=dim, mysize=mysize, noise=noise)
-
-    @functools.wraps(xr_filtfilt_butter)
-    def filtfilt_butter(self, dim, N=2, Wn=0.4):
-        return xr_filtfilt_butter(self._obj, dim=dim, N=N, Wn=Wn)
-
-    @functools.wraps(xr_filtfilt_bessel)
-    def filtfilt_bessel(self, dim, N=2, Wn=0.4):
-        return xr_filtfilt_bessel(self._obj, dim=dim, N=N, Wn=Wn)
-
-    @functools.wraps(xr_unispline)
-    def unispline(self, dim, err=None, num_knots=11, ix=None):
-        return xr_unispline(self._obj, dim=dim, err=err,
-                            num_knots=num_knots, ix=ix)
-
-    @functools.wraps(xr_polyfit)
-    def polyfit(self, dim, ix=None, deg=0.5, poly='chebyshev'):
-        return xr_polyfit(self._obj, dim=dim, ix=ix, deg=deg, poly=poly)
 
 
 xr.register_dataarray_accessor('xyz')(XYZPY)

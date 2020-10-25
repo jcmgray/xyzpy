@@ -9,6 +9,12 @@ Release notes for ``xyzpy``.
 v0.3.2 (Unreleased)
 --------------------------
 
+**Breaking changes**
+
+- Remove all the data processing functionality which can now pretty much all be found in ``xarray``. This also
+  removes the ``numba``, ``scipy`` and ``cytoolz`` dependencies completely.
+
+
 **Enhancements**
 
 - Generalize (and deprecate) :meth:`xyzpy.Crop.qsub_grow` to :meth:`xyzpy.Crop.grow_cluster` (:pull:`10`)

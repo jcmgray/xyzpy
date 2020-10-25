@@ -349,8 +349,8 @@ class TestSowerReaper:
                     c2.reap_combos() ==
                     combo_runner(foo_add, combos))
 
-    @pytest.mark.parametrize("scheduler", ['sge', 'pbs'])
-    def test_gen_qsub_script(self, scheduler):
+    @pytest.mark.parametrize("scheduler", ['sge', 'pbs', 'slurm'])
+    def test_gen_cluster_script(self, scheduler):
         combos = [
             ('a', [10, 20, 30]),
             ('b', [4, 5, 6, 7]),
@@ -363,16 +363,16 @@ class TestSowerReaper:
             crop.sow_combos(combos, constants={'c': True})
 
             # test script to grow all
-            s1 = crop.gen_qsub_script(scheduler=scheduler, minutes=20)
+            s1 = crop.gen_cluster_script(scheduler=scheduler, minutes=20)
             print(s1)
 
             # test script to grow specified
-            s2 = crop.gen_qsub_script([0, 1], scheduler=scheduler)
+            s2 = crop.gen_cluster_script(batch_ids=[0, 1], scheduler=scheduler)
             print(s2)
 
             # test script to grow missing
             crop.grow((1, 3, 5))
-            s3 = crop.gen_qsub_script(scheduler=scheduler)
+            s3 = crop.gen_cluster_script(scheduler=scheduler)
             print(s3)
 
             assert s1 != s2
