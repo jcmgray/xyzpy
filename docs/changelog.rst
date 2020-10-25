@@ -4,9 +4,9 @@ Changelog
 Release notes for ``xyzpy``.
 
 
-.. _whats-new.0.3.2:
+.. _whats-new.1.0.0:
 
-v0.3.2 (Unreleased)
+v1.0.0 (24th October 2020)
 --------------------------
 
 **Breaking changes**
