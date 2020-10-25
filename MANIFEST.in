@@ -4,4 +4,4 @@ include README.rst
 include setup.cfg
 include LICENSE
 graft tests
-graft deps
+graft ci
