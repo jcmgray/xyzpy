@@ -43,6 +43,8 @@ setup(
             'bokeh',
         ],
         'docs': [
+            'matplotlib',
+            'bokeh',
             'sphinx',
             'pydata-sphinx-theme',
             'nbsphinx',
