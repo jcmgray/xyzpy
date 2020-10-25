@@ -439,6 +439,7 @@ class Harvester(object):
             engine = self.engine
 
         if new_full_ds is not None:
+            self._full_ds.close()
             if os.path.exists(self.data_name):
                 if engine == 'zarr':
                     shutil.rmtree(self.data_name)

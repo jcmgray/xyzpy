@@ -44,8 +44,10 @@ class TestProgbar:
 class TestTimer:
 
     def test_simple(self):
+        import time
+
         with xyz.Timer() as timer:
-            pass
+            time.sleep(0.01)
         assert timer.t > 0.0
 
 
