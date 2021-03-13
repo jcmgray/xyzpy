@@ -184,6 +184,24 @@ class TestHarvester:
         assert h.full_ds.identical(fn3_fba_ds)
         assert hds.identical(fn3_fba_ds)
 
+    def test_label_as_harvester(self, fn3_fba_runner, fn3_fba_ds):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fl_pth = os.path.join(tmpdir, 'test.h5')
+            h = label(
+                harvester=fl_pth,
+                fn_args=('a', 'b'),
+                var_names=['sum', 'even', 'array'],
+                var_dims={'array': ['time']},
+                var_coords={'time': np.linspace(0, 1.0, 3)},
+                constants={'c': 100},
+                attrs={'fruit': 'apples'},
+            )(fn3_fba)
+            h.harvest_combos((('a', (1, 2)), ('b', (3, 4))))
+            hds = load_ds(fl_pth)
+        assert h.last_ds.identical(fn3_fba_ds)
+        assert h.full_ds.identical(fn3_fba_ds)
+        assert hds.identical(fn3_fba_ds)
+
     def test_harvest_combos_new_sow_reap_separate(self, fn3_fba_runner,
                                                   fn3_fba_ds):
         with tempfile.TemporaryDirectory() as tmpdir:

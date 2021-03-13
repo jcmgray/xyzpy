@@ -271,8 +271,10 @@ def label(var_names,
           constants=None,
           resources=None,
           attrs=None,
+          harvester=False,
           **default_runner_settings):
-    """Decorator to automatically wrap a function as a :class:`~xyzpy.Runner`.
+    """Convenient decorator to automatically wrap a function as a
+    :class:`~xyzpy.Runner` or :class:`~xyzpy.Harvester`.
 
     Parameters
     ----------
@@ -296,6 +298,9 @@ def label(var_names,
         Like `constants` but not saved to the the dataset, e.g. if very big.
     attrs : dict-like, optional
         Any other miscelleous information to be saved with the dataset.
+    harvester : bool or str, optional
+        If ``True``, wrap the runner as a :class:`~xyzpy.Harvester`, if a
+        string, create the harvester with that as the ``data_name``.
     default_runner_settings
         These keyword arguments will be supplied as defaults to any runner.
 
@@ -323,9 +328,18 @@ def label(var_names,
 
     """
     def wrapper(fn):
+
         r = Runner(fn, var_names, fn_args=fn_args, var_dims=var_dims,
                    var_coords=var_coords, constants=constants,
                    resources=resources, attrs=attrs, **default_runner_settings)
+
+        if harvester:
+            if harvester is True:
+                data_name = None
+            else:
+                data_name = harvester
+            r = Harvester(r, data_name=data_name)
+
         return functools.update_wrapper(r, fn)
 
     return wrapper
