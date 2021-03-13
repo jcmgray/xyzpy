@@ -392,6 +392,9 @@ class Harvester(object):
     def fn(self, fn):
         self.runner.fn = fn
 
+    def __call__(self, *args, **kwargs):
+        return self.fn(*args, **kwargs)
+
     @property
     def last_ds(self):
         """Dataset containing the last runs' data.
