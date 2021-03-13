@@ -1,17 +1,16 @@
 import os
-import pathlib
-import shutil
-from itertools import chain
-from time import sleep
-from glob import glob
-import warnings
-import pickle
 import copy
 import math
+import time
+import glob
+import shutil
+import pickle
+import pathlib
+import warnings
 import functools
+import importlib
+import itertools
 
-import joblib
-from joblib.externals import cloudpickle
 import numpy as np
 import xarray as xr
 
@@ -41,6 +40,33 @@ INFO_NM = "xyz-settings.jbdmp"
 
 class XYZError(Exception):
     pass
+
+
+def write_to_disk(obj, fname):
+    with open(fname, 'wb') as file:
+        pickle.dump(obj, file)
+
+
+def read_from_disk(fname):
+    with open(fname, 'rb') as file:
+        return pickle.load(file)
+
+
+@functools.lru_cache(8)
+def get_picklelib(picklelib='joblib.externals.cloudpickle'):
+    return importlib.import_module(picklelib)
+
+
+def to_pickle(obj, picklelib='joblib.externals.cloudpickle'):
+    plib = get_picklelib(picklelib)
+    s = plib.dumps(obj)
+    return s
+
+
+def from_pickle(s, picklelib='joblib.externals.cloudpickle'):
+    plib = get_picklelib(picklelib)
+    obj = plib.loads(s)
+    return obj
 
 
 # --------------------------------- parsing --------------------------------- #
@@ -295,11 +321,11 @@ class Crop(object):
         if self.farmer is not None:
             farmer_copy = copy.deepcopy(self.farmer)
             farmer_copy.fn = None
-            farmer_pkl = cloudpickle.dumps(farmer_copy)
+            farmer_pkl = to_pickle(farmer_copy)
         else:
             farmer_pkl = None
 
-        joblib.dump({
+        write_to_disk({
             'combos': combos,
             'cases': cases,
             'fn_args': fn_args,
@@ -317,7 +343,7 @@ class Crop(object):
         if not os.path.isfile(sfile):
             raise XYZError("Settings can't be found at {}.".format(sfile))
         else:
-            return joblib.load(sfile)
+            return read_from_disk(sfile)
 
     def _sync_info_from_disk(self, only_missing=True):
         """Load information about the saved cases.
@@ -328,7 +354,10 @@ class Crop(object):
         self._batch_remainder = settings['_batch_remainder']
 
         farmer_pkl = settings['farmer']
-        farmer = None if farmer_pkl is None else pickle.loads(farmer_pkl)
+        farmer = (
+            None if farmer_pkl is None else
+            from_pickle(farmer_pkl)
+        )
 
         fn, farmer = _parse_fn_farmer(None, farmer)
 
@@ -343,14 +372,14 @@ class Crop(object):
     def save_function_to_disk(self):
         """Save the base function to disk using cloudpickle
         """
-        joblib.dump(cloudpickle.dumps(self._fn),
-                    os.path.join(self.location, FNCT_NM))
+        write_to_disk(to_pickle(self._fn),
+                      os.path.join(self.location, FNCT_NM))
 
     def load_function(self):
         """Load the saved function from disk, and try to re-insert it back into
         Harvester or Runner if present.
         """
-        self._fn = cloudpickle.loads(joblib.load(
+        self._fn = from_pickle(read_from_disk(
             os.path.join(self.location, FNCT_NM)))
 
         if self.farmer is not None:
@@ -381,9 +410,9 @@ class Crop(object):
         """
         if self.is_prepared():
             self._sync_info_from_disk()
-            self._num_sown_batches = len(glob(
+            self._num_sown_batches = len(glob.glob(
                 os.path.join(self.location, "batches", BTCH_NM.format("*"))))
-            self._num_results = len(glob(
+            self._num_results = len(glob.glob(
                 os.path.join(self.location, "results", RSLT_NM.format("*"))))
         else:
             self._num_sown_batches = -1
@@ -414,13 +443,13 @@ class Crop(object):
     @property
     def all_nan_result(self):
         if self._all_nan_result is None:
-            result_files = glob(
+            result_files = glob.glob(
                 os.path.join(self.location, "results", RSLT_NM.format("*"))
             )
             if not result_files:
                 raise XYZError("To infer an all-nan result requires at least "
                                "one finished result.")
-            reference_result = joblib.load(result_files[0])[0]
+            reference_result = read_from_disk(result_files[0])[0]
             self._all_nan_result = nan_like_result(reference_result)
 
         return self._all_nan_result
@@ -553,7 +582,7 @@ class Crop(object):
         )
 
         # load same combinations as cases saved with
-        settings = joblib.load(os.path.join(self.location, INFO_NM))
+        settings = read_from_disk(os.path.join(self.location, INFO_NM))
 
         with Reaper(self, num_batches=settings['num_batches'],
                     wait=wait, default_result=default_result) as reap_fn:
@@ -620,7 +649,7 @@ class Crop(object):
         )
 
         # Load exact same combinations as cases saved with
-        settings = joblib.load(os.path.join(self.location, INFO_NM))
+        settings = read_from_disk(os.path.join(self.location, INFO_NM))
 
         if parse:
             constants = _parse_constants(constants)
@@ -766,7 +795,7 @@ class Crop(object):
             The bad batch numbers.
         """
         # XXX: work out why this is needed sometimes on network filesystems.
-        result_files = glob(
+        result_files = glob.glob(
             os.path.join(self.location, "results", RSLT_NM.format("*")))
 
         bad_ids = []
@@ -778,10 +807,10 @@ class Crop(object):
             batch_file = os.path.join(
                 self.location, "batches", BTCH_NM.format(result_num))
 
-            batch = joblib.load(batch_file)
+            batch = read_from_disk(batch_file)
 
             try:
-                result = joblib.load(result_file)
+                result = read_from_disk(result_file)
                 unloadable = False
             except Exception as e:
                 unloadable = True
@@ -879,11 +908,10 @@ class Sower(object):
         self._batch_counter = 0  # counts how many batches have been written
 
     def save_batch(self):
-        """Save the current batch of cases to disk using joblib.dump
-         and start the next batch.
+        """Save the current batch of cases to disk and start the next batch.
         """
         self._batch_counter += 1
-        joblib.dump(self._batch_cases, os.path.join(
+        write_to_disk(self._batch_cases, os.path.join(
             self.crop.location, "batches", BTCH_NM.format(self._batch_counter))
         )
         self._batch_cases = []
@@ -941,22 +969,24 @@ def grow(batch_number, crop=None, fn=None, check_mpi=True,
         logger.setLevel(logging.DEBUG)
 
     if crop is None:
-        if os.path.relpath('.', '..')[:5] != ".xyz-":
+        current_folder = os.path.relpath('.', '..')
+        if current_folder[:5] != ".xyz-":
             raise XYZError("`grow` should be run in a "
                            "\"{crop_parent}/.xyz-{crop_name}\" folder, else "
                            "`crop_parent` and `crop_name` (or `fn`) should be "
                            "specified.")
+        crop_name = current_folder[5:]
         crop_location = os.getcwd()
     else:
+        crop_name = crop.name
         crop_location = crop.location
 
     # load function
     if fn is None:
-        fn = cloudpickle.loads(
-            joblib.load(os.path.join(crop_location, FNCT_NM)))
+        fn = from_pickle(read_from_disk(os.path.join(crop_location, FNCT_NM)))
 
     # load cases to evaluate
-    cases = joblib.load(
+    cases = read_from_disk(
         os.path.join(crop_location, "batches", BTCH_NM.format(batch_number)))
 
     if len(cases) == 0:
@@ -974,14 +1004,15 @@ def grow(batch_number, crop=None, fn=None, check_mpi=True,
         rank = 0
 
     if rank == 0:
+
+        if verbosity >= 1:
+            print(f"xyzpy: loaded batch {batch_number} of {crop_name}.")
+
         results = []
-
-        descr = "Batch {}".format(batch_number)
-
-        pbar = progbar(range(len(cases)), disable=verbosity <= 0, desc=descr)
+        pbar = progbar(range(len(cases)), disable=verbosity <= 0)
         for i in pbar:
             if verbosity >= 2:
-                pbar.set_description(descr + ": {}".format(cases[i]))
+                pbar.set_description(f"{cases[i]}")
 
             # compute and store result!
             results.append(fn(**cases[i]))
@@ -992,8 +1023,12 @@ def grow(batch_number, crop=None, fn=None, check_mpi=True,
                              "for the crop at {}.".format(crop.location))
 
         # save to results
-        joblib.dump(tuple(results), os.path.join(
+        write_to_disk(tuple(results), os.path.join(
             crop_location, "results", RSLT_NM.format(batch_number)))
+
+        if verbosity >= 1:
+            print(f"xyzpy: success - batch {batch_number} completed.")
+
     else:
         for case in cases:
             # worker: just help compute the result!
@@ -1036,23 +1071,23 @@ class Reaper(object):
             if use_default:
                 res = (default_result,) * crop.batchsize
             else:
-                res = joblib.load(x)
+                res = read_from_disk(x)
 
             if (res is None) or len(res) == 0:
                 raise ValueError("Something not right: result {} contains "
-                                 "no data upon joblib.load".format(x))
+                                 "no data upon read from disk.".format(x))
             return res
 
         def wait_to_load(x):
             while not os.path.exists(x):
-                sleep(0.2)
+                time.sleep(0.2)
 
             if os.path.isfile(x):
                 return _load(x)
             else:
                 raise ValueError("{} is not a file.".format(x))
 
-        self.results = chain.from_iterable(map(
+        self.results = itertools.chain.from_iterable(map(
             wait_to_load if wait else _load, files))
 
     def __enter__(self):
