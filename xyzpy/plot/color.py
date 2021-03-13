@@ -4,7 +4,7 @@ Helper functions for generating color spectrums.
 import itertools
 
 import matplotlib.cm as cm
-from matplotlib.colors import BASE_COLORS, CSS4_COLORS, to_rgba
+from matplotlib.colors import Colormap, BASE_COLORS, CSS4_COLORS, to_rgba
 
 from .xyz_cmaps import _XYZ_CMAPS
 
@@ -47,6 +47,12 @@ def convert_colors(cols, outformat, informat='MATPLOTLIB'):
 def xyz_colormaps(name=None, reverse=False):
     """Custom-defined colormaps
     """
+    if isinstance(name, Colormap):
+        if reverse:
+            return name.reversed()
+        else:
+            return name
+
     try:
         import colorcet
         found_colorcet = True
