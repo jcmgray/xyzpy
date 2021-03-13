@@ -1412,9 +1412,12 @@ def grow_cluster(
         f.write(script)
 
     if scheduler in {'sge', 'pbs'}:
-        subprocess.run(['qsub', script_file])
+        result = subprocess.run(['qsub', script_file], capture_output=True)
     elif scheduler == 'slurm':
-        subprocess.run(['sbatch', script_file])
+        result = subprocess.run(['sbatch', script_file], capture_output=True)
+
+    print(result.stderr.decode())
+    print(result.stdout.decode())
 
     os.remove(script_file)
 
