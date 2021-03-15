@@ -270,10 +270,16 @@ class PlotterBokeh(Plotter):
         """
         from bokeh.models import HoverTool
 
-        self._plot.add_tools(HoverTool(tooltips=[
-            ("({}, {})".format(self.x_coo, self.y_coo
-                               if isinstance(self.y_coo, str) else None),
-             "(@x, @y)"), (self.z_coo, "@z_coo")]))
+        tooltips = [
+            ("({}, {})".format(
+                self.x_coo,
+                self.y_coo if isinstance(self.y_coo, str) else None),
+             "(@x, @y)"),
+        ]
+        if self.z_coo:
+            tooltips.append((self.z_coo, "@z_coo"))
+
+        self._plot.add_tools(HoverTool(tooltips=tooltips))
 
     def update(self):
         from bokeh.io import push_notebook
