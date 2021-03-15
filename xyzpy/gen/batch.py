@@ -1,4 +1,5 @@
 import os
+import re
 import copy
 import math
 import time
@@ -1069,7 +1070,9 @@ class Reaper(object):
 
             # actual result doesn't exist yet - use the default if specified
             if use_default:
-                res = (default_result,) * crop.batchsize
+                i = int(re.findall(RSLT_NM.format(r'(\d+)'), x)[0])
+                size = crop.batchsize + int(i < crop._batch_remainder)
+                res = (default_result,) * size
             else:
                 res = read_from_disk(x)
 
