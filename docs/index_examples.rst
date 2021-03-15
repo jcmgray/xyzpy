@@ -10,3 +10,4 @@ Examples
   examples/farming example
   examples/crop example
   examples/dask distributed example
+  examples/visualize matrix

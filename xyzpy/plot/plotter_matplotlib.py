@@ -254,8 +254,8 @@ class PlotterMatplotlib(Plotter):
             lgnd.get_title().set_fontsize(self.fontsize_ztitle)
 
             if self.legend_marker_alpha is not None:
-                for l in lgnd.legendHandles:
-                    l.set_alpha(1.0)
+                for legendline in lgnd.legendHandles:
+                    legendline.set_alpha(1.0)
 
     def set_mappable(self):
         """Mappale object for colorbars.
@@ -877,7 +877,7 @@ def choose_squarest_grid(x):
 
 
 def visualize_matrix(x, figsize=(4, 4),
-                     colormap='Greys',
+                     colormap=None,
                      touching=False,
                      zlims=(None, None),
                      gridsize=None,
@@ -901,11 +901,18 @@ def visualize_matrix(x, figsize=(4, 4),
     return_fig : bool
         Whether to return the figure created or just show it.
     """
+    import matplotlib as mpl
     import matplotlib.pyplot as plt
 
     fig = plt.figure(figsize=figsize, dpi=100)
     if isinstance(x, np.ndarray):
         x = (x,)
+
+    if colormap is not None:
+        color_opts = {'cmap': xyz_colormaps(colormap),
+                      'vmin': zlims[0], 'vmax': zlims[1]}
+    else:
+        color_opts = {}
 
     nx = len(x)
     if gridsize:
@@ -916,6 +923,22 @@ def visualize_matrix(x, figsize=(4, 4),
 
     for img, subplot in zip(x, subplots):
 
+        if np.ndim(img) == 1:
+            img = np.diag(img)
+
+        # assume we want to map directly into complex/real plane
+        if colormap is None:
+            # slight rotation is for nicer colors when real
+            phi = np.angle(img) + np.pi / 8
+            mag = np.abs(img)
+            max_mag = np.max(mag)
+
+            hue = (phi + np.pi) / (2 * np.pi)
+            sat = mag / max_mag
+            val = np.tile(1.0, hue.shape)
+
+            img = mpl.colors.hsv_to_rgb(np.stack((hue, sat, val), axis=-1))
+
         if tri is not None:
             if tri not in {'upper', 'lower'}:
                 raise ValueError("'tri' should be one of {'upper', 'lower}.")
@@ -924,8 +947,7 @@ def visualize_matrix(x, figsize=(4, 4),
             img = np.ma.array(img, mask=ma_fn(np.ones_like(img), k=-1))
 
         ax = fig.add_subplot(*subplot)
-        ax.imshow(img, cmap=xyz_colormaps(colormap), interpolation='nearest',
-                  vmin=zlims[0], vmax=zlims[1])
+        ax.imshow(img, interpolation='nearest', **color_opts)
         # Hide the right and top spines
         ax.spines['right'].set_visible(False)
         ax.spines['left'].set_visible(False)
