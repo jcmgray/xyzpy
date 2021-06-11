@@ -4,6 +4,21 @@ Changelog
 Release notes for ``xyzpy``.
 
 
+.. _whats-new.1.0.1:
+
+v1.0.1 (Unreleased)
+--------------------------
+
+**Enhancements**
+
+- Defer ``Crop.reap`` clean up until *after* dataset sync (useful if you forget to set ``overwrite=True``)
+
+**Bug fixes:**
+
+- Fix sowing, reaping and merging multiple sets of cases (:issue:`13`)
+- Fix incomplete crop reaping when there is a non-zero batch remainder size
+
+
 .. _whats-new.1.0.0:
 
 v1.0.0 (24th October 2020)

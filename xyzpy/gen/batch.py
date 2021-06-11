@@ -727,11 +727,17 @@ class Crop(object):
         if harvester is None:
             raise ValueError("Cannot reap and harvest if no Harvester is set.")
 
-        ds = self.reap_runner(harvester.runner, wait=wait, clean_up=clean_up,
+        ds = self.reap_runner(harvester.runner, wait=wait, clean_up=False,
                               allow_incomplete=allow_incomplete, to_df=False)
 
         if sync:
             harvester.add_ds(ds, sync=sync, overwrite=overwrite)
+
+        # defer cleaning up until we have sucessfully synced new dataset
+        if clean_up is None:
+            clean_up = not allow_incomplete
+        if clean_up:
+            self.delete_all()
 
         return ds
 
