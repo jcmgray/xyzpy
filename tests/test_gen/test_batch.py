@@ -378,3 +378,32 @@ class TestSowerReaper:
             assert s1 != s2
             assert s1 != s3
             assert s2 != s3
+
+    def test_sow_reap_cases(self):
+
+        def dummy_function(a, b):
+            return a + b
+
+        cases1 = [(1, 2), (3, 4)]
+        cases2 = [(5, 6), (7, 8)]
+        fn_args = ('a', 'b')
+
+        with TemporaryDirectory() as tmpdir:
+            fl_pth = os.path.join(tmpdir, 'test.dmp')
+            runner = Runner(dummy_function, var_names=['Dummy_Value'])
+            harvester = Harvester(runner, engine='joblib', data_name=fl_pth)
+
+            crop1 = harvester.Crop(parent_dir=tmpdir)
+            crop1.sow_cases(fn_args=fn_args, cases=cases1)
+            crop1.grow_missing()
+            crop1.reap()
+
+            crop2 = harvester.Crop(parent_dir=tmpdir)
+            crop2.sow_cases(fn_args=fn_args, cases=cases2)
+            crop2.grow_missing()
+            crop2.reap()
+
+            ds = harvester.full_ds
+            assert isinstance(ds, xr.Dataset)
+            assert ds['Dummy_Value'].size == 16
+            assert ds['Dummy_Value'].notnull().sum() == 4
