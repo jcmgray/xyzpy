@@ -28,6 +28,7 @@ from .prepare import (
     _parse_combos,
     _parse_constants,
     _parse_attrs,
+    _parse_fn_args,
     _parse_cases,
 )
 from .farming import Runner, Harvester, Sampler
@@ -301,6 +302,9 @@ class Crop(object):
 
         # Decide based on num_batches:
         else:
+            # cap at the total number of cases
+            self.num_batches = min(n, self.num_batches)
+
             if not isinstance(self.num_batches, int):
                 raise TypeError("`num_batches` must be an integer.")
             if self.num_batches < 1:
@@ -524,8 +528,8 @@ class Crop(object):
                           verbosity=verbosity)
 
     def sow_cases(self, fn_args, cases, constants=None, verbosity=1):
+        fn_args = _parse_fn_args(self._fn, fn_args)
         cases = _parse_cases(cases)
-
         constants = self.parse_constants(constants)
 
         self.choose_batch_settings(cases=cases)
@@ -605,7 +609,8 @@ class Crop(object):
                           parse=True,
                           wait=False,
                           clean_up=None,
-                          allow_incomplete=False):
+                          allow_incomplete=False,
+                          to_df=False):
         """Reap a function over sowed combinations and output to a Dataset.
 
         Parameters
@@ -637,6 +642,8 @@ class Crop(object):
         allow_incomplete : bool, optional
             Allow only partially completed crop results to be reaped,
             incomplete results will all be filled-in as nan.
+        to_df : bool, optional
+            Whether to reap to a ``xarray.Dataset`` or a ``pandas.DataFrame``.
 
         Returns
         -------
@@ -678,7 +685,7 @@ class Crop(object):
             else:
                 opts['fn_args'] = settings['fn_args']
                 opts['cases'] = settings['cases']
-                opts['to_df'] = True
+                opts['to_df'] = to_df
                 data = case_runner_to_ds(**opts)
 
         if clean_up:
@@ -686,14 +693,14 @@ class Crop(object):
 
         return data
 
-    def reap_runner(self, runner, wait=False,
-                    clean_up=None, allow_incomplete=False):
+    def reap_runner(self, runner, wait=False, clean_up=None,
+                    allow_incomplete=False, to_df=False):
         """Reap a Crop over sowed combos and save to a dataset defined by a
         Runner.
         """
         # Can ignore `Runner.resources` as they play no part in desecribing the
         #   output, though they should be supplied to sow and thus grow.
-        ds = self.reap_combos_to_ds(
+        data = self.reap_combos_to_ds(
             var_names=runner._var_names,
             var_dims=runner._var_dims,
             var_coords=runner._var_coords,
@@ -702,9 +709,15 @@ class Crop(object):
             parse=False,
             wait=wait,
             clean_up=clean_up,
-            allow_incomplete=allow_incomplete)
-        runner.last_ds = ds
-        return ds
+            allow_incomplete=allow_incomplete,
+            to_df=to_df)
+
+        if to_df:
+            runner._last_df = data
+        else:
+            runner._last_ds = data
+
+        return data
 
     def reap_harvest(self, harvester, wait=False, sync=True, overwrite=None,
                      clean_up=None, allow_incomplete=False):
@@ -715,7 +728,7 @@ class Crop(object):
             raise ValueError("Cannot reap and harvest if no Harvester is set.")
 
         ds = self.reap_runner(harvester.runner, wait=wait, clean_up=clean_up,
-                              allow_incomplete=allow_incomplete)
+                              allow_incomplete=allow_incomplete, to_df=False)
 
         if sync:
             harvester.add_ds(ds, sync=sync, overwrite=overwrite)
@@ -728,7 +741,7 @@ class Crop(object):
             raise ValueError("Cannot reap samples without a 'Sampler'.")
 
         df = self.reap_runner(sampler.runner, wait=wait, clean_up=clean_up,
-                              allow_incomplete=allow_incomplete)
+                              allow_incomplete=allow_incomplete, to_df=True)
 
         if sync:
             sampler._last_df = df

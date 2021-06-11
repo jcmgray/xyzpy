@@ -78,6 +78,7 @@ class Runner(object):
         self._constants = _parse_constants(constants)
         self._resources = _parse_resources(resources)
         self._attrs = _parse_attrs(attrs)
+        self._last_ds = None
         self.default_runner_settings = default_runner_settings
 
     def __call__(self, *args, **kwargs):
@@ -160,6 +161,10 @@ class Runner(object):
                          "Runner's function that are *not* saved with the "
                          "dataset.")
 
+    @property
+    def last_ds(self):
+        return self._last_ds
+
     # Running methods ------------------------------------------------------- #
 
     def run_combos(self, combos, constants=(), **runner_settings):
@@ -177,7 +182,7 @@ class Runner(object):
             Keyword arguments supplied to :func:`~xyzpy.combo_runner`.
         """
         combos = _parse_combos(combos)
-        self.last_ds = combo_runner_to_ds(
+        self._last_ds = combo_runner_to_ds(
             self.fn, combos, self._var_names,
             var_dims=self._var_dims,
             var_coords=self._var_coords,
@@ -186,7 +191,7 @@ class Runner(object):
             attrs=self._attrs,
             parse=False,
             **{**self.default_runner_settings, **runner_settings})
-        return self.last_ds
+        return self._last_ds
 
     def run_cases(self, cases, constants=(), fn_args=None, **runner_settings):
         """Run cases using the function and save to dataset.
@@ -206,7 +211,7 @@ class Runner(object):
         if fn_args is None:
             fn_args = self._fn_args
 
-        self.last_ds = case_runner_to_ds(
+        self._last_ds = case_runner_to_ds(
             fn=self.fn,
             fn_args=fn_args,
             cases=cases,
@@ -218,7 +223,7 @@ class Runner(object):
             attrs=self._attrs,
             parse=False,
             **{**self.default_runner_settings, **runner_settings})
-        return self.last_ds
+        return self._last_ds
 
     def Crop(self,
              name=None,
