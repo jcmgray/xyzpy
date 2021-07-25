@@ -111,3 +111,39 @@ def get_default_sequential_cm(engine='MATPLOTLIB'):
         return itertools.cycle(Category10_9)
     else:
         return itertools.cycle(rgb + (1.,) for rgb in cm.tab10.colors)
+
+
+def cimple(
+    hue,
+    sat1=0.4,
+    sat2=1.0,
+    val1=0.9,
+    val2=0.25,
+    hue_shift=0.0,
+    name='cimple',
+):
+    """Creates a color map for a single hue.
+    """
+    import matplotlib as mpl
+    c1 = mpl.colors.hsv_to_rgb((hue, sat1, val1))
+    c2 = mpl.colors.hsv_to_rgb((hue + hue_shift, sat2, val2))
+    cdict = {
+        'red': [(0.0, c1[0], c1[0]), (1.0, c2[0], c2[0])],
+        'green': [(0.0, c1[1], c1[1]), (1.0, c2[1], c2[1])],
+        'blue': [(0.0, c1[2], c1[2]), (1.0, c2[2], c2[2])],
+    }
+    return mpl.colors.LinearSegmentedColormap(name, cdict)
+
+
+def cimple_bright(
+    hue,
+    sat1=0.8,
+    sat2=0.9,
+    val1=0.97,
+    val2=0.3,
+    hue_shift=0.0,
+    name='cimple_bright',
+):
+    """Creates a color map for a single hue, with bright defaults.
+    """
+    return cimple(hue, sat1, sat2, val1, val2, hue_shift, name)

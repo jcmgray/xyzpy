@@ -55,6 +55,8 @@ from .manage import (
 )
 from .plot.color import (
     convert_colors,
+    cimple,
+    cimple_bright,
 )
 # Making static plots with matplotlib
 from .plot.plotter_matplotlib import (
@@ -122,6 +124,8 @@ __all__ = [
     "merge_sync_conflict_datasets",
     "auto_xyz_ds",
     "convert_colors",
+    "cimple",
+    "cimple_bright",
     "LinePlot",
     "lineplot",
     "auto_lineplot",
