@@ -16,18 +16,18 @@
 # import sys
 # sys.path.insert(0, os.path.abspath('.'))
 
-import xyzpy
+# import xyzpy
 
 # -- Project information -----------------------------------------------------
 
 project = 'xyzpy'
-copyright = '2020, Johnnie Gray'
+copyright = '2016-2021, Johnnie Gray'
 author = 'Johnnie Gray'
 
-# The full version, including alpha/beta/rc tags.
-release = xyzpy._version.get_versions()['version']
-# The short X.Y version.
-version = '.'.join(release.split('.')[:2])
+# # The full version, including alpha/beta/rc tags.
+# release = xyzpy._version.get_versions()['version']
+# # The short X.Y version.
+# version = '.'.join(release.split('.')[:2])
 
 
 # -- General configuration ---------------------------------------------------
@@ -87,14 +87,15 @@ language = None
 exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store', '**.ipynb_checkpoints']
 
 # The name of the Pygments (syntax highlighting) style to use.
-pygments_style = 'pastie'
+pygments_style = 'default'
 
 
 # -- Options for HTML output -------------------------------------------------
 
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
-html_theme = "pydata_sphinx_theme"
+html_theme = "sphinx_book_theme"
+html_title = ''
 
 # Theme options are theme-specific and customize the look and feel of a theme
 # further.  For a list of options available for each theme, see the
@@ -102,6 +103,13 @@ html_theme = "pydata_sphinx_theme"
 #
 html_theme_options = {
     "github_url": "https://github.com/jcmgray/xyzpy",
+    "repository_url": "https://github.com/jcmgray/xyzpy",
+    "use_repository_button": True,
+    "use_issues_button": True,
+    "use_edit_page_button": True,
+    "path_to_docs": "docs",
+    "use_fullscreen_button": False,
+    "use_download_button": False,
 }
 
 # Add any paths that contain custom static files (such as style sheets) here,

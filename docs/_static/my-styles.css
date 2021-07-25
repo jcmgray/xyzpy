@@ -1,10 +1,8 @@
-@import url('https://fontlibrary.org/face/aardvark-sans');
-@import url('https://fonts.googleapis.com/css2?family=Commissioner&display=swap');
-@import url('https://fontlibrary.org/face/code-new-roman');
+@import url('https://fonts.googleapis.com/css2?family=Commissioner&family=Roboto+Mono:wght@400;600&display=swap');
 
 code {
-    color: #dd3636 !important;
-    background-color: #fbe9e9 !important;
+    color: #039bea !important;
+    background-color: #f1fcff !important;
 }
 
 :root{
@@ -12,9 +10,8 @@ code {
     --highlightcolor: #1a5777;
 }
 
-
 h1, h2, h3 {
-    font-family: 'AardvarkFixedRegular', monospace;
+    font-family: 'Roboto Mono', monospace;
     font-weight: bold;
     color: var(--headercolor) !important;
 }
@@ -24,25 +21,19 @@ body {
 }
 
 code, kbd, pre, samp {
-    font-family: 'CodeNewRomanRegular', monospace;
+    font-family: 'Roboto Mono', monospace;
 }
 
-.navbar-nav > .active > .nav-link {
-    color: var(--highlightcolor) !important;
+.content {
+    width: 60em;
 }
 
-.toc-entry > .nav-link.active {
-    color: var(--highlightcolor) !important;
+.bd-sidebar {
+    padding-top: 0em;
+    padding-right: 2em;
+    padding-left: 2em;
 }
 
-.bd-sidebar .nav > .active:hover > a, .bd-sidebar .nav > .active > a {
-    color: var(--highlightcolor) !important;
-}
-
-.toc-entry a {
-    padding: 0.4rem 1.0rem;
-}
-
-.container, .container-lg, .container-md, .container-sm, .container-xl {
-    max-width: 1600px;
+#site-navigation div.navbar_extra_footer {
+    font-size: .6em;
 }
