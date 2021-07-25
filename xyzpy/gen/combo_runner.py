@@ -97,24 +97,27 @@ def nested_submit(fn, combos, kwds, executor=None):
 
 
 def default_getter(pbar=None):
-    """Generate the default function to get a result from a future, updating
-    the progress bar ``pbar`` in the process.
+    """Generate the default function to get a result from a future, maybe
+    updating the progress bar ``pbar`` in the process.
     """
+
+    def getter(future):
+        # don't using try-except here, because futures might raise themselves
+        if hasattr(future, "get"):
+            return future.get()
+        if hasattr(future, "result"):
+            return future.result()
+        raise TypeError("Future does not have a `result` or `get` method.")
+
     if pbar:
-        def getter(future):
-            try:
-                res = future.result()
-            except AttributeError:
-                res = future.get()
+
+        def getter_with_pbar(future):
+            res = getter(future)
             pbar.update()
             return res
-    else:
-        def getter(future):
-            try:
-                res = future.result()
-            except AttributeError:
-                res = future.get()
-            return res
+
+        return getter_with_pbar
+
     return getter
 
 
