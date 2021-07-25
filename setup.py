@@ -46,7 +46,7 @@ setup(
             'matplotlib',
             'bokeh',
             'sphinx',
-            'pydata-sphinx-theme',
+            'sphinx-book-theme>=0.1',
             'nbsphinx',
             'ipython',
         ]
