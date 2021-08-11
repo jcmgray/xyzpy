@@ -10,20 +10,20 @@ import pandas as pd
 import xarray as xr
 
 from .prepare import (
-    _parse_fn_args,
-    _parse_var_names,
-    _parse_var_dims,
-    _parse_var_coords,
-    _parse_constants,
-    _parse_resources,
-    _parse_combos,
-    _parse_cases,
-    _parse_attrs,
+    parse_fn_args,
+    parse_var_names,
+    parse_var_dims,
+    parse_var_coords,
+    parse_constants,
+    parse_resources,
+    parse_combos,
+    parse_cases,
+    parse_attrs,
 )
 from .combo_runner import combo_runner_to_ds
 from .case_runner import case_runner_to_ds
 from ..manage import load_ds, save_ds, load_df, save_df
-from . import batch
+from . import cropping
 
 
 # --------------------------------------------------------------------------- #
@@ -71,13 +71,13 @@ class Runner(object):
                  attrs=None,
                  **default_runner_settings):
         self.fn = fn
-        self._var_names = _parse_var_names(var_names)
-        self._fn_args = _parse_fn_args(fn, fn_args)
-        self._var_dims = _parse_var_dims(var_dims, self._var_names)
-        self._var_coords = _parse_var_coords(var_coords)
-        self._constants = _parse_constants(constants)
-        self._resources = _parse_resources(resources)
-        self._attrs = _parse_attrs(attrs)
+        self._var_names = parse_var_names(var_names)
+        self._fn_args = parse_fn_args(fn, fn_args)
+        self._var_dims = parse_var_dims(var_dims, self._var_names)
+        self._var_coords = parse_var_coords(var_coords)
+        self._constants = parse_constants(constants)
+        self._resources = parse_resources(resources)
+        self._attrs = parse_attrs(attrs)
         self._last_ds = None
         self.default_runner_settings = default_runner_settings
 
@@ -90,7 +90,7 @@ class Runner(object):
         return self._fn_args
 
     def _set_fn_args(self, fn_args):
-        self._fn_args = _parse_fn_args(self.fn, fn_args)
+        self._fn_args = parse_fn_args(self.fn, fn_args)
 
     def _del_fn_args(self):
         self._fn_args = None
@@ -102,7 +102,7 @@ class Runner(object):
         return self._var_names
 
     def _set_var_names(self, var_names):
-        self._var_names = _parse_var_names(var_names)
+        self._var_names = parse_var_names(var_names)
 
     def _del_var_names(self):
         self._var_names = None
@@ -116,7 +116,7 @@ class Runner(object):
     def _set_var_dims(self, var_dims, var_names=None):
         if var_names is None:
             var_names = self._var_names
-        self._var_dims = _parse_var_dims(var_dims, var_names)
+        self._var_dims = parse_var_dims(var_dims, var_names)
 
     def _del_var_dims(self):
         self._var_dims = None
@@ -128,7 +128,7 @@ class Runner(object):
         return self._var_coords
 
     def _set_var_coords(self, var_coords):
-        self._var_coords = _parse_var_coords(var_coords)
+        self._var_coords = parse_var_coords(var_coords)
 
     def _del_var_coords(self):
         self._var_coords = None
@@ -140,7 +140,7 @@ class Runner(object):
         return self._constants
 
     def _set_constants(self, constants):
-        self._constants = _parse_constants(constants)
+        self._constants = parse_constants(constants)
 
     def _del_constants(self):
         self._constants = None
@@ -152,7 +152,7 @@ class Runner(object):
         return self._resources
 
     def _set_resources(self, resources):
-        self._resources = _parse_resources(resources)
+        self._resources = parse_resources(resources)
 
     def _del_resources(self):
         self._resources = None
@@ -181,9 +181,11 @@ class Runner(object):
         runner_settings
             Keyword arguments supplied to :func:`~xyzpy.combo_runner`.
         """
-        combos = _parse_combos(combos)
+        combos = parse_combos(combos)
         self._last_ds = combo_runner_to_ds(
-            self.fn, combos, self._var_names,
+            fn=self.fn,
+            combos=combos,
+            var_names=self._var_names,
             var_dims=self._var_dims,
             var_coords=self._var_coords,
             constants={**self._constants, **dict(constants)},
@@ -206,10 +208,10 @@ class Runner(object):
         runner_settings
             Supplied to :func:`~xyzpy.case_runner`.
         """
-        cases = _parse_cases(cases)
-
         if fn_args is None:
             fn_args = self._fn_args
+
+        cases = parse_cases(cases, fn_args)
 
         self._last_ds = case_runner_to_ds(
             fn=self.fn,
@@ -239,12 +241,9 @@ class Runner(object):
         -------
         Crop
         """
-        return batch.Crop(farmer=self,
-                          name=name,
-                          parent_dir=parent_dir,
-                          save_fn=save_fn,
-                          batchsize=batchsize,
-                          num_batches=num_batches)
+        return cropping.Crop(farmer=self, name=name, parent_dir=parent_dir,
+                             save_fn=save_fn, batchsize=batchsize,
+                             num_batches=num_batches)
 
     def __repr__(self):
         string = "<xyzpy.Runner>\n"
@@ -277,6 +276,7 @@ def label(var_names,
           resources=None,
           attrs=None,
           harvester=False,
+          sampler=False,
           **default_runner_settings):
     """Convenient decorator to automatically wrap a function as a
     :class:`~xyzpy.Runner` or :class:`~xyzpy.Harvester`.
@@ -332,6 +332,9 @@ def label(var_names,
         (3, -1)
 
     """
+    if harvester and sampler:
+        raise ValueError("Cannot be both a harvester and a sampler.")
+
     def wrapper(fn):
 
         r = Runner(fn, var_names, fn_args=fn_args, var_dims=var_dims,
@@ -344,6 +347,13 @@ def label(var_names,
             else:
                 data_name = harvester
             r = Harvester(r, data_name=data_name)
+
+        if sampler:
+            if sampler is True:
+                data_name = None
+            else:
+                data_name = sampler
+            r = Sampler(r, data_name=data_name)
 
         return functools.update_wrapper(r, fn)
 
@@ -645,12 +655,9 @@ class Harvester(object):
         -------
         Crop
         """
-        return batch.Crop(farmer=self,
-                          name=name,
-                          parent_dir=parent_dir,
-                          save_fn=save_fn,
-                          batchsize=batchsize,
-                          num_batches=num_batches)
+        return cropping.Crop(farmer=self, name=name, parent_dir=parent_dir,
+                             save_fn=save_fn, batchsize=batchsize,
+                             num_batches=num_batches)
 
     def __repr__(self):
         string = ("<xyzpy.Harvester>\n"
@@ -816,8 +823,13 @@ class Sampler:
         )
         return tuple(combos.keys()), cases
 
-    def sample_combos(self, n, combos=None, engine=None,
-                      **case_runner_settings):
+    def sample_combos(
+        self,
+        n,
+        combos=None,
+        engine=None,
+        **case_runner_settings,
+    ):
         """Sample the target function many times, randomly choosing parameter
         combinations from ``combos`` (or ``SampleHarvester.default_combos``).
 
@@ -843,12 +855,14 @@ class Sampler:
         self.add_df(last_df, engine=engine)
         return last_df
 
-    def Crop(self,
-             name=None,
-             parent_dir=None,
-             save_fn=None,
-             batchsize=None,
-             num_batches=None):
+    def Crop(
+        self,
+        name=None,
+        parent_dir=None,
+        save_fn=None,
+        batchsize=None,
+        num_batches=None,
+    ):
         """Return a Crop instance with this Sampler, from which `fn`
         will be set, and then samples can be sown, grown, and reaped into the
         ``Sampler.full_df``. See :class:`~xyzpy.Crop`.
@@ -857,12 +871,9 @@ class Sampler:
         -------
         Crop
         """
-        return batch.Crop(farmer=self,
-                          name=name,
-                          parent_dir=parent_dir,
-                          save_fn=save_fn,
-                          batchsize=batchsize,
-                          num_batches=num_batches)
+        return cropping.Crop(farmer=self, name=name, parent_dir=parent_dir,
+                             save_fn=save_fn, batchsize=batchsize,
+                             num_batches=num_batches)
 
     def __repr__(self):
         string = ("<xyzpy.Sampler>\n"

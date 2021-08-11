@@ -9,7 +9,7 @@ import xarray as xr
 
 from xyzpy.manage import load_ds, load_df
 from xyzpy.gen.farming import Runner, Harvester, Sampler, label
-from xyzpy.gen.batch import grow
+from xyzpy.gen.cropping import grow
 
 
 # -------------------------------- Fixtures --------------------------------- #

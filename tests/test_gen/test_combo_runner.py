@@ -7,7 +7,7 @@ import xarray as xr
 
 from xyzpy.gen.combo_runner import (
     combo_runner,
-    _combos_to_ds,
+    results_to_ds,
     combo_runner_to_ds,
 )
 from . import (
@@ -108,7 +108,7 @@ class TestCombosToDS:
         results = [1, 2, 3]
         combos = [('a', [1, 2, 3])]
         var_names = ['sum']
-        ds = _combos_to_ds(results, combos, var_names,
+        ds = results_to_ds(results, combos, var_names,
                            var_dims={'sum': ()}, var_coords={})
         assert ds['sum'].data.dtype == int
 

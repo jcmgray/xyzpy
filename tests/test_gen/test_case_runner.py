@@ -1,16 +1,13 @@
-import pytest
 import xarray as xr
 import numpy as np
 from numpy.testing import assert_allclose
 
 from xyzpy.gen.case_runner import (
     case_runner,
-    _cases_to_ds,
     case_runner_to_ds,
+    case_runner_to_df,
     find_missing_cases,
-    fill_missing_cases,
 )
-from xyzpy.gen.combo_runner import combo_runner_to_ds
 from . import (
     foo3_scalar,
     foo3_float_bool,
@@ -67,110 +64,6 @@ class TestCaseRunner:
         xs = case_runner(foo3_scalar, 'a', cases,
                          constants={'b': 10, 'c': 100})
         assert xs == (111, 112, 113)
-
-
-class TestCasesToDS:
-    def test_simple(self):
-        results = ((1,), (2,), (3,), (4,), (5,))
-        cases = (('a', 'a'), ('a', 'b'), ('b', 'c'), ('c', 'c'), ('b', 'a'))
-        ds = _cases_to_ds(results=results,
-                          fn_args=('case1', 'case2'),
-                          var_names=('bananas',),
-                          cases=cases, var_dims={'bananas': ()},
-                          var_coords={})
-        assert_allclose(ds.bananas.data, [[1, 2, np.nan],
-                                          [5, np.nan, 3],
-                                          [np.nan, np.nan, 4]])
-
-    def test_single_result_format(self):
-        results = [(1,), (2,), (3,), (4,), (5,)]
-        cases = [('a', 'a'), ('a', 'b'), ('b', 'c'), ('c', 'c'), ('b', 'a')]
-        ds = _cases_to_ds(results=results, cases=cases,
-                          fn_args=('case1', 'case2'),
-                          var_names=('bananas',),
-                          var_dims={'bananas': ()},
-                          var_coords={})
-        assert_allclose(ds.bananas.data, [[1, 2, np.nan],
-                                          [5, np.nan, 3],
-                                          [np.nan, np.nan, 4]])
-
-    def test_single_cases_format(self):
-        results = [(1,), (2,), (3,), (4,), (5,)]
-        cases = [('a',), ('b',), ('c',), ('d',), ('e',)]
-        ds = _cases_to_ds(results=results,
-                          cases=cases,
-                          fn_args=('case1',),
-                          var_names=('bananas',),
-                          var_dims={'bananas': ()},
-                          var_coords={},)
-        assert_allclose(ds.bananas.data, [1, 2, 3, 4, 5])
-
-    def test_multires(self):
-        var_names = ('lists',)
-        var_vals = [np.arange(10) + i for i in range(5)]
-        var_dims = {'lists': ('time',)}
-        var_coords = {'time': np.arange(10) / 10}
-        fn_args = ('letter',)
-        case_cnfgs = ['a', 'b', 'c', 'd', 'e']
-        ds = _cases_to_ds(results=var_vals,
-                          fn_args=fn_args,
-                          cases=case_cnfgs,
-                          var_names=var_names,
-                          var_dims=var_dims,
-                          var_coords=var_coords)
-        assert ds.time.data.dtype == float
-
-    def test_add_to_ds(self):
-        ds = xr.Dataset(coords={'a': [1, 2],
-                                'b': [10, 20]})
-        ds['x'] = (('a', 'b'), [[11, 21], [12, 0]])
-        assert ds['x'].sel(a=2, b=20).data == 0
-        _cases_to_ds(results=[22],
-                     fn_args=['a', 'b'],
-                     cases=[[2, 20]],
-                     var_names=['x'],
-                     add_to_ds=ds,
-                     overwrite=True)
-        assert ds['x'].data.dtype == int
-        assert ds['x'].sel(a=2, b=20).data == 22
-
-    def test_add_to_ds_array(self):
-        ds = xr.Dataset(coords={'a': [1, 2],
-                                'b': [10, 20],
-                                't': [0.1, 0.2, 0.3]})
-        ds['x'] = (('a', 'b', 't'), [[[11.1, 11.2, 11.3], [21.1, 21.2, 21.3]],
-                                     [[12.1, 12.2, 12.3], [0, 0, 0]]])
-        assert_allclose(ds['x'].sel(a=2, b=20).data, [0, 0, 0])
-        _cases_to_ds(results=[[[22.1, 22.2, 22.3]]],
-                     fn_args=['a', 'b'],
-                     cases=[[2, 20]],
-                     var_names=['x'],
-                     var_dims=['t'],
-                     add_to_ds=ds, overwrite=True)
-        assert_allclose(ds['x'].sel(a=2, b=20).data, [22.1, 22.2, 22.3])
-
-    def test_add_to_ds_no_overwrite(self):
-        ds = xr.Dataset(coords={'a': [1, 2],
-                                'b': [10, 20]})
-        ds['x'] = (('a', 'b'), [[11, 21], [12, 0]])
-        assert ds['x'].sel(a=2, b=20).data == 0
-        with pytest.raises(ValueError):
-            _cases_to_ds(results=[22],
-                         fn_args=['a', 'b'],
-                         cases=[[2, 20]],
-                         var_names=['x'],
-                         add_to_ds=ds,
-                         overwrite=False)
-        ds = xr.Dataset(coords={'a': [1, 2],
-                                'b': [10, 20]})
-        ds['x'] = (('a', 'b'), [[11, 21], [12, None]])
-        _cases_to_ds(results=[22],
-                     fn_args=['a', 'b'],
-                     cases=[[2, 20]],
-                     var_names=['x'],
-                     add_to_ds=ds,
-                     overwrite=False)
-        assert ds['x'].sel(a=2, b=20).data == 22
 
 
 class TestCaseRunnerToDS:
@@ -289,6 +182,21 @@ class TestCaseRunnerToDS:
         assert np.logical_not(np.isnan(fds['y'].data)).all()
 
 
+class TestCaseRunnerToDF:
+
+    def test_single_arg(self):
+
+        df = case_runner_to_df(
+            fn=foo3_scalar,
+            fn_args=['a', 'b', 'c'],
+            cases=[(1, 10, 100), (2, 20, 200)],
+            var_names='x',
+        )
+        assert len(df) == 2
+        assert df.columns.tolist() == ['a', 'b', 'c', 'x']
+        assert df.x.dtype == int
+
+
 # --------------------------------------------------------------------------- #
 # Finding and filling missing data                                            #
 # --------------------------------------------------------------------------- #
@@ -347,62 +255,3 @@ class TestFindMissingCases:
         assert set(m_args) == {'a', 'b'}
         assert all(t_config in m_configs for t_config in t_configs)
         assert all(m_config in t_configs for m_config in m_configs)
-
-
-class TestFillMissingCases:
-    def test_simple(self):
-        ds = xr.Dataset(coords={'a': [1, 2, 3], 'b': [40, 50]})
-        ds['x'] = (('a', 'b'), np.array([[641, np.nan],
-                                         [np.nan, 652],
-                                         [np.nan, np.nan]]))
-        fill_missing_cases(ds, fn=foo3_scalar, constants={'c': 600},
-                           var_names='x')
-        assert_allclose(ds.x.data, [[641, 651], [642, 652], [643, 653]])
-
-    def test_multires(self):
-        ds = xr.Dataset(coords={'a': [1, 2, 3], 'b': [40, 50]})
-        ds['x'] = (('a', 'b'), np.array([[641, np.nan],
-                                         [np.nan, 652],
-                                         [np.nan, np.nan]]))
-        ds['even'] = (('a', 'b'), np.array([[False, None],
-                                            [None, True],
-                                            [None, None]]))
-        fill_missing_cases(ds, fn=foo3_float_bool, constants={'c': 600},
-                           var_names=['x', 'even'])
-        assert_allclose(ds.x.data, [[641, 651],
-                                    [642, 652],
-                                    [643, 653]])
-        assert(ds.even.data.tolist() == [[False, False],
-                                         [True, True],
-                                         [False, False]])
-
-    def test_array_return(self):
-        ds = xr.Dataset(coords={'a': [1, 2, 3], 'b': [40, 50],
-                                't': [0.0, 0.1, 0.2, 0.3, 0.4]})
-        ds['z1'] = (('a', 'b', 't'),
-                    np.array([[41 + 0.1j * np.arange(5), [np.nan] * 5],
-                              [[np.nan] * 5, 52 + 0.1j * np.arange(5)],
-                              [[np.nan] * 5, [np.nan] * 5]]))
-        ds['z2'] = (('a', 'b', 't'),
-                    np.array([[41 - 0.1j * np.arange(5), [np.nan] * 5],
-                              [[np.nan] * 5, 52 - 0.1j * np.arange(5)],
-                              [[np.nan] * 5, [np.nan] * 5]]))
-        settings = {'var_names': ['z1', 'z2'],
-                    'var_dims': {('z1', 'z2'): 't'},
-                    'var_coords': {'t': [0.0, 0.1, 0.2, 0.3, 0.4]}}
-        fill_missing_cases(ds, foo2_zarray1_zarray2, **settings)
-        dst = combo_runner_to_ds(foo2_zarray1_zarray2,
-                                 combos=[('a', [1, 2, 3]),
-                                         ('b', [40, 50])], **settings)
-        assert dst.equals(ds)
-
-    def test_float_coords(self):
-        ds = xr.Dataset(coords={'a': [1.1, 2.1, 3.1], 'b': [40.01, 50.01]})
-        ds['x'] = (('a', 'b'), np.array([[641.11, np.nan],
-                                         [np.nan, 652.11],
-                                         [np.nan, np.nan]]))
-        fill_missing_cases(ds, fn=foo3_scalar, constants={'c': 600},
-                           var_names='x')
-        assert_allclose(ds.x.data, [[641.11, 651.11],
-                                    [642.11, 652.11],
-                                    [643.11, 653.11]])
