@@ -387,8 +387,8 @@ class TestSampler:
             hdf = load_df(fl_pth, engine=engine)
 
             assert len(hdf) == 10
-            assert s.last_df.equals(hdf)
-            assert s.full_df.equals(hdf)
+            assert s.last_df.compare(hdf).empty
+            assert s.full_df.compare(hdf).empty
 
             s.sample_combos(20, combos)
             hdf = load_df(fl_pth, engine=engine)
@@ -423,5 +423,5 @@ class TestSampler:
             c.reap()
             hdf = load_df(fl_pth)
             assert len(hdf) == 10
-            assert s.last_df.equals(hdf)
-            assert s.full_df.equals(hdf)
+            assert s.last_df.compare(hdf).empty
+            assert s.full_df.compare(hdf).empty

@@ -194,7 +194,7 @@ class TestCaseRunnerToDF:
         )
         assert len(df) == 2
         assert df.columns.tolist() == ['a', 'b', 'c', 'x']
-        assert df.x.dtype == int
+        assert 'int' in df.x.dtype.name
 
 
 # --------------------------------------------------------------------------- #
