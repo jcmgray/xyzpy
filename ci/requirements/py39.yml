@@ -1,0 +1,25 @@
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - python=3.9
+  - numpy
+  - numba
+  - xarray
+  - dask
+  - zict
+  - joblib
+  - netcdf4
+  - hdf4
+  - h5py
+  - h5netcdf
+  - pytest
+  - pytest-cov
+  - tqdm
+  - matplotlib
+  - bokeh
+  - ipython
+  - coverage
+  - coveralls
+  - codecov
+  - zarr
