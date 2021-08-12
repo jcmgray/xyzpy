@@ -28,17 +28,13 @@ from .prepare import (
     parse_fn_args,
     parse_cases,
 )
-from .farming import Runner, Harvester, Sampler
+from .farming import Runner, Harvester, Sampler, XYZError
 
 
 BTCH_NM = "xyz-batch-{}.jbdmp"
 RSLT_NM = "xyz-result-{}.jbdmp"
 FNCT_NM = "xyz-function.clpkl"
 INFO_NM = "xyz-settings.jbdmp"
-
-
-class XYZError(Exception):
-    pass
 
 
 def write_to_disk(obj, fname):

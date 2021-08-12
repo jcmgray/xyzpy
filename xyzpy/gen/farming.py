@@ -26,6 +26,10 @@ from ..manage import load_ds, save_ds, load_df, save_df
 from . import cropping
 
 
+class XYZError(Exception):
+    pass
+
+
 # --------------------------------------------------------------------------- #
 #                                   RUNNER                                    #
 # --------------------------------------------------------------------------- #
@@ -172,10 +176,10 @@ class Runner(object):
 
         Parameters
         ----------
-        combos : tuple of form ((str, seq), ...)
+        combos : dict_like
             The values of each function argument with which to evaluate all
             combinations.
-        constants : dict (optional)
+        constants : dict, optional
             Extra constant arguments for this run, repeated arguments will
             take precedence over stored constants but for this run only.
         runner_settings
@@ -467,6 +471,10 @@ class Harvester(object):
         engine : str, optional
             Engine to use to save and load datasets.
         """
+        if self.data_name is None:
+            raise XYZError("You didn't set a ``data_name`` for this harvester "
+                           "to use for persistent storage.")
+
         if engine is None:
             engine = self.engine
 
@@ -569,18 +577,35 @@ class Harvester(object):
         else:
             self._full_ds = new_full_ds
 
-    def harvest_combos(self, combos, *,
-                       sync=True,
-                       overwrite=None,
-                       chunks=None,
-                       engine=None,
-                       **runner_settings):
+    def expand_dims(self, name, value, engine=None):
+        """Add a new coordinate dimension with ``name`` and ``value``.
+        """
+        ds = self.full_ds
+        new_ds = ds.expand_dims(name)
+        new_ds.coords[name] = [value]
+        if self.data_name is not None:
+            self.save_full_ds(new_ds, engine=engine)
+        else:
+            self._full_ds = new_ds
+
+    def harvest_combos(
+        self,
+        combos,
+        *,
+        sync=True,
+        overwrite=None,
+        chunks=None,
+        engine=None,
+        **runner_settings
+    ):
         """Run combos, automatically merging into an on-disk dataset.
 
         Parameters
         ---------
-        combos : mapping_like
-            The combos to run.
+        combos : dict_like
+            The combos to run. The only difference here is that you can supply
+            an ellipse ``...``, meaning the all values for that coordinate will
+            be loaded from the current full dataset.
         sync : bool, optional
             If True (default), load and save the disk dataset before
             and after merging in the new data.
@@ -600,7 +625,10 @@ class Harvester(object):
         runner_settings
             Supplied to :func:`~xyzpy.combo_runner`.
         """
-
+        combos = tuple(
+            (key, self.full_ds.coords[key].values if values is ... else values)
+            for key, values in parse_combos(combos)
+        )
         ds = self.runner.run_combos(combos, **runner_settings)
         self.add_ds(ds, sync=sync, overwrite=overwrite,
                     chunks=chunks, engine=engine)

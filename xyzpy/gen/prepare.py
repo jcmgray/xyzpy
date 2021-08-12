@@ -40,7 +40,10 @@ def parse_combos(combos):
         combos = tuple(combos.items())
     elif isinstance(combos[0], str):
         combos = (combos,)
-    return tuple((arg, list(vals)) for arg, vals in combos)
+    return tuple(
+        (arg, list(vals) if isiterable(vals) else vals)
+        for arg, vals in combos
+    )
 
 
 def parse_combo_results(results, var_names):

@@ -361,6 +361,28 @@ class TestHarvester:
             assert h.full_ds['sum'].chunks is not None
             h.full_ds.close()
 
+    def test_expand_dims_and_ellipsis_combos(self):
+
+        @label('x', harvester=True)
+        def foo(a, b, c=5):
+            return a + b + c
+
+        foo.harvest_combos({
+            'a': [1, 2],
+            'b': [3, 4]
+        })
+
+        assert foo.full_ds['x'].ndim == 2
+        foo.expand_dims('c', 5)
+        assert foo.full_ds['x'].ndim == 3
+
+        foo.harvest_combos({
+            'a': ...,
+            'b': ...,
+            'c': [8, 9],
+        })
+        assert list(foo.full_ds['c'].values) == [5, 8, 9]
+
 
 class TestSampler:
 
