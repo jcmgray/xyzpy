@@ -184,6 +184,7 @@ class Crop(object):
         save_fn=None,
         batchsize=None,
         num_batches=None,
+        shuffle=False,
         farmer=None,
         autoload=True
     ):
@@ -194,6 +195,7 @@ class Crop(object):
         self.save_fn = save_fn
         self.batchsize = batchsize
         self.num_batches = num_batches
+        self.shuffle = shuffle
         self._batch_remainder = None
         self._all_nan_result = None
 
@@ -296,6 +298,7 @@ class Crop(object):
             'batchsize': self.batchsize,
             'num_batches': self.num_batches,
             '_batch_remainder': self._batch_remainder,
+            'shuffle': self.shuffle,
             'farmer': farmer_pkl,
         }, os.path.join(self.location, INFO_NM))
 
@@ -480,6 +483,7 @@ class Crop(object):
         combos,
         cases=None,
         constants=None,
+        shuffle=False,
         verbosity=1,
         batchsize=None,
         num_batches=None,
@@ -495,6 +499,10 @@ class Crop(object):
             or all function arguments.
         constants : mapping, optional
             Provide additional constant function values to use when sowing.
+        shuffle : bool or int, optional
+            If given, sow the combos in a random order (using ``random.seed``
+            and ``random.shuffle``), which can be helpful for distributing
+            resources when not all cases are computationally equal.
         verbosity : int, optional
             How much information to show when sowing.
         batchsize : int, optional
@@ -506,6 +514,8 @@ class Crop(object):
             self.batchsize = batchsize
         if num_batches is not None:
             self.num_batches = num_batches
+        if shuffle is not None:
+            self.shuffle = shuffle
 
         combos = parse_combos(combos)
         cases = parse_cases(cases)
@@ -524,6 +534,7 @@ class Crop(object):
                 combos=combos,
                 cases=cases,
                 constants=constants,
+                shuffle=shuffle,
                 verbosity=verbosity,
             )
 
@@ -631,7 +642,7 @@ class Crop(object):
         )
 
         # load same combinations as cases saved with
-        settings = read_from_disk(os.path.join(self.location, INFO_NM))
+        settings = self.load_info()
 
         with Reaper(self, num_batches=settings['num_batches'],
                     wait=wait, default_result=default_result) as reap_fn:
@@ -641,6 +652,7 @@ class Crop(object):
                 combos=settings['combos'],
                 cases=settings['cases'],
                 constants={},
+                shuffle=settings.get('shuffle', False),
             )
 
         if clean_up:
@@ -706,8 +718,8 @@ class Crop(object):
             self, clean_up, allow_incomplete
         )
 
-        # Load exact same combinations as cases saved with
-        settings = read_from_disk(os.path.join(self.location, INFO_NM))
+        # load exact same combinations as cases saved with
+        settings = self.load_info()
 
         if parse:
             constants = parse_constants(constants)
@@ -728,6 +740,7 @@ class Crop(object):
                 constants={},
                 resources={},
                 attrs={**constants, **attrs},
+                shuffle=settings.get('shuffle', False),
                 parse=parse,
                 to_df=to_df,
             )

@@ -27,6 +27,7 @@ def case_runner(
     combos=None,
     constants=None,
     split=False,
+    shuffle=False,
     parse=True,
     parallel=False,
     executor=None,
@@ -43,12 +44,18 @@ def case_runner(
         Names of case arguments that fn takes, can be ``None`` if each case is
         a ``dict``.
     cases : iterable[tuple] or iterable[dict]
-        List of settings that ``fn_args`` take. If ``fn_args`` is ``None``,
-        each case should be a ``dict``.
-    constants : mapping, optional
-        Arguments to `fn` which are not iterated over.
+        List of specific configurations that ``fn_args`` should take. If
+        ``fn_args`` is ``None``, each case should be a ``dict``.
+    combos : dict_like[str, iterable], optional
+        Optional specification of sub-combinations.
+    constants : dict, optional
+        Constant function arguments.
     split : bool, optional
         See :func:`~xyzpy.combo_runner`.
+    shuffle : bool or int, optional
+        If given, compute the results in a random order (using ``random.seed``
+        and ``random.shuffle``), which can be helpful for distributing
+        resources when not all cases are computationally equal.
     parallel : bool, optional
         Process combos in parallel, default number of workers picked.
     executor : executor-like pool, optional
@@ -87,6 +94,7 @@ def case_runner(
         verbosity=verbosity,
         split=split,
         flat=True,
+        shuffle=shuffle,
     )
 
 
@@ -101,6 +109,7 @@ def case_runner_to_ds(
     constants=None,
     resources=None,
     attrs=None,
+    shuffle=False,
     to_df=False,
     parse=True,
     parallel=False,
@@ -138,6 +147,10 @@ def case_runner_to_ds(
         Like `constants` but they will not be recorded.
     attrs : mapping, optional
         Any extra attributes to store.
+    shuffle : bool or int, optional
+        If given, compute the results in a random order (using ``random.seed``
+        and ``random.shuffle``), which can be helpful for distributing
+        resources when not all cases are computationally equal.
     parse : bool, optional
         Whether to perform parsing of the inputs arguments.
     parallel : bool, optional
@@ -183,6 +196,7 @@ def case_runner_to_ds(
         constants=constants,
         resources=resources,
         attrs=attrs,
+        shuffle=shuffle,
         to_df=to_df,
         parallel=parallel,
         num_workers=num_workers,

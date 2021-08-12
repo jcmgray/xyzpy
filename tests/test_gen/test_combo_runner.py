@@ -35,8 +35,10 @@ _test_expect1 = (np.array([1, 2]).reshape((2, 1, 1)) +
 
 
 class TestComboRunner:
-    def test_simple(self):
-        x = combo_runner(foo3_scalar, _test_combos1)
+
+    @pytest.mark.parametrize('shuffle', [False, True, 2])
+    def test_simple(self, shuffle):
+        x = combo_runner(foo3_scalar, _test_combos1, shuffle=shuffle)
         assert_allclose(x, _test_expect1)
 
     def test_progbars(self):
@@ -67,10 +69,12 @@ class TestComboRunner:
         assert_allclose(x, xn)
         assert_allclose(y, yn)
 
+    @pytest.mark.parametrize('shuffle', [False, True, 2])
     @pytest.mark.parametrize('parallel', [False, True])
     @pytest.mark.parametrize('fn', (foo3_scalar,))
-    def test_parallel_basic(self, parallel, fn):
-        x = combo_runner(fn, _test_combos1, num_workers=2, parallel=parallel)
+    def test_parallel_basic(self, parallel, fn, shuffle):
+        x = combo_runner(fn, _test_combos1, num_workers=2, parallel=parallel,
+                         shuffle=shuffle)
         assert_allclose(x, _test_expect1)
 
     @pytest.mark.parametrize('executor', ['cf-process', 'cf-thread',
@@ -104,6 +108,7 @@ class TestComboRunner:
 
 
 class TestCombosToDS:
+
     def test_simple(self):
         results = [1, 2, 3]
         combos = [('a', [1, 2, 3])]
@@ -112,19 +117,14 @@ class TestCombosToDS:
                            var_dims={'sum': ()}, var_coords={})
         assert ds['sum'].data.dtype == int
 
-    def test_add_to_ds(self):
-        # TODO -------------------------------------------------------------- #
-        pass
-
-    def test_add_to_ds_array(self):
-        # TODO -------------------------------------------------------------- #
-        pass
-
 
 class TestComboRunnerToDS:
-    def test_basic(self):
+
+    @pytest.mark.parametrize('shuffle', [False, True, 2])
+    def test_basic(self, shuffle):
         combos = _test_combos1
-        ds = combo_runner_to_ds(foo3_scalar, combos, var_names=['bananas'])
+        ds = combo_runner_to_ds(foo3_scalar, combos, var_names=['bananas'],
+                                shuffle=shuffle)
         assert ds.sel(a=2, b=30, c=400)['bananas'].data == 432
 
     def test_multiresult(self):

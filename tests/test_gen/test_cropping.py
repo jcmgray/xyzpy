@@ -89,7 +89,8 @@ class TestSowerReaper:
         print(c)
         repr(c)
 
-    def test_batch(self):
+    @pytest.mark.parametrize('shuffle', [False, True, 2])
+    def test_batch(self, shuffle):
 
         combos = [
             ('a', [10, 20, 30]),
@@ -105,7 +106,7 @@ class TestSowerReaper:
             assert not crop.is_prepared()
             assert crop.num_sown_batches == crop.num_results == -1
 
-            crop.sow_combos(combos, constants={'c': True})
+            crop.sow_combos(combos, constants={'c': True}, shuffle=shuffle)
 
             assert crop.is_prepared()
             assert crop.num_sown_batches == 3
@@ -159,13 +160,14 @@ class TestSowerReaper:
         assert results2 == expected2
 
     @pytest.mark.parametrize("num_workers", [None, 2])
-    def test_crop_grow_missing(self, num_workers):
+    @pytest.mark.parametrize('shuffle', [False, True, 2])
+    def test_crop_grow_missing(self, num_workers, shuffle):
         combos1 = [('a', [10, 20, 30]),
                    ('b', [4, 5, 6, 7])]
         expected1 = combo_runner(foo_add, combos1, constants={'c': True})
         with TemporaryDirectory() as tdir:
             c1 = Crop(name='run1', fn=foo_add, parent_dir=tdir, batchsize=5)
-            c1.sow_combos(combos1, constants={'c': True})
+            c1.sow_combos(combos1, constants={'c': True}, shuffle=shuffle)
             c1.grow_missing(num_workers=num_workers)
             results1 = c1.reap()
         assert results1 == expected1
@@ -243,14 +245,15 @@ class TestSowerReaper:
                                            np.tile(np.nan, (2, 3)))})
                 assert nres.identical(ds_exp)
 
-    def test_reap_allow_incomplete(self):
+    @pytest.mark.parametrize('shuffle', [False, True, 2])
+    def test_reap_allow_incomplete(self, shuffle):
         combos = (('a', [1, 2, 3]),
                   ('b', [10, 20, 30]),
                   ('c', range(100, 1101, 100)))
 
         with TemporaryDirectory() as tdir:
             crop = Crop(fn=foo_add, parent_dir=tdir)
-            crop.sow_combos(combos)
+            crop.sow_combos(combos, shuffle=shuffle)
             with pytest.raises(XYZError):
                 crop.reap(allow_incomplete=True)
             for i in range(1, 40):

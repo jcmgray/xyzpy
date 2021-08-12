@@ -161,11 +161,12 @@ def combo_runner_core(
     constants,
     cases=None,
     split=False,
+    flat=False,
+    shuffle=False,
     parallel=False,
     num_workers=None,
     executor=None,
     verbosity=1,
-    flat=False,
     info=None,
 ):
     if combos:
@@ -210,6 +211,13 @@ def combo_runner_core(
             locs.append(loc)
             settings.append(kws)
 
+    if shuffle:
+        import random
+        random.seed(int(shuffle))
+        enum_settings = list(enumerate(settings))
+        random.shuffle(enum_settings)
+        enum, settings = zip(*enum_settings)
+
     run_linear_opts = {'fn': fn, 'settings': settings, 'verbosity': verbosity}
 
     if executor is not None:
@@ -221,6 +229,10 @@ def combo_runner_core(
         results_linear = _run_linear_executor(executor, **run_linear_opts)
     else:
         results_linear = _run_linear_sequential(**run_linear_opts)
+
+    if shuffle:
+        enum_results = sorted(zip(enum, results_linear), key=lambda x: x[0])
+        _, results_linear = zip(*enum_results)
 
     # try and put the union of case coordinates into a reasonable order
     for arg in case_args:
@@ -272,6 +284,7 @@ def combo_runner(
     constants=None,
     split=False,
     flat=False,
+    shuffle=False,
     parallel=False,
     executor=None,
     num_workers=None,
@@ -288,19 +301,25 @@ def combo_runner(
         All combinations of each argument to values mapping will be computed.
         Each argument range thus gets a dimension in the output array(s).
     cases  : sequence of mappings, optional
-        Each case corresponds to a single instance of argument values to
-        compute the function for. If both ``combos`` and ``cases`` are given,
-        then the function is computed for all sub-combinations in ``combos``
-        for each case in ``cases``, arguments can thus only appear in one or
-        the other. Note that missing combinations of arguments will be
-        represented by ``nan`` if creating a nested array.
+        Optional list of specific configurations. If both ``combos`` and
+        ``cases`` are given, then the function is computed for all
+        sub-combinations in ``combos`` for each case in ``cases``, arguments
+        can thus only appear in one or the other. Note that missing
+        combinations of arguments will be represented by ``nan`` if creating a
+        nested array.
     constants : dict, optional
-        Dict-like mapping of *constant* fn argument mappings.
+        Constant function arguments. Unlike ``combos`` and ``cases``, these
+        won't produce dimensions in the output result when ``flat=False``.
     split : bool, optional
-        Whether to split (unzip) into multiple output arrays or not.
+        Whether to split (unzip) the outputs of ``fn`` into multiple output
+        arrays or not.
     flat : bool, optional
         Whether to return a flat list of results or to return a nested
         tuple suitable to be supplied to ``numpy.array``.
+    shuffle : bool or int, optional
+        If given, compute the results in a random order (using ``random.seed``
+        and ``random.shuffle``), which can be helpful for distributing
+        resources when not all cases are computationally equal.
     parallel : bool, optional
         Process combos in parallel, default number of workers picked.
     executor : executor-like pool, optional
@@ -396,6 +415,7 @@ def combo_runner(
         constants=constants,
         split=split,
         flat=flat,
+        shuffle=shuffle,
         parallel=parallel,
         executor=executor,
         num_workers=num_workers,
@@ -519,6 +539,7 @@ def combo_runner_to_ds(
     constants=None,
     resources=None,
     attrs=None,
+    shuffle=False,
     parse=True,
     to_df=False,
     parallel=False,
@@ -612,6 +633,7 @@ def combo_runner_to_ds(
         info=info,
         split=(not to_df) and (len(var_names) > 1),
         flat=to_df,
+        shuffle=shuffle,
     )
 
     if to_df:
