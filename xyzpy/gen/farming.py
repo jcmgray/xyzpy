@@ -577,12 +577,39 @@ class Harvester(object):
         else:
             self._full_ds = new_full_ds
 
-    def expand_dims(self, name, value, engine=None):
-        """Add a new coordinate dimension with ``name`` and ``value``.
+    def expand_dims(
+        self,
+        name,
+        value,
+        engine=None,
+    ):
+        """Add a new coordinate dimension with ``name`` and ``value``. The
+        change is immediately synced with the on-disk dataset. Useful if you
+        want to expand the parameter space along a previously constant
+        argument.
         """
-        ds = self.full_ds
-        new_ds = ds.expand_dims(name)
+        new_ds = self.full_ds.expand_dims(name)
         new_ds.coords[name] = [value]
+        if self.data_name is not None:
+            self.save_full_ds(new_ds, engine=engine)
+        else:
+            self._full_ds = new_ds
+
+    def drop_sel(
+        self,
+        labels=None,
+        *,
+        errors='raise',
+        engine=None,
+        **labels_kwargs,
+    ):
+        """Drop specific values of coordinates from this harvester and its
+        dataset. See
+        http://xarray.pydata.org/en/latest/generated/xarray.Dataset.drop_sel.html.
+        The change is immediately synced with the on-disk dataset.
+        Useful for tidying uneeded data points.
+        """
+        new_ds = self.full_ds.drop_sel(labels, errors=errors, **labels_kwargs)
         if self.data_name is not None:
             self.save_full_ds(new_ds, engine=engine)
         else:

@@ -369,7 +369,7 @@ class TestHarvester:
 
         foo.harvest_combos({
             'a': [1, 2],
-            'b': [3, 4]
+            'b': [3, 4],
         })
 
         assert foo.full_ds['x'].ndim == 2
@@ -382,6 +382,24 @@ class TestHarvester:
             'c': [8, 9],
         })
         assert list(foo.full_ds['c'].values) == [5, 8, 9]
+
+    def test_drop_sel(self):
+        @label('x', harvester=True)
+        def foo(a, b, c):
+            return a + b + c
+
+        foo.harvest_combos({
+            'a': [1, 2],
+            'b': [3, 4],
+            'c': [5, 6, 7],
+        })
+
+        assert foo.full_ds['x'].ndim == 3
+        assert foo.full_ds['x'].size == 12
+        foo.drop_sel(c=6)
+        assert foo.full_ds['x'].ndim == 3
+        assert foo.full_ds['x'].size == 8
+        assert 6 not in foo.full_ds.coords['c'].values
 
 
 class TestSampler:
