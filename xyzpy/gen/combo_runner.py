@@ -455,6 +455,10 @@ def results_to_ds(
     fn_args = tuple(x for x, _ in combos)
     results = parse_combo_results(results, var_names)
 
+    if len(results) != len(var_names):
+        raise ValueError(f"Wrong number of results ({len(results)}) for "
+                         f"{len(var_names)} ``var_names``: {var_names}.")
+
     # Check if the results are an array of xarray objects
     xobj_results = isinstance(
         get_ndim_first(results, len(fn_args) + 1),

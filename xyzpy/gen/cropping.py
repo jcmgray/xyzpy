@@ -242,7 +242,7 @@ class Crop(object):
 
         if (self.batchsize is not None) and (self.num_batches is not None):
             # Check that they are set correctly
-            pos_tot = self.batchsize * self.num_batches
+            pos_tot = self.batchsize * self.num_batches + self._batch_remainder
             if not (n <= pos_tot < n + self.batchsize):
                 raise ValueError("`batchsize` and `num_batches` cannot both"
                                  "be specified if they do not not multiply"
