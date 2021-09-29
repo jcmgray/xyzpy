@@ -4,19 +4,48 @@ Changelog
 Release notes for ``xyzpy``.
 
 
-.. _whats-new.1.0.1:
+.. _whats-new.1.2.1:
 
-v1.0.1 (Unreleased)
+v1.2.1 (12th August 2021)
+--------------------------
+
+**Bug fixes:**
+
+- fix a few bugs related to crops and batchsizes
+
+
+.. _whats-new.1.2.0:
+
+v1.2.0 (12th August 2021)
+--------------------------
+
+**Enhancements**
+
+- unified interface for mixing both ``cases`` and ``combos``
+- add random shuffling of growing order to load balance on batch systems etc
+- add :meth:`~xyzpy.Harvester.expand_dims` and :meth:`~xyzpy.Harvester.drop_sel`
+
+
+.. _whats-new.1.1.0:
+
+v1.1.0 (25th July 2021)
 --------------------------
 
 **Enhancements**
 
 - Defer ``Crop.reap`` clean up until *after* dataset sync (useful if you forget to set ``overwrite=True``)
+- Capture and print ``Crop.grow_cluster`` output
+- add ``visualize_matrix`` tool
+- add ``cimple`` colormap generator
+- allow ``@xyz.label`` decorator to specify ``harvester=``
+- spruce docs
+
 
 **Bug fixes:**
 
 - Fix sowing, reaping and merging multiple sets of cases (:issue:`13`)
 - Fix incomplete crop reaping when there is a non-zero batch remainder size
+- Fix for futures that raise attribute errors themselves
 
 
 .. _whats-new.1.0.0:
