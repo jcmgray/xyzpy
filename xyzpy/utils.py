@@ -12,6 +12,10 @@ import tqdm
 import numpy as np
 
 
+class XYZError(Exception):
+    pass
+
+
 def isiterable(obj):
     return isinstance(obj, Iterable)
 

@@ -10,6 +10,7 @@ import pandas as pd
 import xarray as xr
 
 from .prepare import (
+    XYZError,
     parse_fn_args,
     parse_var_names,
     parse_var_dims,
@@ -24,10 +25,6 @@ from .combo_runner import combo_runner_to_ds
 from .case_runner import case_runner_to_ds
 from ..manage import load_ds, save_ds, load_df, save_df
 from . import cropping
-
-
-class XYZError(Exception):
-    pass
 
 
 # --------------------------------------------------------------------------- #

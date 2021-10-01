@@ -2,7 +2,7 @@
 
 import inspect
 
-from ..utils import isiterable
+from ..utils import isiterable, XYZError
 
 
 def _str_2_tuple(x):
@@ -31,6 +31,15 @@ def parse_fn_args(fn, fn_args):
 
 # combo_runner -------------------------------------------------------------- #
 
+
+def check_for_duplicates(arg, values):
+    seen = set()
+    for val in values:
+        if val in seen:
+            raise XYZError(f"Duplicate combo value for '{arg}': {val}")
+        seen.add(val)
+
+
 def parse_combos(combos):
     """Turn dicts and single tuples into proper form for combo runners.
     """
@@ -40,10 +49,16 @@ def parse_combos(combos):
         combos = tuple(combos.items())
     elif isinstance(combos[0], str):
         combos = (combos,)
-    return tuple(
+
+    combos = tuple(
         (arg, list(vals) if isiterable(vals) else vals)
         for arg, vals in combos
     )
+
+    for arg, values in combos:
+        check_for_duplicates(arg, values)
+
+    return combos
 
 
 def parse_combo_results(results, var_names):
