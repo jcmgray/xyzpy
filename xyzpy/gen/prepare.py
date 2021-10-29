@@ -33,6 +33,8 @@ def parse_fn_args(fn, fn_args):
 
 
 def check_for_duplicates(arg, values):
+    if values is Ellipsis:
+        return
     seen = set()
     for val in values:
         if val in seen:
