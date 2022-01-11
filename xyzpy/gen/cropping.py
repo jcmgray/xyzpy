@@ -1228,7 +1228,7 @@ _PBS_HEADER = (
 _SLURM_HEADER = (
     "#!/bin/bash -l\n"
     "#SBATCH --nodes={num_nodes}\n"
-    "#SBATCH --mem={gigabytes}gb\n"
+    "#SBATCH --mem={gigabytes}G\n"
     "#SBATCH --cpus-per-task={num_procs}\n"
     "#SBATCH --time={hours:02}:{minutes:02}:{seconds:02}\n"
     "{extra_resources}\n"
