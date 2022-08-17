@@ -74,7 +74,8 @@ from .plot.plotter_matplotlib import (
     heatmap,
     AutoHeatMap,
     auto_heatmap,
-    visualize_matrix
+    visualize_matrix,
+    visualize_tensor,
 )
 # Making interactive plots with bokeh
 from .plot.plotter_bokeh import (
@@ -145,6 +146,7 @@ __all__ = [
     "iheatmap",
     "auto_iheatmap",
     "visualize_matrix",
+    "visualize_tensor",
     "unzip",
     "progbar",
     "getsizeof",
