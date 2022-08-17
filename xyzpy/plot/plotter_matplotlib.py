@@ -6,6 +6,7 @@ Functions for plotting datasets nicely.
 # TODO: docs                                                                  #
 
 import functools
+import collections
 
 import numpy as np
 
@@ -964,3 +965,308 @@ def visualize_matrix(x, figsize=(4, 4),
         return fig
     else:
         plt.show()
+
+
+def visualize_tensor(
+    array,
+    max_projections=None,
+    angles=None,
+    scales=None,
+    projection_overlap_spacing=1.05,
+    skew_factor=0.05,
+    spacing_factor=1.0,
+    magscale='linear',
+    size_map=True,
+    size_pow=1/2,
+    size_scale=1.0,
+    alpha_map=True,
+    alpha_pow=1/2,
+    alpha=0.8,
+    marker='o',
+    linewidths=0,
+    show_lattice=True,
+    lattice_opts=None,
+    compass=False,
+    compass_bounds=(0.0, 0.9, 0.1, 0.1),
+    compass_labels=None,
+    compass_opts=None,
+    interleave_projections=False,
+    reverse_projections=False,
+    facecolor=None,
+    rasterize=4096,
+    rasterize_dpi=300,
+    figsize=(5, 5),
+    ax=None,
+):
+    """Visualize all entries of a tensor, with indices mapped into the plane
+    and values mapped into a color wheel.
+
+    Parameters
+    ----------
+    array : ndarray
+        The tensor to visualize.
+    skew_factor : float, optional
+        When there are more than two dimensions, a factor to scale the
+        rotations by to avoid overlapping data points.
+    size_map : bool, optional
+        Whether to map the tensor value magnitudes to marker size.
+    size_scale : float, optional
+        An overall factor to scale the marker size by.
+    alpha_map : bool, optional
+        Whether to map the tensor value magnitudes to marker alpha.
+    alpha_pow : float, optional
+        The power to raise the magnitude to when mapping to alpha.
+    alpha : float, optional
+        The overall alpha to use for all markers if ``not alpha_map``.
+    show_lattice : bool, optional
+        Show a small grey dot for every 'lattice' point regardless of value.
+    lattice_opts : dict, optional
+        Options to pass to ``maplotlib.Axis.scatter`` for the lattice points.
+    linewidths : float, optional
+        The linewidth to use for the markers.
+    marker : str, optional
+        The marker to use for the markers.
+    figsize : tuple, optional
+        The size of the figure to create, if ``ax`` is not provided.
+    ax : matplotlib.Axis, optional
+        The axis to draw to. If not provided, a new figure will be created.
+
+    Returns
+    -------
+    fig : matplotlib.Figure
+        The figure containing the plot, or ``None`` if ``ax`` was provided.
+    ax : matplotlib.Axis
+        The axis containing the plot.
+    """
+    import matplotlib as mpl
+    import matplotlib.pyplot as plt
+
+    auto_angles = angles is None
+    auto_scales = scales is None
+
+    # can only plot numpy
+    array = np.asarray(array)
+
+    if max_projections is None:
+        max_projections = array.ndim
+
+    # map each dimension to an angle
+    if not auto_angles:
+        angles = np.array(angles)
+    else:
+        # if max_projections == array.ndim, then each dimension has its own
+        # angle, if max_projections < array.dim, then we will
+        # reuse the same angles, initially round robin distributed
+        angles = np.tile(
+            np.linspace(0.0, np.pi, max_projections, endpoint=False),
+            array.ndim // max_projections + 1
+        )[:array.ndim]
+
+        if not interleave_projections:
+            # 'fill up' one angle before moving on, rather than round-robin,
+            # doing this matches the behavior of fusing adjacent dimensions
+            angles = np.sort(angles)
+
+        def angle_modulate(x):
+            return x * (x - np.pi / 2) * (x - x[-1])
+
+        # modulate the angles slightly to avoid overlapping data points
+        angles += angle_modulate(angles) * skew_factor
+
+    if auto_scales:
+        scales = np.empty(angles.shape)
+    else:
+        scales = np.array(scales)
+
+    # the logic here is, when grouping dimensions into the same angles we
+    # need to offset each overlapping dimension by increasing amount
+    first_size = {}
+    grouped_size = {}
+    group_counter = {}
+    group_rank = {}
+    fastest_varying = []
+
+    iphis = list(enumerate(angles))
+    if not reverse_projections:
+        iphis.reverse()
+
+    for i, phi in iphis:
+        if phi not in first_size:
+            # first time we have encountered an axis at this angle
+            fastest_varying.append((i, array.shape[i]))
+            first_size[phi] = array.shape[i]
+            grouped_size[phi] = array.shape[i]
+            group_counter[phi] = 1
+        else:
+            # already an axis at this angle, space this one larger
+            grouped_size[phi] *= array.shape[i]
+            group_counter[phi] += 1
+
+        # what rank among axes at this angle is i?
+        group_rank[i] = group_counter[phi]
+
+        if auto_scales:
+            scales[i] = (
+                grouped_size[phi] // array.shape[i]
+                # put extra space between distinct dimensions
+                * projection_overlap_spacing**group_counter[phi]
+                # account for spacing out of first dimensions
+                / max(1, (first_size[phi] - 1))**spacing_factor
+            )
+
+    eff_width = max(grouped_size.values())
+    eff_ndim = max_projections
+
+    # define the core mappings of coordinate to 2D plane
+
+    def xcomponent(i, coo):
+        return scales[i] * np.sin(angles[i]) * coo
+
+    def ycomponent(i, coo):
+        return scales[i] * -np.cos(angles[i]) * coo
+
+    # compute projection into 2D coordinates for every index location
+    coos = np.indices(array.shape)
+    x = np.zeros(array.shape)
+    y = np.zeros(array.shape)
+    for i, coo in enumerate(coos):
+        x += xcomponent(i, coo)
+        y += ycomponent(i, coo)
+
+    # compute colors
+    zs = array.flat
+
+    # the constant rotation is to have blue and orange as + and -
+    color_phi = np.angle(zs) + np.pi / 8
+
+    if magscale == 'linear':
+        color_mag = np.abs(zs)
+    elif magscale == 'log':
+        # XXX: need some kind of cutoff?
+        raise NotImplementedError("log scale not implemented.")
+    else:
+        # more robust way to 'flatten' the perceived magnitude
+        color_mag = np.abs(zs)**magscale
+
+    max_mag = np.max(color_mag)
+    hue = (color_phi + np.pi) / (2 * np.pi)
+    sat = color_mag / max_mag
+    val = np.tile(1.0, hue.shape)
+    zs = mpl.colors.hsv_to_rgb(np.stack((hue, sat, val), axis=-1))
+
+    if alpha_map:
+        # append alpha channel
+        zalpha = (color_mag / color_mag.max()).reshape(-1, 1)**alpha_pow
+        zs = np.concatenate([zs, zalpha], axis=-1)
+        alpha = None
+
+    # compute a sensible base size based on expected density of points
+    base_size = size_scale * 3000 / (eff_width * eff_ndim**1.2)
+    if size_map:
+        s = base_size * (color_mag / color_mag.max())**size_pow
+    else:
+        s = base_size
+
+    if ax is None:
+        fig, ax = plt.subplots(figsize=figsize)
+        ax.set_aspect('equal')
+        ax.axis('off')
+        fig.set_dpi(rasterize_dpi)
+    else:
+        fig = None
+
+    if show_lattice:
+        # put a small grey line on every edge
+        ls = []
+        for i, isize in fastest_varying:
+            other_shape = array.shape[:i] + array.shape[i + 1:]
+            other_coos = np.indices(other_shape)
+            coo_start = np.insert(other_coos, i, 0, 0)
+            coo_stop = np.insert(other_coos, i, isize - 1, 0)
+
+            xi = np.zeros(coo_start.shape)
+            yi = np.zeros(coo_start.shape)
+
+            for i, coo in enumerate(coo_start):
+                xi += xcomponent(i, coo)
+                yi += ycomponent(i, coo)
+
+            xf = np.zeros(coo_start.shape)
+            yf = np.zeros(coo_start.shape)
+
+            for i, coo in enumerate(coo_stop):
+                xf += xcomponent(i, coo)
+                yf += ycomponent(i, coo)
+
+            li = np.stack((xi.flat, yi.flat), 1)
+            lf = np.stack((xf.flat, yf.flat), 1)
+
+            l = np.stack((li, lf), 1)
+            ls.append(l)
+
+        segments = np.concatenate(ls)
+
+        lattice_opts = {} if lattice_opts is None else dict(lattice_opts)
+        lattice_opts.setdefault('color', (.6, .6, .6))
+        lattice_opts.setdefault(
+            'alpha',
+            0.01 + 2**(-(array.size**0.2 + eff_ndim**0.8))
+        )
+        lattice_opts.setdefault('linewidth', 1)
+        lattice_opts.setdefault('zorder', -2)
+        lines = mpl.collections.LineCollection(segments, **lattice_opts)
+        ax.add_collection(lines)
+
+    ax.scatter(
+        x.flat,
+        y.flat,
+        c=zs,
+        s=s,
+        alpha=alpha,
+        linewidths=linewidths,
+        marker=marker,
+        zorder=-1,
+        clip_on=False,
+    )
+
+    if facecolor is not None:
+        fig.patch.set_facecolor(facecolor)
+
+    if isinstance(rasterize, (float, int)):
+        # only turn on above a certain size
+        rasterize = array.size > rasterize
+
+    if rasterize:
+        ax.set_rasterization_zorder(0)
+
+    if compass:
+        cax = ax.inset_axes(compass_bounds)
+        cax.axis('off')
+        cax.set_aspect('equal')
+
+        compass_opts = {} if compass_opts is None else dict(compass_opts)
+        compass_opts.setdefault('color', (0.5, 0.5, 0.5))
+        compass_opts.setdefault('width', 0.002)
+        compass_opts.setdefault('length_includes_head', True)
+
+        if compass_labels is None:
+            compass_labels = range(len(angles))
+        elif compass_labels is False:
+            compass_labels = [''] * len(angles)
+
+        for i, phi in enumerate(angles):
+            dx = np.sin(phi) * group_rank[i]
+            dy = -np.cos(phi) * group_rank[i]
+            cax.arrow(0, 0, dx, dy, **compass_opts)
+            cax.text(
+                dx, dy, f" {compass_labels[i]}",
+                ha='left', va='top',
+                color=compass_opts['color'],
+                size=6,
+                rotation=180 * phi / np.pi - 90,
+                rotation_mode='anchor',
+            )
+
+    return fig, ax
+
+
