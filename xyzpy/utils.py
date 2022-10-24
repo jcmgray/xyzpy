@@ -334,6 +334,58 @@ class Benchmarker:
         return self.ds.xyz.ilineplot('n', 'time', 'kernel', **plot_opts)
 
 
+def format_number_with_error(x, err):
+    """Given ``x`` with error ``err``, format a string showing the relevant
+    digits of ``x`` with two significant digits of the error bracketed, and
+    overall exponent if necessary.
+
+    Parameters
+    ----------
+    x : float
+        The value to print.
+    err : float
+        The error on ``x``.
+
+    Returns
+    -------
+    str
+
+    Examples
+    --------
+
+        >>> print_number_with_uncertainty(0.1542412, 0.0626653)
+        '0.154(63)'
+
+        >>> print_number_with_uncertainty(-128124123097, 6424)
+        '-1.281241231(64)e+11'
+
+    """
+    # compute an overall scaling for both values
+    x_exponent = max(
+        int(f'{x:e}'.split('e')[1]),
+        int(f'{err:e}'.split('e')[1]) + 1,
+    )
+    # for readability try and show values close to 1 with no exponent
+    hide_exponent = (
+         # nicer showing 0.xxx(yy) than x.xx(yy)e-1
+        (x_exponent in (0, -1)) or
+        # also nicer showing xx.xx(yy) than x.xxx(yy)e+1
+        ((x_exponent == +1) and (err < abs(x / 10)))
+    )
+    if hide_exponent:
+        suffix = ""
+    else:
+        x = x / 10**x_exponent
+        err = err / 10**x_exponent
+        suffix = f"e{x_exponent:+03d}"
+
+    # work out how many digits to print
+    # format the main number and bracketed error
+    mantissa, exponent = f'{err:.1e}'.split('e')
+    mantissa, exponent = mantissa.replace('.', ''), int(exponent)
+    return f'{x:.{abs(exponent) + 1}f}({mantissa}){suffix}'
+
+
 class RunningStatistics:  # pragma: no cover
     """Running mean & standard deviation using Welford's
     algorithm. This is a very efficient way of keeping track of the error on
@@ -422,6 +474,17 @@ class RunningStatistics:  # pragma: no cover
         if self.count == 0:
             return np.inf
         return self.err / abs(self.mean)
+
+    def __repr__(self):
+        if self.count == 0:
+            # mean and error are undefined
+            return "RunningStatistics(mean=None, count=0)"
+
+        return (
+            f"RunningStatistics("
+            f"mean={format_number_with_error(self.mean, self.err)}, "
+            f"count={self.count}"")"
+        )
 
 
 class RunningCovariance:  # pragma: no cover
@@ -573,7 +636,7 @@ def estimate_from_repeats(fn, *fn_args, rtol=0.02, tol_scale=1.0, get='stats',
         How much information to show:
 
         - ``0``: nothing
-        - ``1``: progress bar just with iteration rate
+        - ``1``: progress bar just with iteration rate,
         - ``2``: progress bar with running stats displayed.
 
     min_samples : int, optional
@@ -602,8 +665,8 @@ def estimate_from_repeats(fn, *fn_args, rtol=0.02, tol_scale=1.0, get='stats',
         ...     return np.random.rand(n).sum()
         ...
         >>> stats = xyz.estimate_from_repeats(fn, n=10, verbosity=3)
-        51: mean: 5.002 err: 0.119: : 0it [00:00, ?it/s]
-        <RunningStatistics(mean=5.002, err=0.119, count=51)>
+        59: 5.13(12): : 58it [00:00, 3610.84it/s]
+        RunningStatistics(mean=5.13(12), count=59)
 
     """
 
@@ -612,7 +675,6 @@ def estimate_from_repeats(fn, *fn_args, rtol=0.02, tol_scale=1.0, get='stats',
 
     if verbosity >= 1:
         repeats = progbar(repeats)
-        prec = abs(round(math.log10(tol_scale * rtol))) + 1
 
     if get == 'samples':
         xs = []
@@ -625,9 +687,9 @@ def estimate_from_repeats(fn, *fn_args, rtol=0.02, tol_scale=1.0, get='stats',
             rs.update(x)
 
             if verbosity >= 2:
-                desc = '{}: mean: {:.{prec}f} err: {:.{prec}f}'
                 repeats.set_description(
-                    desc.format(rs.count, rs.mean, rs.err, prec=prec))
+                    f"{rs.count}: {format_number_with_error(rs.mean, rs.err)}"
+                )
 
             # need at least min_samples to check convergence
             if (i > min_samples):
@@ -637,19 +699,16 @@ def estimate_from_repeats(fn, *fn_args, rtol=0.02, tol_scale=1.0, get='stats',
             # reached the maximum number of samples to try
             if i >= max_samples - 1:
                 break
-
-    # allow user to cleanly interupt sampling with keyboard
     except KeyboardInterrupt:
+        # allow user to cleanly interupt sampling with keyboard
         pass
-
     finally:
         if verbosity >= 1:
             repeats.close()
 
     if verbosity >= 1:
         sys.stderr.flush()
-        print("<RunningStatistics(mean={:.{prec}f}, err={:.{prec}f}, "
-              "count={})>".format(rs.mean, rs.err, rs.count, prec=prec))
+        print(rs)
 
     if get == 'samples':
         return rs, xs
