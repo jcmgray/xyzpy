@@ -80,6 +80,9 @@ def save_ds(ds, file_name, engine="h5netcdf", **kwargs):
     elif engine == 'zarr':
         ds.to_zarr(file_name, **kwargs)
     else:
+        # officially: complex data dtypes are not valid for netcdf
+        if any(np.iscomplexobj(v.values) for v in ds.variables.values()):
+            kwargs.setdefault("invalid_netcdf", True)
         ds.to_netcdf(file_name, engine=engine, **kwargs)
 
 

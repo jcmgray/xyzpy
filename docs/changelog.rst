@@ -4,6 +4,23 @@ Changelog
 Release notes for ``xyzpy``.
 
 
+.. whats-new.1.3.0:
+
+v1.3.0 (unreleased)
+-------------------
+
+**Enhancements**:
+
+- add :func:`~xyzpy.visualize_tensor` for visualizing arbitrarily high
+  dimensional tensors
+- add :func:`~xyzpy.format_number_with_error` for nicely formatting numbers
+  with known errors
+
+**Bug fixes:**
+
+- fix saving of complex datasets withs `engine='netcdf'` (:issue:`15`)
+
+
 .. _whats-new.1.2.1:
 
 v1.2.1 (12th August 2021)
