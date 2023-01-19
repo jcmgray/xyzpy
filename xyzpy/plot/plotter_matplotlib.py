@@ -877,96 +877,259 @@ def choose_squarest_grid(x):
     return m, n
 
 
-def visualize_matrix(x, figsize=(4, 4),
-                     colormap=None,
-                     touching=False,
-                     zlims=(None, None),
-                     gridsize=None,
-                     tri=None,
-                     return_fig=True):
-    """Plot the elements of one or more matrices.
+def _compute_hue(z):
+    # the constant rotation is to have blue and orange as + and -
+    # negation puts +i as green -i as pink
+    return ((-np.angle(z) + 9 * np.pi / 8) / (2 * np.pi)) % 1
 
-    Parameters
-    ----------
-    x : array or iterable of arrays
-        2d-matrix or matrices to plot.
-    figsize : tuple
-        Total size of plot.
-    colormap : str
-        Colormap to use to weight elements.
-    touching : bool
-        If plotting more than one matrix, whether the edges should touch.
-    zlims:
-        Scaling parameters for the element colorings, (i.e. if these are
-        set then the weightings are not normalized).
-    return_fig : bool
-        Whether to return the figure created or just show it.
-    """
+
+def to_colors(
+    zs,
+    magscale='linear',
+    max_mag=None,
+    alpha_map=True,
+    alpha_pow=1/2,
+):
     import matplotlib as mpl
+    arraymag = np.abs(zs)
+
+    if magscale == 'linear':
+        mapped_mag = arraymag
+    elif magscale == 'log':
+        # XXX: need some kind of cutoff?
+        raise NotImplementedError("log scale not implemented.")
+    else:
+        # more robust way to 'flatten' the perceived magnitude
+        mapped_mag = arraymag**magscale
+
+    if max_mag is None:
+        max_mag = np.max(mapped_mag)
+
+    hue = _compute_hue(zs)
+    sat = mapped_mag / max_mag
+    val = np.tile(1.0, hue.shape)
+    zs = mpl.colors.hsv_to_rgb(np.stack((hue, sat, val), axis=-1))
+
+    if alpha_map:
+        # append alpha channel
+        zalpha = (mapped_mag / max_mag)**alpha_pow
+        zs = np.concatenate([zs, np.expand_dims(zalpha, -1)], axis=-1)
+
+    return zs, mapped_mag, max_mag
+
+
+def add_visualize_legend(
+    ax,
+    complexobj,
+    max_mag,
+    max_projections,
+    legend_loc='auto',
+    legend_size=0.15,
+    legend_bounds=None,
+    legend_resolution=3,
+):
+    import matplotlib as mpl
+
+    # choose where to put the legend
+    if legend_bounds is None:
+        if legend_loc == 'auto':
+            if (max_projections <= 2):
+                # move compass and legends beyond the plot rectangle, which
+                # will be filled when there are only 2 plot dimensions
+                legend_loc = (1 - 0.03, 0.0 - legend_size + 0.03)
+            else:
+                # occupy space within the rectangle
+                legend_loc = (1.0 - legend_size, 0.0)
+        legend_bounds = (*legend_loc, legend_size, legend_size)
+
+    lax = ax.inset_axes(legend_bounds)
+    lax.axis('off')
+    lax.set_aspect('equal')
+
+    num = legend_resolution * 2 + 1
+    if complexobj:
+        re = np.linspace(-1, 1, num=num).reshape(1, -1)
+        im = 1j * np.linspace(1, -1, num=num).reshape(-1, 1)
+        z = re + im
+    else:
+        re = np.linspace(-1, 1, num=num)
+        # repeat a few times to make the bar thick enough
+        z = np.tile(re, (max(1, legend_resolution // 3), 1))
+
+    zmag = np.abs(z)
+    mask = zmag > 1.0
+    z[mask] = zmag[mask] = 0.0
+
+    # compute the color for each point
+    hue = _compute_hue(z)
+    sat = zmag
+    val = np.tile(1.0, hue.shape)
+
+    # convert to rgb
+    bars = mpl.colors.hsv_to_rgb(np.stack((hue, sat, val), axis=-1))
+    # add alpha channel
+    bars = np.concatenate([bars, np.tile(1.0, hue.shape + (1,))], -1)
+    # add make area outside disk transparent
+    bars[..., 3][mask] = 0.0
+
+    # plot the actual colorbar legend
+    lax.imshow(bars)
+
+    # add axis orientation labels
+    lax.text(1.02, 0.5, '$+1$', ha='left', va='center',
+             transform=lax.transAxes, color=(.5, .5, .5), size=6)
+    lax.text(-0.02, 0.5, '$-1$', ha='right', va='center',
+             transform=lax.transAxes, color=(.5, .5, .5), size=6)
+    if complexobj:
+        lax.text(0.5, -0.02, '$-j$', ha='center', va='top',
+                 transform=lax.transAxes, color=(.5, .5, .5), size=6)
+        lax.text(0.5, 1.02, '$+j$', ha='center', va='bottom',
+                 transform=lax.transAxes, color=(.5, .5, .5), size=6)
+
+    # show the overall scale
+    if complexobj:
+        overall_scale_opts = {'x': .85, 'y': .15, 'ha': 'left'}
+    else:
+        overall_scale_opts = {'x': .5, 'y': -0.15, 'ha': 'center'}
+
+    lax.text(
+        s=f'$\\times {float(max_mag):.3}$', va='top',
+        **overall_scale_opts, transform=lax.transAxes,
+        color=(.5, .5, .5), size=6
+    )
+
+
+def setup_fig_ax(
+    facecolor=None,
+    rasterize=4096,
+    rasterize_dpi=300,
+    figsize=(5, 5),
+    ax=None,
+):
     import matplotlib.pyplot as plt
 
-    fig = plt.figure(figsize=figsize, dpi=100)
-    if isinstance(x, np.ndarray):
-        x = (x,)
-
-    if colormap is not None:
-        color_opts = {'cmap': xyz_colormaps(colormap),
-                      'vmin': zlims[0], 'vmax': zlims[1]}
+    if ax is None:
+        fig, ax = plt.subplots(figsize=figsize)
+        fig.set_dpi(rasterize_dpi)
+        fig.patch.set_alpha(0.0)
     else:
-        color_opts = {}
+        fig = None
 
-    nx = len(x)
-    if gridsize:
-        m, n = gridsize
-    else:
-        m, n = choose_squarest_grid(nx)
-    subplots = tuple((m, n, i) for i in range(1, nx + 1))
+    ax.set_aspect('equal')
+    ax.axis('off')
 
-    for img, subplot in zip(x, subplots):
+    if facecolor is not None:
+        fig.patch.set_facecolor(facecolor)
 
-        if np.ndim(img) == 1:
-            img = np.diag(img)
+    if rasterize:
+        ax.set_rasterization_zorder(0)
 
-        # assume we want to map directly into complex/real plane
-        if colormap is None:
-            # slight rotation is for nicer colors when real
-            phi = np.angle(img) + np.pi / 8
-            mag = np.abs(img)
-            max_mag = np.max(mag)
-
-            hue = (phi + np.pi) / (2 * np.pi)
-            sat = mag / max_mag
-            val = np.tile(1.0, hue.shape)
-
-            img = mpl.colors.hsv_to_rgb(np.stack((hue, sat, val), axis=-1))
-
-        if tri is not None:
-            if tri not in {'upper', 'lower'}:
-                raise ValueError("'tri' should be one of {'upper', 'lower}.")
-
-            ma_fn = np.tril if tri == 'upper' else np.triu
-            img = np.ma.array(img, mask=ma_fn(np.ones_like(img), k=-1))
-
-        ax = fig.add_subplot(*subplot)
-        ax.imshow(img, interpolation='nearest', **color_opts)
-        # Hide the right and top spines
-        ax.spines['right'].set_visible(False)
-        ax.spines['left'].set_visible(False)
-        ax.spines['bottom'].set_visible(False)
-        ax.spines['top'].set_visible(False)
-        # Only show ticks on the left and bottom spines
-        ax.yaxis.set_visible(False)
-        ax.xaxis.set_visible(False)
-    plt.subplots_adjust(left=0, bottom=0, right=1, top=1,
-                        wspace=-0.001 if touching else 0.05,
-                        hspace=-0.001 if touching else 0.05)
-    if return_fig:
-        plt.close(fig)
-        return fig
-    else:
-        plt.show()
+    return fig, ax
 
 
+def handle_sequence_of_arrays(vis_fn):
+    """Simple wrapper to handle sequence of arrays as input to e.g.
+    ``visualize_tensor``.
+    """
+
+    @functools.wraps(vis_fn)
+    def wrapped(array, *args, **kwargs):
+        import matplotlib.pyplot as plt
+
+        if (
+            isinstance(array, (tuple, list)) and
+            all(hasattr(x, 'shape') for x in array)
+        ):
+            # assume sequence of tensors to plot
+            figsize = kwargs.get('figsize', (5, 5))
+            rasterize_dpi = kwargs.get('rasterize_dpi', 300)
+            nplot = len(array)
+            fig, axs = plt.subplots(
+                1, nplot, figsize=figsize, squeeze=False, sharey=True,
+            )
+            fig.set_dpi(rasterize_dpi)
+            fig.patch.set_alpha(0.0)
+
+            # plot all tensors with same magnitude scale
+            kwargs.setdefault("max_mag", max(np.max(np.abs(x)) for x in array))
+
+            # only show legend on last plot
+            legend = kwargs.pop('legend', False)
+
+            for i in range(nplot):
+                vis_fn(
+                    array[i], *args,
+                    ax=axs[0, i],
+                    # only show legend on last plot
+                    legend=(legend and i == nplot - 1),
+                    **kwargs
+                )
+
+            plt.close(fig)
+            return fig, axs
+
+        else:
+            # treat as single tensor
+            return vis_fn(array, *args, **kwargs)
+
+    return wrapped
+
+
+@handle_sequence_of_arrays
+def visualize_matrix(
+    array,
+    max_mag=None,
+    legend=False,
+    legend_loc='auto',
+    legend_size=0.15,
+    legend_bounds=None,
+    legend_resolution=3,
+    facecolor=None,
+    rasterize=4096,
+    rasterize_dpi=300,
+    figsize=(5, 5),
+    ax=None,
+):
+    import matplotlib.pyplot as plt
+
+    # can only plot numpy
+    array = np.asarray(array)
+    if array.ndim == 1:
+        # draw vectors as diagonals
+        array = np.diag(array)
+
+    if isinstance(rasterize, (float, int)):
+        # only turn on above a certain size
+        rasterize = array.size > rasterize
+
+    fig, ax = setup_fig_ax(
+        facecolor=facecolor,
+        rasterize=rasterize,
+        rasterize_dpi=rasterize_dpi,
+        figsize=figsize,
+        ax=ax,
+    )
+
+    zs, _, max_mag = to_colors(array)
+    ax.imshow(zs, interpolation='nearest', zorder=-1)
+
+    if legend:
+        add_visualize_legend(
+            ax=ax,
+            complexobj=np.iscomplexobj(array),
+            max_mag=max_mag,
+            max_projections=2,
+            legend_loc=legend_loc,
+            legend_size=legend_size,
+            legend_bounds=legend_bounds,
+            legend_resolution=legend_resolution,
+        )
+
+    plt.close(fig)
+    return fig, ax
+
+
+@handle_sequence_of_arrays
 def visualize_tensor(
     array,
     max_projections=None,
@@ -987,9 +1150,17 @@ def visualize_tensor(
     show_lattice=True,
     lattice_opts=None,
     compass=False,
-    compass_bounds=(0.0, 0.9, 0.1, 0.1),
+    compass_loc='auto',
+    compass_size=0.1,
+    compass_bounds=None,
     compass_labels=None,
     compass_opts=None,
+    max_mag=None,
+    legend=False,
+    legend_loc='auto',
+    legend_size=0.15,
+    legend_bounds=None,
+    legend_resolution=3,
     interleave_projections=False,
     reverse_projections=False,
     facecolor=None,
@@ -1046,6 +1217,18 @@ def visualize_tensor(
 
     # can only plot numpy
     array = np.asarray(array)
+
+    if isinstance(rasterize, (float, int)):
+        # only turn on above a certain size
+        rasterize = array.size > rasterize
+
+    fig, ax = setup_fig_ax(
+        facecolor=facecolor,
+        rasterize=rasterize,
+        rasterize_dpi=rasterize_dpi,
+        figsize=figsize,
+        ax=ax,
+    )
 
     if max_projections is None:
         max_projections = array.ndim
@@ -1134,46 +1317,20 @@ def visualize_tensor(
         y += ycomponent(i, coo)
 
     # compute colors
-    zs = array.flat
-
-    # the constant rotation is to have blue and orange as + and -
-    color_phi = np.angle(zs) + np.pi / 8
-
-    if magscale == 'linear':
-        color_mag = np.abs(zs)
-    elif magscale == 'log':
-        # XXX: need some kind of cutoff?
-        raise NotImplementedError("log scale not implemented.")
-    else:
-        # more robust way to 'flatten' the perceived magnitude
-        color_mag = np.abs(zs)**magscale
-
-    max_mag = np.max(color_mag)
-    hue = (color_phi + np.pi) / (2 * np.pi)
-    sat = color_mag / max_mag
-    val = np.tile(1.0, hue.shape)
-    zs = mpl.colors.hsv_to_rgb(np.stack((hue, sat, val), axis=-1))
-
-    if alpha_map:
-        # append alpha channel
-        zalpha = (color_mag / color_mag.max()).reshape(-1, 1)**alpha_pow
-        zs = np.concatenate([zs, zalpha], axis=-1)
-        alpha = None
+    zs, mapped_mag, max_mag = to_colors(
+        array.flat,
+        magscale=magscale,
+        max_mag=max_mag,
+        alpha_map=alpha_map,
+        alpha_pow=alpha_pow,
+    )
 
     # compute a sensible base size based on expected density of points
     base_size = size_scale * 3000 / (eff_width * eff_ndim**1.2)
     if size_map:
-        s = base_size * (color_mag / color_mag.max())**size_pow
+        s = base_size * (mapped_mag / max_mag)**size_pow
     else:
         s = base_size
-
-    if ax is None:
-        fig, ax = plt.subplots(figsize=figsize)
-        ax.set_aspect('equal')
-        ax.axis('off')
-        fig.set_dpi(rasterize_dpi)
-    else:
-        fig = None
 
     if show_lattice:
         # put a small grey line on every edge
@@ -1201,8 +1358,7 @@ def visualize_tensor(
             li = np.stack((xi.flat, yi.flat), 1)
             lf = np.stack((xf.flat, yf.flat), 1)
 
-            l = np.stack((li, lf), 1)
-            ls.append(l)
+            ls.append(np.stack((li, lf), 1))
 
         segments = np.concatenate(ls)
 
@@ -1217,29 +1373,35 @@ def visualize_tensor(
         lines = mpl.collections.LineCollection(segments, **lattice_opts)
         ax.add_collection(lines)
 
+    # plot the actual points
     ax.scatter(
-        x.flat,
-        y.flat,
-        c=zs,
-        s=s,
-        alpha=alpha,
+        # mapped variables
+        # (reverse the data so that the correct points are shown on top)
+        x=x.flat[::-1],
+        y=y.flat[::-1],
+        c=zs[::-1],
+        s=s[::-1] if size_map else s,
+        # constants
+        alpha=None if alpha_map else alpha,  # folded into color if alpha_map
         linewidths=linewidths,
         marker=marker,
         zorder=-1,
         clip_on=False,
     )
 
-    if facecolor is not None:
-        fig.patch.set_facecolor(facecolor)
-
-    if isinstance(rasterize, (float, int)):
-        # only turn on above a certain size
-        rasterize = array.size > rasterize
-
-    if rasterize:
-        ax.set_rasterization_zorder(0)
-
     if compass:
+        # choose where to put the compass
+        if compass_bounds is None:
+            if compass_loc == 'auto':
+                if (max_projections <= 2):
+                    # move compass and legends beyond the plot rectangle, which
+                    # will be filled when there are only 2 plot dimensions
+                    compass_loc = (-0.05, 1.0 - compass_size + 0.05)
+                else:
+                    # occupy space within the rectangle
+                    compass_loc = (0.0, 1 - compass_size)
+            compass_bounds = (*compass_loc, compass_size, compass_size)
+
         cax = ax.inset_axes(compass_bounds)
         cax.axis('off')
         cax.set_aspect('equal')
@@ -1267,6 +1429,19 @@ def visualize_tensor(
                 rotation_mode='anchor',
             )
 
+    if legend:
+        add_visualize_legend(
+            ax=ax,
+            complexobj=np.iscomplexobj(array),
+            max_mag=max_mag,
+            max_projections=max_projections,
+            legend_loc=legend_loc,
+            legend_size=legend_size,
+            legend_bounds=legend_bounds,
+            legend_resolution=legend_resolution,
+        )
+
+    plt.close(fig)
     return fig, ax
 
 

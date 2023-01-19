@@ -1,6 +1,7 @@
 """
 Helper functions for generating color spectrums.
 """
+import math
 import itertools
 
 import matplotlib.cm as cm
@@ -117,16 +118,21 @@ def cimple(
     hue,
     sat1=0.4,
     sat2=1.0,
-    val1=0.9,
+    val1=0.95,
     val2=0.25,
     hue_shift=0.0,
     name='cimple',
+    auto_adjust_sat=0.2,
 ):
     """Creates a color map for a single hue.
     """
     import matplotlib as mpl
-    c1 = mpl.colors.hsv_to_rgb((hue, sat1, val1))
-    c2 = mpl.colors.hsv_to_rgb((hue + hue_shift, sat2, val2))
+
+    # account for the fact that yellows appear much less saturated
+    sat1 += auto_adjust_sat * math.cos(hue * math.pi - 0.15)**8
+
+    c1 = mpl.colors.hsv_to_rgb((hue % 1.0, sat1, val1))
+    c2 = mpl.colors.hsv_to_rgb(((hue + hue_shift) % 1.0, sat2, val2))
     cdict = {
         'red': [(0.0, c1[0], c1[0]), (1.0, c2[0], c2[0])],
         'green': [(0.0, c1[1], c1[1]), (1.0, c2[1], c2[1])],
