@@ -490,11 +490,15 @@ class Crop(object):
         batchsize=None,
         num_batches=None,
     ):
-        """Sow combos to disk to be later grown, potentially in batches.
+        """Sow combos to disk to be later grown, potentially in batches. Note
+        if you have already sown this `Crop`, as long as the number of batches
+        hasn't changed (e.g. you have just tweaked the function or a constant
+        argument), you can safely resow and only the batches will be
+        overwritten, i.e. the results will remain.
 
         Parameters
         ----------
-        combos : mapping of arg names to values
+        combos : dict_like[str, iterable]
             The combinations to sow for all or some function arguments.
         cases : iterable or mappings, optional
             Optionally provide an sequence of individual cases to sow for some
@@ -560,7 +564,7 @@ class Crop(object):
         cases : iterable or mappings, optional
             Sequence of individual cases to sow for all or some function
             arguments.
-        combos : mapping of arg names to values, optional
+        combos : dict_like[str, iterable]
             Combinations to sow for some or all function arguments.
         constants : mapping, optional
             Provide additional constant function values to use when sowing.

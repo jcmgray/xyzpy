@@ -137,7 +137,7 @@ def case_runner_to_ds(
         `var_coords` (not needed by `fn`) or `constants` (needed by `fn`).
     var_coords : mapping, optional
         Mapping of extra coords the output variables may depend on.
-    combos : iterable[tuple] or iterable[dict], optional
+    combos : dict_like[str, iterable], optional
         If specified, run all combinations of some arguments in these mappings.
     constants : mapping, optional
         Arguments to `fn` which are not iterated over, these will be
@@ -213,7 +213,58 @@ case_runner_to_df = functools.partial(case_runner_to_ds, to_df=True)
 # Update or add new values                                                    #
 # --------------------------------------------------------------------------- #
 
-def find_missing_cases(ds, ignore_dims=None, show_progbar=False):
+
+def is_case_missing(ds, setting, method='isnull'):
+    """Does the dataset or dataarray ``ds`` not contain any non-null data for
+    location ``setting``?
+
+    Note that this only returns true if *all* data across *all* variables is
+    completely missing at the location.
+
+    Parameters
+    ----------
+    ds : xarray.Dataset or xarray.DataArray
+        Dataset or dataarray to look in.
+    setting : dict[str, hashable]
+        Coordinate location to check.
+
+    Returns
+    -------
+    missing : bool
+    """
+    import numpy as np
+
+    try:
+        sds = ds.sel(setting)
+
+        if method == 'isnull':
+            sds = sds.isnull()
+        elif method == 'isfinite':
+            sds = ~np.isfinite(sds)
+        else:
+            raise ValueError('Unknown method: {}'.format(method))
+
+        nds = sds.all()
+    except KeyError:
+        # coordinates not present at all
+        return True
+
+    try:
+        # cocatenate answer for each variable if Dataset
+        nds = nds.to_array().all()
+    except AttributeError:
+        # already a DataArray
+        pass
+
+    return nds.item()
+
+
+def find_missing_cases(
+    ds,
+    ignore_dims=None,
+    method='isnull',
+    show_progbar=False
+):
     """Find all cases in a dataset with missing data.
 
     Parameters
@@ -236,14 +287,53 @@ def find_missing_cases(ds, ignore_dims=None, show_progbar=False):
 
     # Find all configurations
     fn_args = tuple(coo for coo in ds.dims if coo not in ignore_dims)
-    var_names = tuple(ds.data_vars)
     all_cases = itertools.product(*(ds[arg].data for arg in fn_args))
 
     # Only return those corresponding to all missing data
     def gen_missing_list():
         for case in progbar(all_cases, disable=not show_progbar):
-            sub_ds = ds.loc[dict(zip(fn_args, case))]
-            if all(sub_ds[v].isnull().all() for v in var_names):
+            setting = dict(zip(fn_args, case))
+            if is_case_missing(ds, setting, method=method):
                 yield case
 
     return fn_args, tuple(gen_missing_list())
+
+
+def parse_into_cases(combos=None, cases=None, ds=None, method='isnull'):
+    """Convert maybe ``combos`` and maybe ``cases`` to a single list of
+    ``cases`` only, also optionally filtering based on whether any data at each
+    location is already present in Dataset or DataArray ``ds``.
+
+    Parameters
+    ----------
+    combos : dict_like[str, iterable], optional
+        Parameter combinations.
+    cases : iterable[dict], optional
+        Parameter configurations.
+    ds : xarray.Dataset or xarray.DataArray, optional
+        Dataset or DataArray in which to check for existing data.
+
+    Returns
+    -------
+    new_cases : iterable[dict]
+        The combined and possibly filtered list of cases.
+    """
+    if combos is None:
+        combos = {}
+    if cases is None:
+        cases = [{}]
+
+    combo_keys = tuple(combos)
+    combo_vals = tuple(combos.values())
+
+    new_cases = []
+    for case in cases:
+        for setting in itertools.product(*combo_vals):
+            new_case = {
+                **case,
+                **dict(zip(combo_keys, setting)),
+            }
+            if (ds is None) or is_case_missing(ds, new_case, method=method):
+                new_cases.append(new_case)
+
+    return new_cases

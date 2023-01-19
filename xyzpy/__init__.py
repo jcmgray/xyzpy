@@ -25,7 +25,9 @@ from .gen.case_runner import (
     case_runner,
     case_runner_to_ds,
     case_runner_to_df,
+    is_case_missing,
     find_missing_cases,
+    parse_into_cases,
 )
 from .gen.cropping import (
     Crop,
@@ -106,7 +108,9 @@ __all__ = [
     "case_runner",
     "case_runner_to_ds",
     "case_runner_to_df",
+    "is_case_missing",
     "find_missing_cases",
+    "parse_into_cases",
     "Crop",
     "grow",
     "load_crops",

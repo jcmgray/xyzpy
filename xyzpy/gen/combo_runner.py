@@ -297,7 +297,7 @@ def combo_runner(
     ----------
     fn : callable
         Function to analyse.
-    combos : mapping of individual fn arguments to sequence of values
+    combos : dict_like[str, iterable]
         All combinations of each argument to values mapping will be computed.
         Each argument range thus gets a dimension in the output array(s).
     cases  : sequence of mappings, optional
@@ -558,7 +558,7 @@ def combo_runner_to_ds(
     ----------
     fn : callable
         Function to evaluate.
-    combos : mapping
+    combos : dict_like[str, iterable]
         Mapping of each individual function argument to sequence of values.
     var_names : str, sequence of strings, or None
         Variable name(s) of the output(s) of `fn`, set to None if

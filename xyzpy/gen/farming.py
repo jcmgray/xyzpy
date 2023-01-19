@@ -173,7 +173,7 @@ class Runner(object):
 
         Parameters
         ----------
-        combos : dict_like
+        combos : dict_like[str, iterable]
             The values of each function argument with which to evaluate all
             combinations.
         constants : dict, optional
@@ -626,7 +626,7 @@ class Harvester(object):
 
         Parameters
         ---------
-        combos : dict_like
+        combos : dict_like[str, iterable]
             The combos to run. The only difference here is that you can supply
             an ellipse ``...``, meaning the all values for that coordinate will
             be loaded from the current full dataset.
@@ -730,7 +730,7 @@ class Sampler:
         Runner describing a labelled function to run.
     data_name : str, optional
         If given, the on-disk file to sync results with.
-    default_combos : dict_like, optional
+    default_combos : dict_like[str, iterable], optional
         The default combos to sample from (which can be overridden).
     full_df : pandas.DataFrame, optional
         If given, use this dataframe as the initial 'full' data.
@@ -889,7 +889,7 @@ class Sampler:
         ----------
         n : int
             How many samples to run.
-        combos : dict_like, optional
+        combos : dict_like[str, iterable], optional
             A mapping of function arguments to potential choices. Any keys in
             here will override ``default_combos``. You can also suppply a
             callable to manually return a random choice e.g. from a probability
