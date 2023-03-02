@@ -16,7 +16,7 @@ _DEFAULT_FN_CACHE_PATH = '__xyz_cache__'
 def cache_to_disk(fn=None, *, cachedir=_DEFAULT_FN_CACHE_PATH, **kwargs):
     """Cache this function to disk, using joblib.
     """
-    mem = joblib.Memory(cachedir=cachedir, verbose=0, **kwargs)
+    mem = joblib.Memory(cachedir, verbose=0, **kwargs)
 
     # bare decorator
     if fn:
