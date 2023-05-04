@@ -278,6 +278,7 @@ def label(var_names,
           attrs=None,
           harvester=False,
           sampler=False,
+          engine=None,
           **default_runner_settings):
     """Convenient decorator to automatically wrap a function as a
     :class:`~xyzpy.Runner` or :class:`~xyzpy.Harvester`.
@@ -347,14 +348,14 @@ def label(var_names,
                 data_name = None
             else:
                 data_name = harvester
-            r = Harvester(r, data_name=data_name)
+            r = Harvester(r, data_name=data_name, engine=engine)
 
         if sampler:
             if sampler is True:
                 data_name = None
             else:
                 data_name = sampler
-            r = Sampler(r, data_name=data_name)
+            r = Sampler(r, data_name=data_name, engine=engine)
 
         return functools.update_wrapper(r, fn)
 
@@ -396,6 +397,9 @@ class Harvester(object):
                  engine='h5netcdf', full_ds=None):
         self.runner = runner
         self.data_name = data_name
+        if engine is None:
+            # allow None for default
+            engine = 'h5netcdf'
         self.engine = engine
         self.chunks = chunks
         self._full_ds = full_ds
@@ -754,6 +758,9 @@ class Sampler:
                                else dict(default_combos))
         self._full_df = full_df
         self._last_df = None
+        if engine is None:
+            # allow None for default
+            engine = 'pickle'
         self.engine = engine
 
     @property
