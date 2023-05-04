@@ -1,12 +1,13 @@
 """Functions for systematically evaluating a function over all combinations.
 """
+import random
 import functools
 import itertools
 import multiprocessing
 
 import numpy as np
 import xarray as xr
-from joblib.externals import loky
+from joblib.externals.loky import get_reusable_executor
 
 from ..utils import progbar
 from .prepare import (
@@ -92,17 +93,19 @@ def _submit(executor, fn, *args, **kwds):
     if isinstance(executor, multiprocessing.pool.Pool):
         return executor.apply_async(fn, args, kwds)
 
-    elif hasattr(executor, 'submit'):
+    elif hasattr(executor, "submit"):
         # concurrent.futures like API
         return executor.submit(fn, *args, **kwds)
 
-    elif hasattr(executor, 'apply_async'):
+    elif hasattr(executor, "apply_async"):
         # ipyparallel like API
         return executor.apply_async(fn, *args, **kwds)
 
     else:
-        raise TypeError("The executor supplied, {}, does not have a ``submit``"
-                        " or ``apply_async`` method.".format(executor))
+        raise TypeError(
+            "The executor supplied, {}, does not have a ``submit``"
+            " or ``apply_async`` method.".format(executor)
+        )
 
 
 def _get_result(future):
@@ -190,7 +193,8 @@ def combo_runner_core(
         raise ValueError(
             f"Variables can't appear in both ``cases`` and ``combos``, "
             f"currently found combo variables {combo_args} and case variables"
-            f"{case_args}.")
+            f"{case_args}."
+        )
 
     # order arguments will be iterated over
     fn_args = case_args + combo_args
@@ -212,20 +216,19 @@ def combo_runner_core(
             settings.append(kws)
 
     if shuffle:
-        import random
         random.seed(int(shuffle))
         enum_settings = list(enumerate(settings))
         random.shuffle(enum_settings)
         enum, settings = zip(*enum_settings)
 
-    run_linear_opts = {'fn': fn, 'settings': settings, 'verbosity': verbosity}
+    run_linear_opts = {"fn": fn, "settings": settings, "verbosity": verbosity}
 
     if executor is not None:
         # custom pool supplied
         results_linear = _run_linear_executor(executor, **run_linear_opts)
     elif parallel or num_workers:
         # else for parallel, by default use a process pool-exceutor
-        executor = loky.get_reusable_executor(num_workers)
+        executor = get_reusable_executor(num_workers)
         results_linear = _run_linear_executor(executor, **run_linear_opts)
     else:
         results_linear = _run_linear_sequential(**run_linear_opts)
@@ -265,10 +268,10 @@ def combo_runner_core(
     if info is not None:
         # optionally return some extra labelling information
         if flat:
-            info['settings'] = settings
+            info["settings"] = settings
         else:
-            info['fn_args'] = fn_args
-            info['all_combo_values'] = all_combo_values
+            info["fn_args"] = fn_args
+            info["all_combo_values"] = all_combo_values
 
     if split:
         # put each output variable into a seperate results at the top level
@@ -424,21 +427,19 @@ def combo_runner(
 
 
 def multi_concat(results, dims):
-    """Concatenate a nested list of xarray objects along several dimensions.
-    """
+    """Concatenate a nested list of xarray objects along several dimensions."""
     if len(dims) == 1:
         return xr.concat(results, dim=dims[0])
     else:
         return xr.concat(
             [multi_concat(sub_results, dims[1:]) for sub_results in results],
-            dim=dims[0]
+            dim=dims[0],
         )
 
 
 def get_ndim_first(x, ndim):
-    """Return the first element from the ndim-nested list x.
-    """
-    return (x if ndim == 0 else get_ndim_first(x[0], ndim - 1))
+    """Return the first element from the ndim-nested list x."""
+    return x if ndim == 0 else get_ndim_first(x[0], ndim - 1)
 
 
 def results_to_ds(
@@ -448,21 +449,21 @@ def results_to_ds(
     var_dims,
     var_coords,
     constants=None,
-    attrs=None
+    attrs=None,
 ):
-    """Convert the output of combo_runner into a :class:`xarray.Dataset`.
-    """
+    """Convert the output of combo_runner into a :class:`xarray.Dataset`."""
     fn_args = tuple(x for x, _ in combos)
     results = parse_combo_results(results, var_names)
 
     if len(results) != len(var_names):
-        raise ValueError(f"Wrong number of results ({len(results)}) for "
-                         f"{len(var_names)} ``var_names``: {var_names}.")
+        raise ValueError(
+            f"Wrong number of results ({len(results)}) for "
+            f"{len(var_names)} ``var_names``: {var_names}."
+        )
 
     # Check if the results are an array of xarray objects
     xobj_results = isinstance(
-        get_ndim_first(results, len(fn_args) + 1),
-        (xr.Dataset, xr.DataArray)
+        get_ndim_first(results, len(fn_args) + 1), (xr.Dataset, xr.DataArray)
     )
 
     if xobj_results:
@@ -474,10 +475,7 @@ def results_to_ds(
     else:
         # create a new dataset using the given arrays and var_names
         ds = xr.Dataset(
-            coords={
-                **dict(combos),
-                **dict(var_coords)
-            },
+            coords={**dict(combos), **dict(var_coords)},
             data_vars={
                 name: (fn_args + var_dims[name], np.asarray(data))
                 for data, name in zip(results, var_names)
@@ -504,8 +502,7 @@ def results_to_df(
     resources,
     var_names,
 ):
-    """Convert the output of combo_runner into a :class:`pandas.DataFrame`.
-    """
+    """Convert the output of combo_runner into a :class:`pandas.DataFrame`."""
     import pandas as pd
 
     # construct as list of single dict entries
@@ -644,16 +641,16 @@ def combo_runner_to_ds(
         # convert flat tuple of results to dataframe
         return results_to_df(
             results,
-            settings=info['settings'],
+            settings=info["settings"],
             attrs=attrs,
             resources=resources,
-            var_names=var_names
+            var_names=var_names,
         )
 
     if cases:
         # if we have cases, then need to find the effective full combos
         # -> results contains nan placeholders for non-run cases
-        combos = tuple(zip(info['fn_args'], info['all_combo_values']))
+        combos = tuple(zip(info["fn_args"], info["all_combo_values"]))
 
     # convert to dataset
     ds = results_to_ds(
