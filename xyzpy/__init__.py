@@ -33,6 +33,8 @@ from .gen.cropping import (
     Crop,
     grow,
     load_crops,
+    clean_slurm_outputs,
+    manage_slurm_outputs,
 )
 from .gen.farming import (
     Runner,
@@ -114,6 +116,8 @@ __all__ = [
     "Crop",
     "grow",
     "load_crops",
+    "clean_slurm_outputs",
+    "manage_slurm_outputs",
     "cache_to_disk",
     "save_ds",
     "load_ds",

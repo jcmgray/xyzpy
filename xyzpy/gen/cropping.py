@@ -17,6 +17,7 @@ from .combo_runner import (
     nan_like_result,
     combo_runner_core,
     combo_runner_to_ds,
+    get_reusable_executor,
 )
 from .case_runner import (
     case_runner,
@@ -38,33 +39,34 @@ INFO_NM = "xyz-settings.jbdmp"
 
 
 def write_to_disk(obj, fname):
-    with open(fname, 'wb') as file:
+    with open(fname, "wb") as file:
         pickle.dump(obj, file)
 
 
 def read_from_disk(fname):
-    with open(fname, 'rb') as file:
+    with open(fname, "rb") as file:
         return pickle.load(file)
 
 
 @functools.lru_cache(8)
-def get_picklelib(picklelib='joblib.externals.cloudpickle'):
+def get_picklelib(picklelib="joblib.externals.cloudpickle"):
     return importlib.import_module(picklelib)
 
 
-def to_pickle(obj, picklelib='joblib.externals.cloudpickle'):
+def to_pickle(obj, picklelib="joblib.externals.cloudpickle"):
     plib = get_picklelib(picklelib)
     s = plib.dumps(obj)
     return s
 
 
-def from_pickle(s, picklelib='joblib.externals.cloudpickle'):
+def from_pickle(s, picklelib="joblib.externals.cloudpickle"):
     plib = get_picklelib(picklelib)
     obj = plib.loads(s)
     return obj
 
 
 # --------------------------------- parsing --------------------------------- #
+
 
 def parse_crop_details(fn, crop_name, crop_parent):
     """Work out how to structure the sowed data.
@@ -102,8 +104,10 @@ def parse_crop_details(fn, crop_name, crop_parent):
 def parse_fn_farmer(fn, farmer):
     if farmer is not None:
         if fn is not None:
-            warnings.warn("'fn' is ignored if a 'Runner', 'Harvester', or "
-                          "'Sampler' is supplied as the 'farmer' kwarg.")
+            warnings.warn(
+                "'fn' is ignored if a 'Runner', 'Harvester', or "
+                "'Sampler' is supplied as the 'farmer' kwarg."
+            )
         fn = farmer.fn
 
     return fn, farmer
@@ -126,11 +130,13 @@ def calc_clean_up_default_res(crop, clean_up, allow_incomplete):
 
 def check_ready_to_reap(crop, allow_incomplete, wait):
     if not (allow_incomplete or wait or crop.is_ready_to_reap()):
-        raise XYZError("This crop is not ready to reap yet - results are "
-                       "missing. You can reap only finished batches by setting"
-                       " ``allow_incomplete=True``, but be aware this will "
-                       "represent all missing batches with ``np.nan`` and thus"
-                       " might effect data-types.")
+        raise XYZError(
+            "This crop is not ready to reap yet - results are "
+            "missing. You can reap only finished batches by setting"
+            " ``allow_incomplete=True``, but be aware this will "
+            "represent all missing batches with ``np.nan`` and thus"
+            " might effect data-types."
+        )
 
 
 class Crop(object):
@@ -177,7 +183,8 @@ class Crop(object):
     """
 
     def __init__(
-        self, *,
+        self,
+        *,
         fn=None,
         name=None,
         parent_dir=None,
@@ -186,7 +193,7 @@ class Crop(object):
         num_batches=None,
         shuffle=False,
         farmer=None,
-        autoload=True
+        autoload=True,
     ):
         self._fn, self.farmer = parse_fn_farmer(fn, farmer)
 
@@ -200,8 +207,9 @@ class Crop(object):
         self._all_nan_result = None
 
         # Work out the full directory for the crop
-        self.location, self.name, self.parent_dir = \
-            parse_crop_details(self._fn, self.name, self.parent_dir)
+        self.location, self.name, self.parent_dir = parse_crop_details(
+            self._fn, self.name, self.parent_dir
+        )
 
         # try loading crop information if it exists
         if autoload and self.is_prepared():
@@ -246,9 +254,11 @@ class Crop(object):
             if self._batch_remainder is not None:
                 pos_tot += self._batch_remainder
             if not (n <= pos_tot < n + self.batchsize):
-                raise ValueError("`batchsize` and `num_batches` cannot both"
-                                 "be specified if they do not not multiply"
-                                 "to the correct number of total cases.")
+                raise ValueError(
+                    "`batchsize` and `num_batches` cannot both"
+                    "be specified if they do not not multiply"
+                    "to the correct number of total cases."
+                )
 
         # Decide based on batchsize
         elif self.num_batches is None:
@@ -276,14 +286,12 @@ class Crop(object):
             self.batchsize, self._batch_remainder = divmod(n, self.num_batches)
 
     def ensure_dirs_exists(self):
-        """Make sure the directory structure for this crop exists.
-        """
+        """Make sure the directory structure for this crop exists."""
         os.makedirs(os.path.join(self.location, "batches"), exist_ok=True)
         os.makedirs(os.path.join(self.location, "results"), exist_ok=True)
 
     def save_info(self, combos=None, cases=None, fn_args=None):
-        """Save information about the sowed cases.
-        """
+        """Save information about the sowed cases."""
         # If saving Harvester or Runner, strip out function information so
         #   as just to use pickle.
         if self.farmer is not None:
@@ -293,20 +301,22 @@ class Crop(object):
         else:
             farmer_pkl = None
 
-        write_to_disk({
-            'combos': combos,
-            'cases': cases,
-            'fn_args': fn_args,
-            'batchsize': self.batchsize,
-            'num_batches': self.num_batches,
-            '_batch_remainder': self._batch_remainder,
-            'shuffle': self.shuffle,
-            'farmer': farmer_pkl,
-        }, os.path.join(self.location, INFO_NM))
+        write_to_disk(
+            {
+                "combos": combos,
+                "cases": cases,
+                "fn_args": fn_args,
+                "batchsize": self.batchsize,
+                "num_batches": self.num_batches,
+                "_batch_remainder": self._batch_remainder,
+                "shuffle": self.shuffle,
+                "farmer": farmer_pkl,
+            },
+            os.path.join(self.location, INFO_NM),
+        )
 
     def load_info(self):
-        """Load the full settings from disk.
-        """
+        """Load the full settings from disk."""
         sfile = os.path.join(self.location, INFO_NM)
 
         if not os.path.isfile(sfile):
@@ -315,18 +325,14 @@ class Crop(object):
             return read_from_disk(sfile)
 
     def _sync_info_from_disk(self, only_missing=True):
-        """Load information about the saved cases.
-        """
+        """Load information about the saved cases."""
         settings = self.load_info()
-        self.batchsize = settings['batchsize']
-        self.num_batches = settings['num_batches']
-        self._batch_remainder = settings['_batch_remainder']
+        self.batchsize = settings["batchsize"]
+        self.num_batches = settings["num_batches"]
+        self._batch_remainder = settings["_batch_remainder"]
 
-        farmer_pkl = settings['farmer']
-        farmer = (
-            None if farmer_pkl is None else
-            from_pickle(farmer_pkl)
-        )
+        farmer_pkl = settings["farmer"]
+        farmer = None if farmer_pkl is None else from_pickle(farmer_pkl)
 
         fn, farmer = parse_fn_farmer(None, farmer)
 
@@ -339,26 +345,29 @@ class Crop(object):
             self.load_function()
 
     def save_function_to_disk(self):
-        """Save the base function to disk using cloudpickle
-        """
-        write_to_disk(to_pickle(self._fn),
-                      os.path.join(self.location, FNCT_NM))
+        """Save the base function to disk using cloudpickle"""
+        write_to_disk(
+            to_pickle(self._fn), os.path.join(self.location, FNCT_NM)
+        )
 
     def load_function(self):
         """Load the saved function from disk, and try to re-insert it back into
         Harvester or Runner if present.
         """
-        self._fn = from_pickle(read_from_disk(
-            os.path.join(self.location, FNCT_NM)))
+        self._fn = from_pickle(
+            read_from_disk(os.path.join(self.location, FNCT_NM))
+        )
 
         if self.farmer is not None:
             if self.farmer.fn is None:
                 self.farmer.fn = self._fn
             else:
                 # TODO: check equality?
-                raise XYZError("Trying to load this Crop's function, {}, from "
-                               "disk but its farmer already has a function "
-                               "set: {}.".format(self._fn, self.farmer.fn))
+                raise XYZError(
+                    "Trying to load this Crop's function, {}, from "
+                    "disk but its farmer already has a function "
+                    "set: {}.".format(self._fn, self.farmer.fn)
+                )
 
     def prepare(self, combos=None, cases=None, fn_args=None):
         """Write information about this crop and the supplied combos to disk.
@@ -370,60 +379,62 @@ class Crop(object):
         self.save_info(combos=combos, cases=cases, fn_args=fn_args)
 
     def is_prepared(self):
-        """Check whether this crop has been written to disk.
-        """
+        """Check whether this crop has been written to disk."""
         return os.path.exists(os.path.join(self.location, INFO_NM))
 
     def calc_progress(self):
-        """Calculate how much progressed has been made in growing the batches.
-        """
+        """Calculate how much progressed has been made in growing the batches."""
         if self.is_prepared():
             self._sync_info_from_disk()
-            self._num_sown_batches = len(glob.glob(
-                os.path.join(self.location, "batches", BTCH_NM.format("*"))))
-            self._num_results = len(glob.glob(
-                os.path.join(self.location, "results", RSLT_NM.format("*"))))
+            self._num_sown_batches = len(
+                glob.glob(
+                    os.path.join(self.location, "batches", BTCH_NM.format("*"))
+                )
+            )
+            self._num_results = len(
+                glob.glob(
+                    os.path.join(self.location, "results", RSLT_NM.format("*"))
+                )
+            )
         else:
             self._num_sown_batches = -1
             self._num_results = -1
 
     def is_ready_to_reap(self):
-        """Have all batches been grown?
-        """
+        """Have all batches been grown?"""
         self.calc_progress()
-        return (
-            self._num_results > 0 and
-            (self._num_results == self.num_sown_batches)
+        return self._num_results > 0 and (
+            self._num_results == self.num_sown_batches
         )
 
     def missing_results(self):
-        """Return tuple of batches which haven't been grown yet.
-        """
+        """Return tuple of batches which haven't been grown yet."""
         self.calc_progress()
 
         def no_result_exists(x):
             return not os.path.isfile(
-                os.path.join(self.location, "results", RSLT_NM.format(x)))
+                os.path.join(self.location, "results", RSLT_NM.format(x))
+            )
 
         return tuple(filter(no_result_exists, range(1, self.num_batches + 1)))
 
     def delete_all(self):
-        """Delete the crop directory and all its contents.
-        """
+        """Delete the crop directory and all its contents."""
         # delete everything
         shutil.rmtree(self.location)
 
     @property
     def all_nan_result(self):
-        """Get a stand-in result for cases which are missing still.
-        """
+        """Get a stand-in result for cases which are missing still."""
         if self._all_nan_result is None:
             result_files = glob.glob(
                 os.path.join(self.location, "results", RSLT_NM.format("*"))
             )
             if not result_files:
-                raise XYZError("To infer an all-nan result requires at least "
-                               "one finished result.")
+                raise XYZError(
+                    "To infer an all-nan result requires at least "
+                    "one finished result."
+                )
             reference_result = read_from_disk(result_files[0])[0]
             self._all_nan_result = nan_like_result(reference_result)
 
@@ -444,12 +455,14 @@ class Crop(object):
         total_bars = 20
         bars = int(percentage * total_bars / 100)
 
-        return ("\n"
-                "{location}\n"
-                "{under_crop_dir}{under_crop_name}\n"
-                "{num_results} / {total} batches of size {bsz} completed\n"
-                "[{done_bars}{not_done_spaces}] : {percentage:.1f}%"
-                "\n").format(
+        return (
+            "\n"
+            "{location}\n"
+            "{under_crop_dir}{under_crop_name}\n"
+            "{num_results} / {total} batches of size {bsz} completed\n"
+            "[{done_bars}{not_done_spaces}] : {percentage:.1f}%"
+            "\n"
+        ).format(
             location=self.location,
             under_crop_dir="-" * (loc_len - name_len),
             under_crop_name="=" * name_len,
@@ -599,25 +612,26 @@ class Crop(object):
             )
 
     def sow_samples(self, n, combos=None, constants=None, verbosity=1):
-        """Sow ``n`` samples to disk.
-        """
+        """Sow ``n`` samples to disk."""
         fn_args, cases = self.farmer.gen_cases_fnargs(n, combos)
-        self.sow_cases(fn_args, cases,
-                       constants=constants, verbosity=verbosity)
+        self.sow_cases(
+            fn_args, cases, constants=constants, verbosity=verbosity
+        )
 
     def grow(self, batch_ids, **combo_runner_opts):
-        """Grow specific batch numbers using this process.
-        """
+        """Grow specific batch numbers using this process."""
         if isinstance(batch_ids, int):
             batch_ids = (batch_ids,)
 
-        combo_runner_core(grow, combos=(('batch_number', batch_ids),),
-                          constants={'verbosity': 0, 'crop': self},
-                          **combo_runner_opts)
+        combo_runner_core(
+            grow,
+            combos=(("batch_number", batch_ids),),
+            constants={"verbosity": 0, "crop": self},
+            **combo_runner_opts,
+        )
 
     def grow_missing(self, **combo_runner_opts):
-        """Grow any missing results using this process.
-        """
+        """Grow any missing results using this process."""
         self.grow(batch_ids=self.missing_results(), **combo_runner_opts)
 
     def reap_combos(self, wait=False, clean_up=None, allow_incomplete=False):
@@ -650,15 +664,18 @@ class Crop(object):
         # load same combinations as cases saved with
         settings = self.load_info()
 
-        with Reaper(self, num_batches=settings['num_batches'],
-                    wait=wait, default_result=default_result) as reap_fn:
-
+        with Reaper(
+            self,
+            num_batches=settings["num_batches"],
+            wait=wait,
+            default_result=default_result,
+        ) as reap_fn:
             results = combo_runner_core(
                 fn=reap_fn,
-                combos=settings['combos'],
-                cases=settings['cases'],
+                combos=settings["combos"],
+                cases=settings["cases"],
                 constants={},
-                shuffle=settings.get('shuffle', False),
+                shuffle=settings.get("shuffle", False),
             )
 
         if clean_up:
@@ -731,22 +748,25 @@ class Crop(object):
             constants = parse_constants(constants)
             attrs = parse_attrs(attrs)
 
-        with Reaper(self, num_batches=settings['num_batches'],
-                    wait=wait, default_result=default_result) as reap_fn:
-
+        with Reaper(
+            self,
+            num_batches=settings["num_batches"],
+            wait=wait,
+            default_result=default_result,
+        ) as reap_fn:
             # move constants into attrs, so as not to pass them to the Reaper
             #   when if fact they were meant for the original function.
             data = combo_runner_to_ds(
                 fn=reap_fn,
-                combos=settings['combos'],
-                cases=settings['cases'],
+                combos=settings["combos"],
+                cases=settings["cases"],
                 var_names=var_names,
                 var_dims=var_dims,
                 var_coords=var_coords,
                 constants={},
                 resources={},
                 attrs={**constants, **attrs},
-                shuffle=settings.get('shuffle', False),
+                shuffle=settings.get("shuffle", False),
                 parse=parse,
                 to_df=to_df,
             )
@@ -756,8 +776,14 @@ class Crop(object):
 
         return data
 
-    def reap_runner(self, runner, wait=False, clean_up=None,
-                    allow_incomplete=False, to_df=False):
+    def reap_runner(
+        self,
+        runner,
+        wait=False,
+        clean_up=None,
+        allow_incomplete=False,
+        to_df=False,
+    ):
         """Reap a Crop over sowed combos and save to a dataset defined by a
         :class:`~xyzpy.Runner`.
         """
@@ -773,7 +799,8 @@ class Crop(object):
             wait=wait,
             clean_up=clean_up,
             allow_incomplete=allow_incomplete,
-            to_df=to_df)
+            to_df=to_df,
+        )
 
         if to_df:
             runner._last_df = data
@@ -782,16 +809,28 @@ class Crop(object):
 
         return data
 
-    def reap_harvest(self, harvester, wait=False, sync=True, overwrite=None,
-                     clean_up=None, allow_incomplete=False):
+    def reap_harvest(
+        self,
+        harvester,
+        wait=False,
+        sync=True,
+        overwrite=None,
+        clean_up=None,
+        allow_incomplete=False,
+    ):
         """Reap a Crop over sowed combos and merge with the dataset defined by
         a :class:`~xyzpy.Harvester`.
         """
         if harvester is None:
             raise ValueError("Cannot reap and harvest if no Harvester is set.")
 
-        ds = self.reap_runner(harvester.runner, wait=wait, clean_up=False,
-                              allow_incomplete=allow_incomplete, to_df=False)
+        ds = self.reap_runner(
+            harvester.runner,
+            wait=wait,
+            clean_up=False,
+            allow_incomplete=allow_incomplete,
+            to_df=False,
+        )
 
         if sync:
             harvester.add_ds(ds, sync=sync, overwrite=overwrite)
@@ -810,7 +849,7 @@ class Crop(object):
         wait=False,
         sync=True,
         clean_up=None,
-        allow_incomplete=False
+        allow_incomplete=False,
     ):
         """Reap a Crop over sowed combos and merge with the dataframe defined
         by a :class:`~xyzpy.Sampler`.
@@ -818,8 +857,13 @@ class Crop(object):
         if sampler is None:
             raise ValueError("Cannot reap samples without a 'Sampler'.")
 
-        df = self.reap_runner(sampler.runner, wait=wait, clean_up=clean_up,
-                              allow_incomplete=allow_incomplete, to_df=True)
+        df = self.reap_runner(
+            sampler.runner,
+            wait=wait,
+            clean_up=clean_up,
+            allow_incomplete=allow_incomplete,
+            to_df=True,
+        )
 
         if sync:
             sampler._last_df = df
@@ -863,14 +907,15 @@ class Crop(object):
         -------
         nested tuple or xarray.Dataset
         """
-        opts = dict(clean_up=clean_up, wait=wait,
-                    allow_incomplete=allow_incomplete)
+        opts = dict(
+            clean_up=clean_up, wait=wait, allow_incomplete=allow_incomplete
+        )
 
         if isinstance(self.farmer, Runner):
             return self.reap_runner(self.farmer, **opts)
 
         if isinstance(self.farmer, Harvester):
-            opts['overwrite'] = overwrite
+            opts["overwrite"] = overwrite
             return self.reap_harvest(self.farmer, sync=sync, **opts)
 
         if isinstance(self.farmer, Sampler):
@@ -894,16 +939,21 @@ class Crop(object):
         """
         # XXX: work out why this is needed sometimes on network filesystems.
         result_files = glob.glob(
-            os.path.join(self.location, "results", RSLT_NM.format("*")))
+            os.path.join(self.location, "results", RSLT_NM.format("*"))
+        )
 
         bad_ids = []
 
         for result_file in result_files:
             # load corresponding batch file to check length.
-            result_num = os.path.split(
-                result_file)[-1].strip("xyz-result-").strip(".jbdmp")
+            result_num = (
+                os.path.split(result_file)[-1]
+                .strip("xyz-result-")
+                .strip(".jbdmp")
+            )
             batch_file = os.path.join(
-                self.location, "batches", BTCH_NM.format(result_num))
+                self.location, "batches", BTCH_NM.format(result_num)
+            )
 
             batch = read_from_disk(batch_file)
 
@@ -941,15 +991,18 @@ class Crop(object):
         self._fn = None
         self.save_fn = False
 
-    fn = property(_get_fn, _set_fn, _del_fn,
-                  "Function to save with the Crop for automatic loading and "
-                  "running. Default crop name will be inferred from this if"
-                  "not given explicitly as well.")
+    fn = property(
+        _get_fn,
+        _set_fn,
+        _del_fn,
+        "Function to save with the Crop for automatic loading and "
+        "running. Default crop name will be inferred from this if"
+        "not given explicitly as well.",
+    )
 
     @property
     def num_sown_batches(self):
-        """Total number of batches to be run/grown.
-        """
+        """Total number of batches to be run/grown."""
         self.calc_progress()
         return self._num_sown_batches
 
@@ -959,7 +1012,7 @@ class Crop(object):
         return self._num_results
 
 
-def load_crops(directory='.'):
+def load_crops(directory="."):
     """Automatically load all the crops found in the current directory.
 
     Parameters
@@ -976,7 +1029,7 @@ def load_crops(directory='.'):
     import re
 
     folders = next(os.walk(directory))[1]
-    crop_rgx = re.compile(r'^\.xyz-(.+)')
+    crop_rgx = re.compile(r"^\.xyz-(.+)")
 
     names = []
     for folder in folders:
@@ -1006,11 +1059,15 @@ class Sower(object):
         self._batch_counter = 0  # counts how many batches have been written
 
     def save_batch(self):
-        """Save the current batch of cases to disk and start the next batch.
-        """
+        """Save the current batch of cases to disk and start the next batch."""
         self._batch_counter += 1
-        write_to_disk(self._batch_cases, os.path.join(
-            self.crop.location, "batches", BTCH_NM.format(self._batch_counter))
+        write_to_disk(
+            self._batch_cases,
+            os.path.join(
+                self.crop.location,
+                "batches",
+                BTCH_NM.format(self._batch_counter),
+            ),
         )
         self._batch_cases = []
         self._counter = 0
@@ -1037,8 +1094,15 @@ class Sower(object):
             self.save_batch()
 
 
-def grow(batch_number, crop=None, fn=None, check_mpi=True,
-         verbosity=2, debugging=False):
+def grow(
+    batch_number,
+    crop=None,
+    fn=None,
+    num_workers=None,
+    check_mpi=True,
+    verbosity=2,
+    debugging=False,
+):
     """Automatically process a batch of cases into results. Should be run in an
     ".xyz-{fn_name}" folder.
 
@@ -1051,6 +1115,9 @@ def grow(batch_number, crop=None, fn=None, check_mpi=True,
     fn : callable, optional
         If specified, the function used to generate the results, otherwise
         the function will be loaded from disk.
+    num_workers : int, optional
+        If specified, grow using a pool of this many workers. This uses
+        ``joblib.externals.loky`` to spawn processes.
     check_mpi : bool, optional
         Whether to check if the process is rank 0 and only save results if
         so - allows mpi functions to be simply used. Defaults to true,
@@ -1063,16 +1130,21 @@ def grow(batch_number, crop=None, fn=None, check_mpi=True,
     """
     if debugging:
         import logging
+
         logger = logging.getLogger()
         logger.setLevel(logging.DEBUG)
 
+    # first we load the function and batch of cases to run
+
     if crop is None:
-        current_folder = os.path.relpath('.', '..')
+        current_folder = os.path.relpath(".", "..")
         if current_folder[:5] != ".xyz-":
-            raise XYZError("`grow` should be run in a "
-                           "\"{crop_parent}/.xyz-{crop_name}\" folder, else "
-                           "`crop_parent` and `crop_name` (or `fn`) should be "
-                           "specified.")
+            raise XYZError(
+                "`grow` should be run in a "
+                '"{crop_parent}/.xyz-{crop_name}" folder, else '
+                "`crop_parent` and `crop_name` (or `fn`) should be "
+                "specified."
+            )
         crop_name = current_folder[5:]
         crop_location = os.getcwd()
     else:
@@ -1080,10 +1152,12 @@ def grow(batch_number, crop=None, fn=None, check_mpi=True,
         crop_location = crop.location
 
     fn_file = os.path.join(crop_location, FNCT_NM)
-    cases_file = os.path.join(crop_location, "batches",
-                              BTCH_NM.format(batch_number))
-    results_file = os.path.join(crop_location, "results",
-                                RSLT_NM.format(batch_number))
+    cases_file = os.path.join(
+        crop_location, "batches", BTCH_NM.format(batch_number)
+    )
+    results_file = os.path.join(
+        crop_location, "results", RSLT_NM.format(batch_number)
+    )
 
     # load function
     if fn is None:
@@ -1093,52 +1167,60 @@ def grow(batch_number, crop=None, fn=None, check_mpi=True,
     cases = read_from_disk(cases_file)
 
     if len(cases) == 0:
-        raise ValueError("Something has gone wrong with the loading of "
-                         "batch {} ".format(BTCH_NM.format(batch_number)) +
-                         "for the crop at {}.".format(crop.location))
+        raise ValueError(
+            "Something has gone wrong with the loading of "
+            "batch {} ".format(BTCH_NM.format(batch_number))
+            + "for the crop at {}.".format(crop.location)
+        )
+    if (verbosity >= 1):
+        print(f"xyzpy: loaded batch {batch_number} of {crop_name}.")
 
     # maybe want to run grow as mpiexec (i.e. `fn` itself in parallel),
     # so only save and delete on rank 0
-    if check_mpi and 'OMPI_COMM_WORLD_RANK' in os.environ:  # pragma: no cover
-        rank = int(os.environ['OMPI_COMM_WORLD_RANK'])
-    elif check_mpi and 'PMI_RANK' in os.environ:  # pragma: no cover
-        rank = int(os.environ['PMI_RANK'])
+    if check_mpi and "OMPI_COMM_WORLD_RANK" in os.environ:  # pragma: no cover
+        mpi = True
+        rank = int(os.environ["OMPI_COMM_WORLD_RANK"])
+    elif check_mpi and "PMI_RANK" in os.environ:  # pragma: no cover
+        mpi = True
+        rank = int(os.environ["PMI_RANK"])
     else:
+        mpi = False
         rank = 0
+    if mpi and (verbosity >= 1):
+        print(f"xyzpy: detected mpi rank {rank}.")
+
+    # create a lazy iterator over the results
+    if num_workers is None:
+        # sequential
+        results_it = (fn(**case) for case in cases)
+    else:
+        # parallel
+        executor = get_reusable_executor(max_workers=num_workers)
+        fs = [executor.submit(fn, **case) for case in cases]
+        results_it = (f.result() for f in fs)
+
+    if verbosity >= 1:
+        results_it = progbar(results_it, total=len(cases))
+
+    # get the actual results!
+    results = []
+    for i, r in enumerate(results_it):
+        if (verbosity >= 2):
+            results_it.set_description(f"{cases[i]}")
+        results.append(r)
 
     if rank == 0:
-        if verbosity >= 1:
-            print(f"xyzpy: loaded batch {batch_number} of {crop_name}.")
-        pbar = progbar(range(len(cases)), disable=verbosity <= 0)
-
-        results = []
-        for i in pbar:
-            if verbosity >= 2:
-                pbar.set_description(f"{cases[i]}")
-
-            # compute and store result!
-            results.append(fn(**cases[i]))
-
-        if len(results) != len(cases):
-            raise ValueError("Something has gone wrong with processing "
-                             "batch {} ".format(BTCH_NM.format(batch_number)) +
-                             "for the crop at {}.".format(crop.location))
-
-        # save to results
+        # only save to results file if the main worker
         write_to_disk(tuple(results), results_file)
 
-        if verbosity >= 1:
-            print(f"xyzpy: success - batch {batch_number} completed.")
-
-    else:
-        for case in cases:
-            # worker: just help compute the result!
-            fn(**case)
+    if (verbosity >= 1):
+        print(f"xyzpy: success - batch {batch_number} completed.")
 
 
 # --------------------------------------------------------------------------- #
 #                              Gathering results                              #
 # --------------------------------------------------------------------------- #
+
 
 class Reaper(object):
     """Class that acts as a stateful function to retrieve already sown and
@@ -1161,24 +1243,25 @@ class Reaper(object):
         )
 
         def _load(x):
-
             use_default = (
-                (default_result is not None) and
-                (not wait) and
-                (not os.path.isfile(x))
+                (default_result is not None)
+                and (not wait)
+                and (not os.path.isfile(x))
             )
 
             # actual result doesn't exist yet - use the default if specified
             if use_default:
-                i = int(re.findall(RSLT_NM.format(r'(\d+)'), x)[0])
+                i = int(re.findall(RSLT_NM.format(r"(\d+)"), x)[0])
                 size = crop.batchsize + int(i < crop._batch_remainder)
                 res = (default_result,) * size
             else:
                 res = read_from_disk(x)
 
             if (res is None) or len(res) == 0:
-                raise ValueError("Something not right: result {} contains "
-                                 "no data upon read from disk.".format(x))
+                raise ValueError(
+                    "Something not right: result {} contains "
+                    "no data upon read from disk.".format(x)
+                )
             return res
 
         def wait_to_load(x):
@@ -1190,8 +1273,9 @@ class Reaper(object):
             else:
                 raise ValueError("{} is not a file.".format(x))
 
-        self.results = itertools.chain.from_iterable(map(
-            wait_to_load if wait else _load, files))
+        self.results = itertools.chain.from_iterable(
+            map(wait_to_load if wait else _load, files)
+        )
 
     def __enter__(self):
         return self
@@ -1214,76 +1298,109 @@ _SGE_HEADER = (
     "#$ -S /bin/bash\n"
     "#$ -l h_rt={hours}:{minutes}:{seconds},mem={gigabytes}G\n"
     "#$ -l tmpfs={temp_gigabytes}G\n"
-    "{extra_resources}\n"
     "#$ -N {name}\n"
     "mkdir -p {output_directory}\n"
     "#$ -wd {output_directory}\n"
     "#$ -pe {pe} {num_procs}\n"
-    "#$ -t {run_start}-{run_stop}\n")
+    "{extra_resources}\n"
+)
+_SGE_ARRAY_HEADER = (
+    "#$ -t {run_start}-{run_stop}\n"
+)
 
 _PBS_HEADER = (
     "#!/bin/bash -l\n"
     "#PBS -lselect={num_nodes}:ncpus={num_procs}:mem={gigabytes}gb\n"
     "#PBS -lwalltime={hours:02}:{minutes:02}:{seconds:02}\n"
-    "{extra_resources}\n"
     "#PBS -N {name}\n"
-    "#PBS -J {run_start}-{run_stop}\n")
+    "{extra_resources}\n"
+)
+_PBS_ARRAY_HEADER = (
+    "#PBS -J {run_start}-{run_stop}\n"
+)
 
 _SLURM_HEADER = (
     "#!/bin/bash -l\n"
     "#SBATCH --nodes={num_nodes}\n"
-    "#SBATCH --mem={gigabytes}G\n"
     "#SBATCH --cpus-per-task={num_procs}\n"
     "#SBATCH --time={hours:02}:{minutes:02}:{seconds:02}\n"
-    "{extra_resources}\n"
+    "#SBATCH --mem={gigabytes}G\n"
     "#SBATCH --job-name={name}\n"
-    "#SBATCH --array={run_start}-{run_stop}\n")
+    "{extra_resources}\n"
+)
+_SLURM_ARRAY_HEADER = (
+    "#SBATCH --array={run_start}-{run_stop}\n"
+)
 
 _BASE = (
     "cd {working_directory}\n"
     "export OMP_NUM_THREADS={num_threads}\n"
     "export MKL_NUM_THREADS={num_threads}\n"
     "export OPENBLAS_NUM_THREADS={num_threads}\n"
+    "export NUMBA_NUM_THREADS={num_threads}\n"
     "{shell_setup}\n"
-    "tmpfile=$(mktemp .xyzpy-qsub.XXXXXXXX)\n"
-    "cat <<EOF > $tmpfile\n"
+    "read -r -d '' SCRIPT << EOM\n"
     "{setup}\n"
     "from xyzpy.gen.cropping import grow, Crop\n"
     "if __name__ == '__main__':\n"
-    "    crop = Crop(name='{name}', parent_dir='{parent_dir}')\n")
+    "    crop = Crop(name='{name}', parent_dir='{parent_dir}')\n"
+)
+_ARRAY_GROW_KWARGS = (
+    "    grow_kwargs = dict(crop=crop, debugging={debugging}, "
+    "num_workers={num_workers})\n"
+)
 
 _CLUSTER_SGE_GROW_ALL_SCRIPT = (
-    "    grow($SGE_TASK_ID, crop=crop, debugging={debugging})\n")
+    _ARRAY_GROW_KWARGS +
+    "    grow($SGE_TASK_ID, **grow_kwargs)\n"
+)
 
 _CLUSTER_PBS_GROW_ALL_SCRIPT = (
-    "    grow($PBS_ARRAY_INDEX, crop=crop, debugging={debugging})\n")
+    _ARRAY_GROW_KWARGS +
+    "    grow($PBS_ARRAY_INDEX, **grow_kwargs)\n"
+)
 
 _CLUSTER_SLURM_GROW_ALL_SCRIPT = (
-    "    grow($SLURM_ARRAY_TASK_ID, crop=crop, debugging={debugging})\n")
+    _ARRAY_GROW_KWARGS +
+    "    grow($SLURM_ARRAY_TASK_ID, **grow_kwargs)\n"
+)
 
 _CLUSTER_SGE_GROW_PARTIAL_SCRIPT = (
+    _ARRAY_GROW_KWARGS +
     "    batch_ids = {batch_ids}]\n"
-    "    grow(batch_ids[$SGE_TASK_ID - 1], crop=crop, "
-    "debugging={debugging})\n")
+    "    grow(batch_ids[$SGE_TASK_ID - 1], **grow_kwargs)\n"
+)
 
 _CLUSTER_PBS_GROW_PARTIAL_SCRIPT = (
+    _ARRAY_GROW_KWARGS +
     "    batch_ids = {batch_ids}\n"
-    "    grow(batch_ids[$PBS_ARRAY_INDEX - 1], crop=crop, "
-    "debugging={debugging})\n")
+    "    grow(batch_ids[$PBS_ARRAY_INDEX - 1], **grow_kwargs)\n"
+)
 
 _CLUSTER_SLURM_GROW_PARTIAL_SCRIPT = (
+    _ARRAY_GROW_KWARGS +
     "    batch_ids = {batch_ids}\n"
-    "    grow(batch_ids[$SLURM_ARRAY_TASK_ID - 1], crop=crop, "
-    "debugging={debugging})\n")
+    "    grow(batch_ids[$SLURM_ARRAY_TASK_ID - 1], **grow_kwargs)\n"
+)
+
+_BASE_CLUSTER_GROW_SINGLE = (
+    "    batch_ids = {batch_ids}\n"
+    "    crop.grow(batch_ids, num_workers={num_workers})\n"
+)
 
 _BASE_CLUSTER_SCRIPT_END = (
-    "EOF\n"
-    "{launcher} $tmpfile\n"
-    "rm $tmpfile\n")
+    "EOM\n"
+    '{launcher} -c "$SCRIPT"\n'
+    "echo 'XYZPY script finished'\n"
+)
 
 
 def gen_cluster_script(
-    crop, scheduler, batch_ids=None, *,
+    crop,
+    scheduler,
+    batch_ids=None,
+    *,
+    mode="array",
     hours=None,
     minutes=None,
     seconds=None,
@@ -1291,14 +1408,16 @@ def gen_cluster_script(
     num_procs=1,
     num_threads=None,
     num_nodes=1,
-    launcher='python',
+    num_workers=None,
+    conda_env=True,
+    launcher="python",
     setup="#",
     shell_setup="",
     mpi=False,
     temp_gigabytes=1,
     output_directory=None,
-    extra_resources=None,
     debugging=False,
+    **kwargs,
 ):
     """Generate a cluster script to grow a Crop.
 
@@ -1310,6 +1429,9 @@ def gen_cluster_script(
         Whether to use a SGE, PBS or slurm submission script template.
     batch_ids : int or tuple[int]
         Which batch numbers to grow, defaults to all missing batches.
+    mode : {'array', 'single'}
+        How to distribute the batches, either as an array job with a single
+        batch per job, or as a single job processing batches in parallel.
     hours : int
         How many hours to request, default=0.
     minutes : int, optional
@@ -1320,6 +1442,19 @@ def gen_cluster_script(
         How much memory to request, default: 2.
     num_procs : int, optional
         How many processes to request (threaded cores or MPI), default: 1.
+    num_threads : int, optional
+        How many threads to use per process. Will be computed automatically
+        based on ``num_procs`` and ``num_workers`` if not specified.
+    num_workers : int, optional
+        How many workers to use for parallel growing, default is sequential. If
+        specified, then generally ``num_workers * num_threads == num_procs``.
+    num_nodes : int, optional
+        How many nodes to request, default: 1.
+    conda_env : bool or str, optional
+        Whether to activate a conda environment before running the script.
+        If ``True``, the environment will be the same as the one used to
+        launch the script. If a string, the environment will be the one
+        specified by the string.
     launcher : str, optional
         How to launch the script, default: ``'python'``. But could for example
         be ``'mpiexec python'`` for a MPI program.
@@ -1329,17 +1464,21 @@ def gen_cluster_script(
         like: ``"import tensorflow as tf; tf.enable_eager_execution()``".
     shell_setup : str, optional
         Commands to be run by the shell before the python script is executed.
-        E.g. ``conda activate my_env``.
     mpi : bool, optional
-        Request MPI processes not threaded processes.
+        Request MPI processes not threaded processes
     temp_gigabytes : int, optional
         How much temporary on-disk memory.
     output_directory : str, optional
         What directory to write output to. Defaults to "$HOME/Scratch/output".
-    extra_resources : str, optional
-        Extra "#$ -l" resources, e.g. 'gpu=1'
     debugging : bool, optional
         Set the python log level to debugging.
+    kwargs : dict, optional
+        Extra keyword arguments are taken to be extra resources to request
+        in the header of the submission script, e.g. ``{'gpu': 1}`` will
+        add ``"#SBATCH --gpu=1"`` to the header if using slurm. If you supply
+        literal ``True`` or ``None`` as the value, then the key will be treated
+        as a flag. E.g. ``{'requeue': None}`` will add ``"#SBATCH --requeue"``
+        to the header.
 
     Returns
     -------
@@ -1348,8 +1487,11 @@ def gen_cluster_script(
 
     scheduler = scheduler.lower()  # be case-insensitive for scheduler
 
-    if scheduler not in {'sge', 'pbs', 'slurm'}:
-        raise ValueError("scheduler must be one of 'sge', 'pbs', or 'slurm'")
+    if scheduler not in ("sge", "pbs", "slurm"):
+        raise ValueError("scheduler must be one of 'sge', 'pbs', or 'slurm'.")
+
+    if mode not in ("array", "single"):
+        raise ValueError("mode must be one of 'array' or 'single'.")
 
     if hours is minutes is seconds is None:
         hours, minutes, seconds = 1, 0, 0
@@ -1360,107 +1502,178 @@ def gen_cluster_script(
 
     if output_directory is None:
         from os.path import expanduser
+
         home = expanduser("~")
-        output_directory = os.path.join(home, 'Scratch', 'output')
+        output_directory = os.path.join(home, "Scratch", "output")
+
+    if conda_env is True:
+        # automatically set conda environment to be the
+        # same as the one that's running this function
+        conda_env = os.environ.get("CONDA_DEFAULT_ENV", False)
+        if conda_env:
+            # but only if we are in a conda environment
+            if ("conda activate" in shell_setup) or (
+                "mamba activate" in shell_setup
+            ):
+                # and user is not already explicitly activating
+                conda_env = False
+
+    if isinstance(conda_env, str):
+        # should now be a string
+        shell_setup += f"\nconda activate {conda_env}"
+    elif conda_env is not False:
+        raise ValueError(
+            "conda_env must be either ``False``, "
+            f"``True`` or a string, not {conda_env}"
+        )
 
     crop.calc_progress()
 
-    if extra_resources is None:
-        extra_resources = ""
-    elif scheduler == 'slurm':
-        extra_resources = '#SBATCH --' + \
-            '\n#SBATCH --'.join(extra_resources.split(','))
+    if kwargs:
+        if scheduler == "slurm":
+            extra_resources = "\n".join([
+                f"#SBATCH --{k}={v}"
+                if v not in (True, None) else
+                f"#SBATCH --{k}"
+                for k, v in kwargs.items()
+            ])
+        elif scheduler == "pbs":
+            extra_resources = "\n".join([
+                f"#PBS -l {k}={v}"
+                if v not in (True, None) else
+                f"#PBS -l {k}"
+                for k, v in kwargs.items()
+            ])
+        elif scheduler == "sge":
+            extra_resources = "\n".join([
+                f"#$ -l {k}={v}"
+                if v not in (True, None) else
+                f"#$ -l {k}"
+                for k, v in kwargs.items()
+            ])
     else:
-        extra_resources = "#$ -l {}".format(extra_resources)
+        extra_resources = ""
 
     if num_threads is None:
         if mpi:
+            # assume single thread per rank
             num_threads = 1
         else:
-            num_threads = num_procs
+            if num_workers is None:
+                # assume all multithreading over all cores
+                num_threads = num_procs
+            else:
+                # assume each worker has equal number of threads
+                num_threads = max(1, num_procs // num_workers)
+
+    if num_workers is not None:
+        if num_workers * num_threads != num_procs:
+            warnings.warn(
+                f"num_workers * num_threads ({num_workers} * {num_threads}) "
+                f"!= num_procs ({num_procs}), may not be computationally "
+                "efficient."
+            )
 
     # get absolute path
     full_parent_dir = str(pathlib.Path(crop.parent_dir).expanduser().resolve())
 
     opts = {
-        'hours': hours,
-        'minutes': minutes,
-        'seconds': seconds,
-        'gigabytes': gigabytes,
-        'name': crop.name,
-        'parent_dir': full_parent_dir,
-        'num_procs': num_procs,
-        'num_threads': num_threads,
-        'num_nodes': num_nodes,
-        'run_start': 1,
-        'launcher': launcher,
-        'setup': setup,
-        'shell_setup': shell_setup,
-        'pe': 'mpi' if mpi else 'smp',
-        'temp_gigabytes': temp_gigabytes,
-        'output_directory': output_directory,
-        'working_directory': full_parent_dir,
-        'extra_resources': extra_resources,
-        'debugging': debugging,
+        "hours": hours,
+        "minutes": minutes,
+        "seconds": seconds,
+        "gigabytes": gigabytes,
+        "name": crop.name,
+        "parent_dir": full_parent_dir,
+        "num_procs": num_procs,
+        "num_threads": num_threads,
+        "num_nodes": num_nodes,
+        "num_workers": num_workers,
+        "launcher": launcher,
+        "setup": setup,
+        "shell_setup": shell_setup,
+        "pe": "mpi" if mpi else "smp",
+        "temp_gigabytes": temp_gigabytes,
+        "output_directory": output_directory,
+        "working_directory": full_parent_dir,
+        "extra_resources": extra_resources,
+        "debugging": debugging,
     }
 
-    if scheduler == 'sge':
+    if batch_ids is not None:
+        # grow specific ids
+        opts["batch_ids"] = tuple(batch_ids)
+        array_mode = "partial"
+    elif crop.num_results == 0:
+        # grow all ids
+        opts["batch_ids"] = range(1, crop.num_batches + 1)
+        array_mode = "all"
+    else:
+        # find missing ids and grow them
+        opts["batch_ids"] = crop.missing_results()
+        array_mode = "partial"
+
+    # build the script!
+
+    if scheduler == "sge":
         script = _SGE_HEADER
-    elif scheduler == 'pbs':
+        if mode == "array":
+            script += _SGE_ARRAY_HEADER
+    elif scheduler == "pbs":
         script = _PBS_HEADER
-    elif scheduler == 'slurm':
+        if mode == "array":
+            script += _PBS_ARRAY_HEADER
+    elif scheduler == "slurm":
         script = _SLURM_HEADER
+        if mode == "array":
+            script += _SLURM_ARRAY_HEADER
 
     script += _BASE
 
-    # grow specific ids
-    if batch_ids is not None:
-        if scheduler == 'sge':
-            script += _CLUSTER_SGE_GROW_PARTIAL_SCRIPT
-        elif scheduler == 'pbs':
-            script += _CLUSTER_PBS_GROW_PARTIAL_SCRIPT
-        elif scheduler == 'slurm':
-            script += _CLUSTER_SLURM_GROW_PARTIAL_SCRIPT
-        batch_ids = tuple(batch_ids)
-        opts['run_stop'] = len(batch_ids)
-        opts['batch_ids'] = batch_ids
+    if mode == "array":
+        opts["run_start"] = 1
 
-    # grow all ids
-    elif crop.num_results == 0:
-        batch_ids = tuple(range(crop.num_batches))
-        if scheduler == 'sge':
-            script += _CLUSTER_SGE_GROW_ALL_SCRIPT
-        elif scheduler == 'pbs':
-            script += _CLUSTER_PBS_GROW_ALL_SCRIPT
-        elif scheduler == 'slurm':
-            script += _CLUSTER_SLURM_GROW_ALL_SCRIPT
-        opts['run_stop'] = crop.num_batches
+        if array_mode == "all":
+            opts["run_stop"] = crop.num_batches
+            if scheduler == "sge":
+                script += _CLUSTER_SGE_GROW_ALL_SCRIPT
+            elif scheduler == "pbs":
+                script += _CLUSTER_PBS_GROW_ALL_SCRIPT
+            elif scheduler == "slurm":
+                script += _CLUSTER_SLURM_GROW_ALL_SCRIPT
 
-    # grow missing ids only
-    else:
-        if scheduler == 'sge':
-            script += _CLUSTER_SGE_GROW_PARTIAL_SCRIPT
-        elif scheduler == 'pbs':
-            script += _CLUSTER_PBS_GROW_PARTIAL_SCRIPT
-        elif scheduler == 'slurm':
-            script += _CLUSTER_SLURM_GROW_PARTIAL_SCRIPT
-        batch_ids = crop.missing_results()
-        opts['run_stop'] = len(batch_ids)
-        opts['batch_ids'] = batch_ids
+        elif array_mode == "partial":
+            opts["run_stop"] = len(opts["batch_ids"])
+            if scheduler == "sge":
+                script += _CLUSTER_SGE_GROW_PARTIAL_SCRIPT
+            elif scheduler == "pbs":
+                script += _CLUSTER_PBS_GROW_PARTIAL_SCRIPT
+            elif scheduler == "slurm":
+                script += _CLUSTER_SLURM_GROW_PARTIAL_SCRIPT
+
+    elif mode == "single":
+        if batch_ids is None:
+            # grow all missing, but compute the list dynamically
+            # this allows the job to be restarted
+            opts["batch_ids"] = "crop.missing_results()"
+        script += _BASE_CLUSTER_GROW_SINGLE
 
     script += _BASE_CLUSTER_SCRIPT_END
     script = script.format(**opts)
 
-    if (scheduler == 'pbs') and len(batch_ids) == 1:
+    if (scheduler == "pbs") and len(opts["batch_ids"]) == 1:
         # PBS can't handle arrays jobs of size 1...
-        script = (script.replace('#PBS -J 1-1\n', "")
-                        .replace("$PBS_ARRAY_INDEX", '1'))
+        script = script.replace("#PBS -J 1-1\n", "").replace(
+            "$PBS_ARRAY_INDEX", "1"
+        )
 
     return script
 
 
 def grow_cluster(
-    crop, scheduler, batch_ids=None, *,
+    crop,
+    scheduler,
+    batch_ids=None,
+    *,
     hours=None,
     minutes=None,
     seconds=None,
@@ -1468,14 +1681,16 @@ def grow_cluster(
     num_procs=1,
     num_threads=None,
     num_nodes=1,
-    launcher='python',
+    num_workers=None,
+    conda_env=True,
+    launcher="python",
     setup="#",
     shell_setup="",
     mpi=False,
     temp_gigabytes=1,
     output_directory=None,
-    extra_resources=None,
     debugging=False,
+    **kwargs,
 ):  # pragma: no cover
     """Automagically submit SGE, PBS, or slurm jobs to grow all missing
     results.
@@ -1514,8 +1729,6 @@ def grow_cluster(
         How much temporary on-disk memory.
     output_directory : str, optional
         What directory to write output to. Defaults to "$HOME/Scratch/output".
-    extra_resources : str, optional
-        Extra "#$ -l" resources, e.g. 'gpu=1'
     debugging : bool, optional
         Set the python log level to debugging.
     """
@@ -1526,7 +1739,9 @@ def grow_cluster(
     import subprocess
 
     script = gen_cluster_script(
-        crop, scheduler, batch_ids=batch_ids,
+        crop,
+        scheduler,
+        batch_ids=batch_ids,
         hours=hours,
         minutes=minutes,
         seconds=seconds,
@@ -1536,23 +1751,25 @@ def grow_cluster(
         num_procs=num_procs,
         num_threads=num_threads,
         num_nodes=num_nodes,
+        num_workers=num_workers,
+        conda_env=conda_env,
         launcher=launcher,
         setup=setup,
         shell_setup=shell_setup,
         mpi=mpi,
-        extra_resources=extra_resources,
         debugging=debugging,
+        **kwargs,
     )
 
     script_file = os.path.join(crop.location, "__qsub_script__.sh")
 
-    with open(script_file, mode='w') as f:
+    with open(script_file, mode="w") as f:
         f.write(script)
 
-    if scheduler in {'sge', 'pbs'}:
-        result = subprocess.run(['qsub', script_file], capture_output=True)
-    elif scheduler == 'slurm':
-        result = subprocess.run(['sbatch', script_file], capture_output=True)
+    if scheduler in {"sge", "pbs"}:
+        result = subprocess.run(["qsub", script_file], capture_output=True)
+    elif scheduler == "slurm":
+        result = subprocess.run(["sbatch", script_file], capture_output=True)
 
     print(result.stderr.decode())
     print(result.stdout.decode())
@@ -1561,8 +1778,7 @@ def grow_cluster(
 
 
 def gen_qsub_script(
-    crop, batch_ids=None, *, scheduler='sge',
-    **kwargs
+    crop, batch_ids=None, *, scheduler="sge", **kwargs
 ):  # pragma: no cover
     """Generate a qsub script to grow a Crop. Deprecated in favour of
     `gen_cluster_script` and will be removed in the future.
@@ -1578,15 +1794,16 @@ def gen_qsub_script(
     kwargs
         See `gen_cluster_script` for all other parameters.
     """
-    warnings.warn("'gen_qsub_script' is deprecated in favour of "
-                  "`gen_cluster_script` and will be removed in the future",
-                  FutureWarning)
+    warnings.warn(
+        "'gen_qsub_script' is deprecated in favour of "
+        "`gen_cluster_script` and will be removed in the future",
+        FutureWarning,
+    )
     return gen_cluster_script(crop, scheduler, batch_ids=batch_ids, **kwargs)
 
 
 def qsub_grow(
-    crop, batch_ids=None, *, scheduler='sge',
-    **kwargs
+    crop, batch_ids=None, *, scheduler="sge", **kwargs
 ):  # pragma: no cover
     """Automagically submit SGE or PBS jobs to grow all missing results.
     Deprecated in favour of `grow_cluster` and will be removed in the future.
@@ -1602,9 +1819,11 @@ def qsub_grow(
     kwargs
         See `grow_cluster` for all other parameters.
     """
-    warnings.warn("'qsub_grow' is deprecated in favour of "
-                  "`grow_cluster` and will be removed in the future",
-                  FutureWarning)
+    warnings.warn(
+        "'qsub_grow' is deprecated in favour of "
+        "`grow_cluster` and will be removed in the future",
+        FutureWarning,
+    )
     grow_cluster(crop, scheduler, batch_ids=batch_ids, **kwargs)
 
 
@@ -1613,14 +1832,81 @@ Crop.qsub_grow = qsub_grow
 Crop.gen_cluster_script = gen_cluster_script
 Crop.grow_cluster = grow_cluster
 
-Crop.gen_sge_script = functools.partialmethod(Crop.gen_cluster_script,
-                                              scheduler='sge')
-Crop.grow_sge = functools.partialmethod(Crop.grow_cluster, scheduler='sge')
+Crop.gen_sge_script = functools.partialmethod(
+    Crop.gen_cluster_script, scheduler="sge"
+)
+Crop.grow_sge = functools.partialmethod(Crop.grow_cluster, scheduler="sge")
 
-Crop.gen_pbs_script = functools.partialmethod(Crop.gen_cluster_script,
-                                              scheduler='pbs')
-Crop.grow_pbs = functools.partialmethod(Crop.grow_cluster, scheduler='pbs')
+Crop.gen_pbs_script = functools.partialmethod(
+    Crop.gen_cluster_script, scheduler="pbs"
+)
+Crop.grow_pbs = functools.partialmethod(Crop.grow_cluster, scheduler="pbs")
 
-Crop.gen_slurm_script = functools.partialmethod(Crop.gen_cluster_script,
-                                                scheduler='slurm')
-Crop.grow_slurm = functools.partialmethod(Crop.grow_cluster, scheduler='slurm')
+Crop.gen_slurm_script = functools.partialmethod(
+    Crop.gen_cluster_script, scheduler="slurm"
+)
+Crop.grow_slurm = functools.partialmethod(Crop.grow_cluster, scheduler="slurm")
+
+
+def clean_slurm_outputs(job, directory=".", cancel_if_finished=True):
+    """ """
+    import re
+    import pathlib
+    import subprocess
+
+    job = str(job)
+
+    files = list(pathlib.Path(directory).glob(f"slurm-{job}_*.out"))
+
+    for file in files:
+        jobid = int(re.match("slurm-\d+_(\d+).out", str(file)).groups()[0])
+
+        with open(file, "r") as f:
+            contents = f.read()
+
+        jname = f"{job}_{jobid}"
+        print(jname, end=" ")
+
+        if f"batch {jobid} completed" in contents:
+            print("xyzpy finished!", end=" ")
+
+            if cancel_if_finished:
+                # check if job queued still
+                status = subprocess.run(
+                    ["scontrol", "show", "job", jname], capture_output=True
+                ).stdout.decode()
+
+                running = "JobState=RUNNING" in status
+                if running:
+                    print("slurm cancelling,", end=" ")
+                    subprocess.run(["scancel", jname])
+                else:
+                    print("slurm finished,", end=" ")
+
+            # delete the output file
+            print("deleting output.", end=" ")
+            file.unlink()
+        else:
+            print("xyzpy running...", end=" ")
+
+        print()
+
+    return len(files)
+
+
+def manage_slurm_outputs(crop, job, wait_time=60):
+    import time
+    from IPython.display import clear_output
+
+    try:
+        while True:
+            clear_output(wait=True)
+            print(crop)
+            clean_slurm_outputs(job)
+
+            if crop.is_ready_to_reap():
+                break
+
+            time.sleep(wait_time)
+    except KeyboardInterrupt:
+        pass
