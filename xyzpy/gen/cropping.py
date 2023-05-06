@@ -1296,13 +1296,13 @@ class Reaper(object):
 _SGE_HEADER = (
     "#!/bin/bash -l\n"
     "#$ -S /bin/bash\n"
+    "#$ -N {name}\n"
     "#$ -l h_rt={hours}:{minutes}:{seconds},mem={gigabytes}G\n"
     "#$ -l tmpfs={temp_gigabytes}G\n"
-    "#$ -N {name}\n"
     "mkdir -p {output_directory}\n"
     "#$ -wd {output_directory}\n"
     "#$ -pe {pe} {num_procs}\n"
-    "{extra_resources}\n"
+    "{header_options}\n"
 )
 _SGE_ARRAY_HEADER = (
     "#$ -t {run_start}-{run_stop}\n"
@@ -1310,10 +1310,10 @@ _SGE_ARRAY_HEADER = (
 
 _PBS_HEADER = (
     "#!/bin/bash -l\n"
+    "#PBS -N {name}\n"
     "#PBS -lselect={num_nodes}:ncpus={num_procs}:mem={gigabytes}gb\n"
     "#PBS -lwalltime={hours:02}:{minutes:02}:{seconds:02}\n"
-    "#PBS -N {name}\n"
-    "{extra_resources}\n"
+    "{header_options}\n"
 )
 _PBS_ARRAY_HEADER = (
     "#PBS -J {run_start}-{run_stop}\n"
@@ -1321,12 +1321,9 @@ _PBS_ARRAY_HEADER = (
 
 _SLURM_HEADER = (
     "#!/bin/bash -l\n"
-    "#SBATCH --nodes={num_nodes}\n"
-    "#SBATCH --cpus-per-task={num_procs}\n"
-    "#SBATCH --time={hours:02}:{minutes:02}:{seconds:02}\n"
-    "#SBATCH --mem={gigabytes}G\n"
     "#SBATCH --job-name={name}\n"
-    "{extra_resources}\n"
+    "#SBATCH --time={hours:02}:{minutes:02}:{seconds:02}\n"
+    "{header_options}\n"
 )
 _SLURM_ARRAY_HEADER = (
     "#SBATCH --array={run_start}-{run_stop}\n"
@@ -1401,14 +1398,17 @@ def gen_cluster_script(
     batch_ids=None,
     *,
     mode="array",
+    num_procs=None,
+    num_threads=None,
+    num_nodes=None,
+    num_workers=None,
+    mem=None,
+    mem_per_cpu=None,
+    gigabytes=None,
+    time=None,
     hours=None,
     minutes=None,
     seconds=None,
-    gigabytes=2,
-    num_procs=1,
-    num_threads=None,
-    num_nodes=1,
-    num_workers=None,
     conda_env=True,
     launcher="python",
     setup="#",
@@ -1493,12 +1493,58 @@ def gen_cluster_script(
     if mode not in ("array", "single"):
         raise ValueError("mode must be one of 'array' or 'single'.")
 
+    # parse the time requirement
     if hours is minutes is seconds is None:
-        hours, minutes, seconds = 1, 0, 0
+        if time is not None:
+            if isinstance(time, (int, float)):
+                hours = time
+                minutes, seconds = 0, 0
+            elif isinstance(time, str):
+                hours, minutes, seconds = time.split(":")
+        else:
+            hours, minutes, seconds = 1, 0, 0
     else:
+        if time is not None:
+            raise ValueError(
+                "Cannot specify both time and hours, minutes, seconds."
+            )
         hours = 0 if hours is None else int(hours)
         minutes = 0 if minutes is None else int(minutes)
         seconds = 0 if seconds is None else int(seconds)
+
+    if scheduler == "slurm":
+        # only supply specified header options
+        # TODO: same with PBS and SGE
+
+        if num_nodes is not None:
+            kwargs["nodes"] = num_nodes
+        if num_procs is not None:
+            kwargs["cpus-per-task"] = num_procs
+
+        if gigabytes is not None:
+            if mem is not None:
+                raise ValueError("Cannot specify both gigabytes and mem.")
+            mem = gigabytes
+
+        if mem is not None:
+            if isinstance(mem, int):
+                mem = f"{mem}G"
+            kwargs["mem"] = mem
+
+        if mem_per_cpu is not None:
+            if isinstance(mem_per_cpu, int):
+                mem_per_cpu = f"{mem_per_cpu}G"
+            kwargs["mem-per-cpu"] = mem_per_cpu
+
+    else:
+        # pbs, sge
+        # parse memory to gigabytes
+        if (gigabytes is not None) and (mem is not None):
+            raise ValueError("Cannot specify both gigabytes and mem.")
+
+        if mem is not None:
+            # take gigabytes from mem
+            gigabytes = int(mem)
 
     if output_directory is None:
         from os.path import expanduser
@@ -1531,28 +1577,28 @@ def gen_cluster_script(
 
     if kwargs:
         if scheduler == "slurm":
-            extra_resources = "\n".join([
-                f"#SBATCH --{k}={v}"
-                if v not in (True, None) else
+            header_options = "\n".join([
                 f"#SBATCH --{k}"
+                if (v is None or v is True) else
+                f"#SBATCH --{k}={v}"
                 for k, v in kwargs.items()
             ])
         elif scheduler == "pbs":
-            extra_resources = "\n".join([
-                f"#PBS -l {k}={v}"
-                if v not in (True, None) else
+            header_options = "\n".join([
                 f"#PBS -l {k}"
+                if (v is None or v is True) else
+                f"#PBS -l {k}={v}"
                 for k, v in kwargs.items()
             ])
         elif scheduler == "sge":
-            extra_resources = "\n".join([
-                f"#$ -l {k}={v}"
-                if v not in (True, None) else
+            header_options = "\n".join([
                 f"#$ -l {k}"
+                if (v is None or v is True) else
+                f"#$ -l {k}={v}"
                 for k, v in kwargs.items()
             ])
     else:
-        extra_resources = ""
+        header_options = ""
 
     if num_threads is None:
         if mpi:
@@ -1595,7 +1641,7 @@ def gen_cluster_script(
         "temp_gigabytes": temp_gigabytes,
         "output_directory": output_directory,
         "working_directory": full_parent_dir,
-        "extra_resources": extra_resources,
+        "header_options": header_options,
         "debugging": debugging,
     }
 
@@ -1678,9 +1724,9 @@ def grow_cluster(
     minutes=None,
     seconds=None,
     gigabytes=2,
+    num_nodes=1,
     num_procs=1,
     num_threads=None,
-    num_nodes=1,
     num_workers=None,
     conda_env=True,
     launcher="python",
