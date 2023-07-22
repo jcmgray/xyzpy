@@ -475,14 +475,8 @@ class Crop(object):
         )
 
     def __repr__(self):
-        if not os.path.exists(self.location):
-            progress = "*reaped or unsown*"
-        else:
-            self.calc_progress()
-            progress = "{}/{}".format(self._num_results, self.num_batches)
-
-        msg = "<Crop(name='{}', progress={}, batchsize={})>"
-        return msg.format(self.name, progress, self.batchsize)
+        msg = "<Crop(name='{}', batchsize={}, num_batches={})>"
+        return msg.format(self.name, self.batchsize, self.num_batches)
 
     def parse_constants(self, constants=None):
         constants = parse_constants(constants)
@@ -1330,6 +1324,7 @@ _SLURM_ARRAY_HEADER = (
 )
 
 _BASE = (
+    "echo 'XYZPY script starting...'\n"
     "cd {working_directory}\n"
     "export OMP_NUM_THREADS={num_threads}\n"
     "export MKL_NUM_THREADS={num_threads}\n"
@@ -1341,6 +1336,7 @@ _BASE = (
     "from xyzpy.gen.cropping import grow, Crop\n"
     "if __name__ == '__main__':\n"
     "    crop = Crop(name='{name}', parent_dir='{parent_dir}')\n"
+    "    print('Growing:', repr(crop))\n"
 )
 _ARRAY_GROW_KWARGS = (
     "    grow_kwargs = dict(crop=crop, debugging={debugging}, "
@@ -1492,6 +1488,15 @@ def gen_cluster_script(
 
     if mode not in ("array", "single"):
         raise ValueError("mode must be one of 'array' or 'single'.")
+
+    # parse the number of threads
+    if num_threads is None:
+        if num_workers is None:
+            # default to 1 thread per core for no workers
+            num_threads = num_procs
+        else:
+            # default to 1 thread per worker
+            num_threads = round(num_procs / num_workers)
 
     # parse the time requirement
     if hours is minutes is seconds is None:
@@ -1932,6 +1937,9 @@ def clean_slurm_outputs(job, directory=".", cancel_if_finished=True):
             # delete the output file
             print("deleting output.", end=" ")
             file.unlink()
+        elif "error" in contents.lower():
+            # check if any captilization of 'error' in file
+            print("appears to have an error!", end=" ")
         else:
             print("xyzpy running...", end=" ")
 
