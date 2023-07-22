@@ -6,6 +6,7 @@ Functions for plotting datasets nicely.
 # TODO: docs                                                                  #
 
 import functools
+import itertools
 import collections
 
 import numpy as np
@@ -22,7 +23,7 @@ from .core import (
     intercept_call_arg,
     prettify,
 )
-from .color import xyz_colormaps
+from .color import xyz_colormaps, cimple
 
 
 # ----------------- Main lineplot interface for matplotlib ------------------ #
@@ -866,6 +867,66 @@ def auto_heatmap(x, **heatmap_opts):
 
 # --------------- Miscellenous matplotlib plotting functions ---------------- #
 
+def setup_fig_ax(
+    nrows=1,
+    ncols=1,
+    facecolor=None,
+    rasterize=False,
+    rasterize_dpi=300,
+    figsize=(5, 5),
+    ax=None,
+    **kwargs,
+):
+    import matplotlib.pyplot as plt
+
+    if ax is None:
+        fig, ax = plt.subplots(nrows, ncols, figsize=figsize, **kwargs)
+
+        fig.patch.set_alpha(0.0)
+    else:
+        fig = None
+
+    if not isinstance(ax, np.ndarray):
+        # squeezed to single axis
+        ax.set_aspect('equal')
+        ax.axis('off')
+
+    if facecolor is not None:
+        fig.patch.set_facecolor(facecolor)
+
+    if rasterize:
+        ax.set_rasterization_zorder(0)
+        if fig is not None:
+            fig.set_dpi(rasterize_dpi)
+
+    return fig, ax
+
+
+def show_and_close(fn):
+
+    @functools.wraps(fn)
+    def wrapped(*args, show_and_close=True, **kwargs):
+        import warnings
+        import matplotlib.pyplot as plt
+
+        # remove annoying regular warning about all-nan slices
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                action='ignore',
+                message='All-NaN slice',
+            )
+            fig, ax = fn(*args, **kwargs)
+
+        if fig is not None:
+            if show_and_close:
+                plt.show()
+                plt.close(fig)
+
+        return fig, ax
+
+    return wrapped
+
+
 def choose_squarest_grid(x):
     p = x ** 0.5
     if p.is_integer():
@@ -998,42 +1059,37 @@ def add_visualize_legend(
         color=(.5, .5, .5), size=6
     )
 
+def make_ax_square_after_plotted(ax):
+    xmin, xmax = ax.get_xlim()
+    xrange = abs(xmax - xmin)
+    ymin, ymax = ax.get_ylim()
+    yrange = abs(ymax - ymin)
 
-def setup_fig_ax(
-    facecolor=None,
-    rasterize=4096,
-    rasterize_dpi=300,
-    figsize=(5, 5),
-    ax=None,
-):
-    import matplotlib.pyplot as plt
+    # pad either x or y to make square
+    if xrange > yrange:
+        ypad = (xrange - yrange) / 2
+        if ymin > ymax:
+            # fipped y axis
+            ax.set_ylim(ymin + ypad, ymax - ypad)
+        else:
+            ax.set_ylim(ymin - ypad, ymax + ypad)
 
-    if ax is None:
-        fig, ax = plt.subplots(figsize=figsize)
-        fig.set_dpi(rasterize_dpi)
-        fig.patch.set_alpha(0.0)
-    else:
-        fig = None
-
-    ax.set_aspect('equal')
-    ax.axis('off')
-
-    if facecolor is not None:
-        fig.patch.set_facecolor(facecolor)
-
-    if rasterize:
-        ax.set_rasterization_zorder(0)
-
-    return fig, ax
+    elif yrange > xrange:
+        xpad = (yrange - xrange) / 2
+        if xmin > xmax:
+            # flipped x axis
+            ax.set_xlim(xmin + xpad, xmax - xpad)
+        else:
+            ax.set_xlim(xmin - xpad, xmax + xpad)
 
 
-def handle_sequence_of_arrays(vis_fn):
+def handle_sequence_of_arrays(f):
     """Simple wrapper to handle sequence of arrays as input to e.g.
     ``visualize_tensor``.
     """
 
-    @functools.wraps(vis_fn)
-    def wrapped(array, *args, **kwargs):
+    @functools.wraps(f)
+    def wrapped(array, *args, show_and_close=True, **kwargs):
         import matplotlib.pyplot as plt
 
         if (
@@ -1057,28 +1113,36 @@ def handle_sequence_of_arrays(vis_fn):
             legend = kwargs.pop('legend', False)
 
             for i in range(nplot):
-                vis_fn(
+                f(
                     array[i], *args,
                     ax=axs[0, i],
                     # only show legend on last plot
                     legend=(legend and i == nplot - 1),
+                    show_and_close=False,
                     **kwargs
                 )
+                make_ax_square_after_plotted(axs[0, i])
 
-            plt.close(fig)
+            if show_and_close:
+                plt.show()
+                plt.close(fig)
             return fig, axs
 
         else:
             # treat as single tensor
-            return vis_fn(array, *args, **kwargs)
+            return f(array, *args, show_and_close=show_and_close, **kwargs)
 
     return wrapped
 
 
 @handle_sequence_of_arrays
+@show_and_close
 def visualize_matrix(
     array,
     max_mag=None,
+    magscale='linear',
+    alpha_map=True,
+    alpha_pow=1/2,
     legend=False,
     legend_loc='auto',
     legend_size=0.15,
@@ -1090,8 +1154,6 @@ def visualize_matrix(
     figsize=(5, 5),
     ax=None,
 ):
-    import matplotlib.pyplot as plt
-
     # can only plot numpy
     array = np.asarray(array)
     if array.ndim == 1:
@@ -1110,7 +1172,13 @@ def visualize_matrix(
         ax=ax,
     )
 
-    zs, _, max_mag = to_colors(array)
+    zs, _, max_mag = to_colors(
+        array,
+        magscale=magscale,
+        max_mag=max_mag,
+        alpha_map=alpha_map,
+        alpha_pow=alpha_pow,
+    )
     ax.imshow(zs, interpolation='nearest', zorder=-1)
 
     if legend:
@@ -1125,11 +1193,11 @@ def visualize_matrix(
             legend_resolution=legend_resolution,
         )
 
-    plt.close(fig)
     return fig, ax
 
 
 @handle_sequence_of_arrays
+@show_and_close
 def visualize_tensor(
     array,
     max_projections=None,
@@ -1174,7 +1242,7 @@ def visualize_tensor(
 
     Parameters
     ----------
-    array : ndarray
+    array : numpy.ndarray
         The tensor to visualize.
     skew_factor : float, optional
         When there are more than two dimensions, a factor to scale the
@@ -1210,10 +1278,6 @@ def visualize_tensor(
         The axis containing the plot.
     """
     import matplotlib as mpl
-    import matplotlib.pyplot as plt
-
-    auto_angles = angles is None
-    auto_scales = scales is None
 
     # can only plot numpy
     array = np.asarray(array)
@@ -1229,6 +1293,11 @@ def visualize_tensor(
         figsize=figsize,
         ax=ax,
     )
+
+    auto_angles = angles is None
+    if scales == "equal":
+        scales = [1] * array.ndim
+    auto_scales = scales is None
 
     if max_projections is None:
         max_projections = array.ndim
@@ -1441,7 +1510,1004 @@ def visualize_tensor(
             legend_resolution=legend_resolution,
         )
 
-    plt.close(fig)
     return fig, ax
 
 
+@functools.lru_cache(16)
+def get_neutral_style(draw_color=(.5, .5, .5)):
+    return {
+        'axes.edgecolor': draw_color,
+        'axes.facecolor': (0, 0, 0, 0),
+        'axes.grid': True,
+        'axes.labelcolor': draw_color,
+        'axes.spines.right': False,
+        'axes.spines.top': False,
+        'figure.facecolor': (0, 0, 0, 0),
+        'grid.alpha': 0.1,
+        'grid.color': draw_color,
+        'legend.frameon': False,
+        'text.color': draw_color,
+        'xtick.color': draw_color,
+        'xtick.minor.visible': True,
+        'ytick.color': draw_color,
+        'ytick.minor.visible': True,
+    }
+
+
+def use_neutral_style(fn):
+    import matplotlib as mpl
+
+    @functools.wraps(fn)
+    def new_fn(
+        *args,
+        use_neutral_style=True,
+        draw_color=(.5, .5, .5),
+        **kwargs
+    ):
+        if not use_neutral_style:
+            return fn(*args, **kwargs)
+
+        style = get_neutral_style(draw_color=draw_color)
+
+        with mpl.rc_context(style):
+            return fn(*args, **kwargs)
+
+    return new_fn
+
+
+# colorblind palettes by Bang Wong (https://www.nature.com/articles/nmeth.1618)
+
+_COLORS_DEFAULT = (
+    '#56B4E9',  # light blue
+    '#E69F00',  # orange
+    '#009E73',  # green
+    '#D55E00',  # red
+    '#F0E442',  # yellow
+    '#CC79A7',  # purple
+    '#0072B2',  # dark blue
+)
+_COLORS_SORTED = (
+    '#0072B2',  # dark blue
+    '#56B4E9',  # light blue
+    '#009E73',  # green
+    '#F0E442',  # yellow
+    '#E69F00',  # orange
+    '#D55E00',  # red
+    '#CC79A7',  # purple
+)
+
+
+def mod_sat(c, mod):
+    """Modify the luminosity of rgb color ``c``.
+    """
+    from matplotlib.colors import hsv_to_rgb, rgb_to_hsv
+
+    h, s, v = rgb_to_hsv(c[:3])
+    return (*hsv_to_rgb((h, mod * s, v)), 1.0)
+
+
+def auto_colors(N):
+    import math
+    from matplotlib.colors import LinearSegmentedColormap
+
+    if N < len(_COLORS_DEFAULT):
+        return _COLORS_DEFAULT[:N]
+
+    cmap = LinearSegmentedColormap.from_list('wong', _COLORS_SORTED)
+
+    xs = list(map(cmap, np.linspace(0, 1.0, N)))
+
+    # modulate color saturation with sine to generate local distinguishability
+    # ... but only turn on gradually for increasing number of nodes
+    sat_mod_period = min(4, N / 7)
+    sat_mod_factor = max(0.0, 2 / 3 * math.tanh((N - 7) / 4))
+
+    return [
+        mod_sat(
+            c, 1 - sat_mod_factor * math.sin(math.pi * i / sat_mod_period)**2
+        )
+        for i, c in enumerate(xs)
+    ]
+
+
+def color_to_colormap(c, vdiff=0.5, sdiff=0.25):
+    import matplotlib as mpl
+    rgb = mpl.colors.to_rgb(c)
+    h, s, v = mpl.colors.rgb_to_hsv(rgb)
+
+    vhi = min(1.0, v + vdiff / 2)
+    vlo = max(0.0, vhi - vdiff)
+    vhi = vlo + vdiff
+
+    shi = min(1.0, s + sdiff / 2)
+    slo = max(0.0, shi - sdiff)
+    shi = slo + sdiff
+
+    hsv_i = (h, max(slo, 0.0), min(vhi, 1.0))
+    hsv_f = (h, min(shi, 1.0), max(vlo, 0.0))
+
+    c1 = mpl.colors.hsv_to_rgb(hsv_i)
+    c2 = mpl.colors.hsv_to_rgb(hsv_f)
+    cdict = {
+        'red': [(0.0, c1[0], c1[0]), (1.0, c2[0], c2[0])],
+        'green': [(0.0, c1[1], c1[1]), (1.0, c2[1], c2[1])],
+        'blue': [(0.0, c1[2], c1[2]), (1.0, c2[2], c2[2])],
+    }
+    return mpl.colors.LinearSegmentedColormap('', cdict)
+
+
+def get_default_cmap(i, vdiff=0.5, sdiff=0.25):
+    return color_to_colormap(_COLORS_DEFAULT[i], vdiff=vdiff, sdiff=sdiff)
+
+
+def to_colormap(c, **autohue_opts):
+    import numbers
+    import matplotlib as mpl
+    from matplotlib import pyplot as plt
+
+    if isinstance(c, mpl.colors.Colormap):
+        return c
+
+    if isinstance(c, numbers.Number):
+        return cimple(c, **autohue_opts)
+
+    try:
+        return plt.get_cmap(c)
+    except ValueError:
+        return color_to_colormap(c)
+
+
+def _make_bold(s):
+    return r'$\bf{' + s.replace('_', r'\_') + r'}$'
+
+
+_LINESTYLES_DEFAULT = (
+    'solid',
+    (0.0, (3, 1)),
+    (0.5, (1, 1)),
+    (1.0, (3, 1, 1, 1)),
+    (1.5, (3, 1, 3, 1, 1, 1)),
+    (2.0, (3, 1, 1, 1, 1, 1)),
+)
+
+
+_MARKERS_DEFAULT = (
+    'o',
+    'X',
+    'v',
+    's',
+    'P',
+    'D',
+    '^',
+    'h',
+    '*',
+    'p',
+    '<',
+    'd',
+    '8',
+    '>',
+    'H',
+)
+
+
+def init_mapped_dim(
+    sizes,
+    domains,
+    values,
+    labels,
+    mapped,
+    base_style,
+    ds,
+    name,
+    dim,
+    order=None,
+    dim_label=None,
+    custom_values=None,
+    default_values=None,
+):
+    if isinstance(dim, (tuple, list)) and all(x in ds.dims for x in dim):
+        # create a new nested effective dimension
+        new_dim = ", ".join(dim)
+        ds = ds.stack({new_dim: dim})
+        dim = new_dim
+
+    elif (dim is not None) and (dim not in ds.dims):
+        # attribute is just manually specified, not mapped to dimension
+        base_style[name] = dim
+        sizes[name] = 1
+        return ds, None
+
+    if (dim is not None) and (order is not None):
+        # select and order along dimension
+        ds = ds.sel({dim: list(order)})
+
+    if dim is not None:
+        ds = ds.dropna(dim, how='all')
+
+        domains[name] = ds[dim].values
+        sizes[name] = len(domains[name])
+        labels[dim] = _make_bold(dim) if dim_label is None else dim_label
+        mapped.add(dim)
+
+        if custom_values is None:
+            if default_values is not None:
+                if callable(default_values):
+                    # allow default values to depend on number of values
+                    default_values = default_values(sizes[name])
+
+                values[name] = tuple(
+                    x for x, _ in zip(default_values, range(sizes[name]))
+                )
+        else:
+            values[name] = custom_values
+
+    else:
+        sizes[name] = 1
+
+    return ds, dim
+
+
+@show_and_close
+@use_neutral_style
+def infiniplot(
+    ds,
+    x,
+    y=None,
+    *,
+    bins=None,
+    bins_density=True,
+    aggregate=None,
+    aggregate_method='median',
+    aggregate_err_range=0.5,
+    err=None,
+    err_style=None,
+    err_kws=None,
+    xlink=None,
+    color=None,
+    colors=None,
+    color_order=None,
+    color_label=None,
+    colormap_start=0.0,
+    colormap_stop=1.0,
+    hue=None,
+    hues=None,
+    hue_order=None,
+    hue_label=None,
+    palette=None,
+    autohue_start=0.6,
+    autohue_sweep=-1.0,
+    autohue_opts=None,
+    marker=None,
+    markers=None,
+    marker_order=None,
+    marker_label=None,
+    markersize=None,
+    markersizes=None,
+    markersize_order=None,
+    markersize_label=None,
+    markeredgecolor='white',
+    markeredgecolor_order=None,
+    markeredgecolor_label=None,
+    markeredgecolors=None,
+    linewidth=None,
+    linewidths=None,
+    linewidth_order=None,
+    linewidth_label=None,
+    linestyle=None,
+    linestyles=None,
+    linestyle_order=None,
+    linestyle_label=None,
+    text=None,
+    text_formatter=str,
+    text_opts=None,
+    col=None,
+    col_order=None,
+    col_label=None,
+    row=None,
+    row_order=None,
+    row_label=None,
+    alpha=1.0,
+    err_band_alpha=0.1,
+    err_bar_capsize=1,
+    xlabel=None,
+    ylabel=None,
+    xlim=None,
+    ylim=None,
+    xscale=None,
+    yscale=None,
+    xbase=10,
+    ybase=10,
+    vspans=(),
+    hspans=(),
+    span_color=(0.5, 0.5, 0.5),
+    span_alpha=0.5,
+    span_linewidth=1,
+    span_linestyle=':',
+    grid=True,
+    grid_which='major',
+    grid_alpha=0.1,
+    legend=True,
+    legend_ncol=None,
+    legend_merge=False,
+    legend_reverse=False,
+    legend_entries=None,
+    legend_opts=None,
+    title=None,
+    ax=None,
+    axs=None,
+    figsize=None,
+    height=3,
+    width=None,
+    hspace=0.12,
+    wspace=0.12,
+    sharex=True,
+    sharey=True,
+    **kwargs,
+):
+    """
+    Parameters
+    ----------
+    ds : xarray.Dataset
+        Dataset to plot.
+    x : str
+        Name of x-axis dimension.
+    y : str
+        Name of y-axis dimension.
+    aggregate : str or tuple[str], optional
+        Name of dimension(s) to aggregate before plotting.
+    aggregate_method : str, optional
+        Aggregation method used to show main line.
+    aggregate_err_range : float, optional
+        Inter-quantile range to use to show aggregation bands.
+    """
+    import matplotlib as mpl
+    from matplotlib import pyplot as plt
+    from matplotlib.ticker import (
+        AutoMinorLocator,
+        LogLocator,
+        NullFormatter,
+        ScalarFormatter,
+        StrMethodFormatter,
+    )
+    from matplotlib.lines import Line2D
+
+    autohue_opts = {} if autohue_opts is None else autohue_opts
+    autohue_opts.setdefault("val1", 1.0)
+    autohue_opts.setdefault("sat1", 0.3)
+    autohue_opts.setdefault("val2", 0.6)
+
+    if text is not None:
+        text_opts = {} if text_opts is None else text_opts
+        text_opts.setdefault('size', 6)
+        text_opts.setdefault('horizontalalignment', 'left')
+        text_opts.setdefault('verticalalignment', 'bottom')
+        text_opts.setdefault('clip_on', True)
+
+    if err_kws is None:
+        err_kws = {}
+
+    # if only one is specified allow it to be either
+    if (hue is not None) and (color is None):
+        color, color_order, colors = hue, hue_order, hues
+        hue = hue_order = hues = None
+
+    # default style options
+    base_style = {
+        'alpha': alpha,
+        'markersize': 6,
+        'color': '#0ca0eb',
+        'marker': '.',
+        'markeredgecolor': 'white',
+    }
+    # the size of each mapped dimension
+    sizes = {}
+    # the domain (i.e. input) of each mapped dimension
+    domains = {}
+    # the range (i.e. output) of each mappend dimension
+    values = {}
+    # how to label each mapped dimension
+    labels = {
+        x: x if xlabel is None else xlabel,
+        y: y if ylabel is None else ylabel,
+    }
+
+    # work out all the dim mapping information
+
+    def default_colormaps(N):
+        if N <= 0:
+            hs = _COLORS_DEFAULT[:N]
+        else:
+            hs = np.linspace(
+                autohue_start, autohue_start + autohue_sweep, N, endpoint=False
+            )
+        return [to_colormap(h, **autohue_opts) for h in hs]
+
+    # drop irrelevant variables and dimensions
+    ds = ds.drop_vars([k for k in ds if k not in (x, y)])
+    possible_dims = set()
+    if x in ds.data_vars:
+        possible_dims.update(ds[x].dims)
+    if y in ds.data_vars:
+        possible_dims.update(ds[y].dims)
+    ds = ds.drop_dims([k for k in ds.dims if k not in possible_dims])
+
+    mapped = set()
+
+    ds, hue = init_mapped_dim(
+        sizes, domains, values, labels, mapped, base_style, ds,
+        "hue", hue, hue_order, hue_label,
+        custom_values=(
+            [to_colormap(h, **autohue_opts) for h in hues]
+            if hues is not None else None
+        ),
+        default_values=default_colormaps,
+    )
+    ds, color = init_mapped_dim(
+        sizes, domains, values, labels, mapped, base_style, ds,
+        "color", color, color_order, color_label,
+        custom_values=colors,
+        default_values=lambda N: np.linspace(colormap_start, colormap_stop, N)
+    )
+
+    if (hue is not None) and (color is not None):
+        # need special label
+        labels[f"{hue}, {color}"] = f"{labels[hue]}, {labels[color]}"
+
+    if (hue is None) and (color is not None):
+        # set a global colormap or sequence
+        if colors is None:
+            cmap_or_colors = (
+                to_colormap(palette) if palette is not None else
+                auto_colors(sizes["color"])
+            )
+        else:
+            cmap_or_colors = values["color"]
+
+    ds, marker = init_mapped_dim(
+        sizes, domains, values, labels, mapped, base_style, ds,
+        "marker", marker, marker_order, marker_label,
+        custom_values=markers,
+        default_values=itertools.cycle(_MARKERS_DEFAULT)
+    )
+    ds, markersize = init_mapped_dim(
+        sizes, domains, values, labels, mapped, base_style, ds,
+        "markersize", markersize, markersize_order, markersize_label,
+        custom_values=markersizes,
+        default_values=lambda N: np.linspace(3.0, 9.0, N)
+    )
+    ds, markeredgecolor = init_mapped_dim(
+        sizes, domains, values, labels, mapped, base_style, ds,
+        "markeredgecolor", markeredgecolor,
+        markeredgecolor_order, markeredgecolor_label,
+        custom_values=markeredgecolors,
+        default_values=lambda N: auto_colors(N)
+    )
+    ds, linestyle = init_mapped_dim(
+        sizes, domains, values, labels, mapped, base_style, ds,
+        "linestyle", linestyle, linestyle_order, linestyle_label,
+        custom_values=linestyles,
+        default_values=itertools.cycle(_LINESTYLES_DEFAULT)
+    )
+    ds, linewidth = init_mapped_dim(
+        sizes, domains, values, labels, mapped, base_style, ds,
+        "linewidth", linewidth, linewidth_order, linewidth_label,
+        custom_values=linewidths,
+        default_values=lambda N: np.linspace(1.0, 3.0, N)
+    )
+    ds, col = init_mapped_dim(
+        sizes, domains, values, labels, mapped, base_style, ds,
+        "col", col, col_order, col_label,
+    )
+    ds, row = init_mapped_dim(
+        sizes, domains, values, labels, mapped, base_style, ds,
+        "row", row, row_order, row_label,
+    )
+
+    # compute which dimensions are not target or mapped dimensions
+    unmapped = sorted(set(ds.dims) - mapped - {x, y, xlink})
+
+    is_histogram = y is None
+    if is_histogram:
+        # assume we want a histogram: create y as probability density / counts
+        import xarray as xr
+
+        # bin over all unmapped dimensions
+        ds = ds.stack({'__hist_dim__': unmapped})
+
+        # work out the bin coordinates
+        if bins is None or isinstance(bins, int):
+            if bins is None:
+                nbins = min(max(3, int(ds['__hist_dim__'].size ** 0.5)), 50)
+            else:
+                nbins = bins
+            xmin, xmax = ds[x].min(), ds[x].max()
+            bins = np.linspace(xmin, xmax, nbins + 1)
+        elif not isinstance(bins, np.ndarray):
+            bins = np.asarray(bins)
+
+        bin_coords = (bins[1:] + bins[:-1]) / 2
+
+        if bins_density:
+            y = f'prob({x})'
+        else:
+            y = f'count({x})'
+
+        if ylabel is None:
+            labels[y] = y
+        else:
+            labels[y] = ylabel
+
+        ds = (
+            xr.apply_ufunc(
+                lambda x: np.histogram(x, bins=bins, density=bins_density)[0],
+                ds[x],
+                input_core_dims=[['__hist_dim__']],
+                output_core_dims=[[x]],
+                vectorize=True,
+            )
+            .to_dataset(name=y)
+            .assign_coords({x: bin_coords})
+        )
+        kwargs.setdefault("drawstyle", "steps-mid")
+
+    # get the target data array and possibly aggregate some dimensions
+    if aggregate:
+        if aggregate is True:
+            # select all unmapped dimensions
+            aggregate = unmapped
+
+        # compute data ranges to maybe show spread bars or bands
+        if aggregate_err_range == "std":
+
+            da_std_mean = ds[y].mean(aggregate)
+            da_std = ds[y].std(aggregate)
+
+            da_ql = da_std_mean - da_std
+            da_qu = da_std_mean + da_std
+
+        elif aggregate_err_range == "stderr":
+
+            da_stderr_mean = ds[y].mean(aggregate)
+            da_stderr_cnt = ds[y].notnull().sum(aggregate)
+            da_stderr = ds[y].std(aggregate) / np.sqrt(da_stderr_cnt)
+
+            da_ql = da_stderr_mean - da_stderr
+            da_qu = da_stderr_mean + da_stderr
+
+        else:
+            aggregate_err_range = min(max(0.0, aggregate_err_range), 1.0)
+            ql = 0.5 - aggregate_err_range / 2.0
+            qu = 0.5 + aggregate_err_range / 2.0
+            da_ql = ds[y].quantile(ql, aggregate)
+            da_qu = ds[y].quantile(qu, aggregate)
+
+        # default to showing spread as bands
+        if err is None:
+            err = True
+        if err_style is None:
+            err_style = "band"
+
+        # main data for central line
+        ds = getattr(ds, aggregate_method)(aggregate)
+
+    # default to bars if err not taken from aggregating
+    if err_style is None:
+        err_style = 'bars'
+
+    # all the coordinates we will iterate over
+    remaining_dims = []
+    remaining_sizes = []
+    for dim, sz in ds.sizes.items():
+        if dim not in (x, xlink):
+            remaining_dims.append(dim)
+            remaining_sizes.append(sz)
+    ranges = list(map(range, remaining_sizes))
+
+    # maybe create the figure and axes
+    if ax is not None:
+        if axs is not None:
+            raise ValueError("cannot specify both `ax` and `axs`")
+        axs = np.array([[ax]])
+
+    if axs is None:
+        if figsize is None:
+            if width is None:
+                width = height
+            if height is None:
+                height = width
+            figsize = (width * sizes["col"], height * sizes["row"])
+
+        fig, axs = plt.subplots(
+            sizes["row"], sizes["col"],
+            sharex=sharex, sharey=sharey,
+            squeeze=False,
+            gridspec_kw={'hspace': hspace, 'wspace': wspace},
+            figsize=figsize,
+        )
+        fig.patch.set_alpha(0.0)
+    else:
+        fig = None
+
+    if (fig is not None) and (title is not None):
+        fig.suptitle(title)
+
+    # iterate over and plot all data
+    handles = {}
+    split_handles = collections.defaultdict(
+        lambda: collections.defaultdict(dict)
+    )
+
+    x_is_constant = (x not in ds.data_vars)
+    if x_is_constant:
+        # is a constant coordinate
+        xdata = ds[x].values
+
+    for iloc in itertools.product(*ranges):
+        # current coordinates
+        loc = dict(zip(remaining_dims, iloc))
+
+        # get the right set of axes to plot on
+        if row is not None:
+            i_ax = loc[row]
+        else:
+            i_ax = 0
+        if col is not None:
+            j_ax = loc[col]
+        else:
+            j_ax = 0
+        ax = axs[i_ax, j_ax]
+
+        # map coordinate into relevant styles and keep track of each uniquely
+        sub_key = {}
+        specific_style = {}
+
+        # need to handle hue and color separately
+        if color is not None:
+            if hue is not None:
+                ihue = loc[hue]
+                hue_in = domains["hue"][ihue]
+                sub_key[hue] = hue_in
+                cmap_or_colors = values["hue"][ihue]
+
+            icolor = loc[color]
+            color_in = domains["color"][icolor]
+            if not callable(cmap_or_colors):
+                color_out = cmap_or_colors[icolor]
+            else:
+                color_out = cmap_or_colors(values["color"][icolor])
+
+            sub_key[color] = color_in
+            specific_style["color"] = color_out
+            if hue is None:
+                legend_dim = color
+                legend_in = color_in
+            else:
+                legend_dim = ", ".join((hue, color))
+                legend_in = ", ".join(map(str, (hue_in, color_in)))
+
+            split_handles[legend_dim][legend_in]["color"] = color_out
+        else:
+            legend_dim = None
+
+        for prop, dim in [
+            ("marker", marker),
+            ("markersize", markersize),
+            ("markeredgecolor", markeredgecolor),
+            ("linewidth", linewidth),
+            ("linestyle", linestyle),
+        ]:
+            if dim is not None:
+                idx = loc[dim]
+                prop_in = domains[prop][idx]
+                prop_out = values[prop][idx]
+                sub_key[dim] = prop_in
+                specific_style[prop] = prop_out
+
+                if dim in (color, hue):
+                    split_handles[legend_dim][legend_in][prop] = prop_out
+                else:
+                    split_handles[dim][prop_in][prop] = prop_out
+
+        # get the masked x and y data
+        ds_loc = ds.isel(loc)
+        mdata = ds_loc[y].notnull().values
+
+        if not x_is_constant:
+            # x also varying
+            xdata = ds_loc[x].values
+            # both x and y must be non-null
+            mdata &= ds_loc[x].notnull().values
+
+        xmdata = xdata[mdata]
+        if not np.any(xmdata):
+            # don't plot all null lines
+            continue
+        ymdata = ds_loc[y].values[mdata]
+
+        if (err is not None):
+
+            if (err is True) and (aggregate is not None):
+                da_ql_loc = da_ql.isel(loc)
+                da_qu_loc = da_qu.isel(loc)
+                y1 = da_ql_loc.values[mdata]
+                y2 = da_qu_loc.values[mdata]
+                yneg = ymdata - y1
+                ypos = y2 - ymdata
+            else:
+                yerr_mdata = ds_loc[err].values[mdata]
+                yneg = - yerr_mdata
+                ypos = + yerr_mdata
+                y1 = ymdata + yneg
+                y2 = ymdata + ypos
+
+            if err_style == 'bars':
+                ax.errorbar(
+                    x=xmdata, y=ymdata, yerr=[abs(yneg), abs(ypos)],
+                    fmt='none',
+                    capsize=err_bar_capsize,
+                    **{**base_style, **specific_style, **err_kws},
+                )
+            elif err_style == 'band':
+                ax.fill_between(
+                    x=xmdata, y1=y1, y2=y2,
+                    color=specific_style.get("color", base_style["color"]),
+                    alpha=err_band_alpha,
+                    **err_kws,
+                )
+
+        if is_histogram:
+            ax.fill_between(
+                x=xmdata, y1=ymdata, y2=0,
+                step={
+                    None: None,
+                    'default': None,
+                    'steps': 'pre',
+                    'steps-pre': 'pre',
+                    'steps-mid': 'mid',
+                    'steps-post': 'post',
+                }[kwargs.get("drawstyle", None)],
+                color=mpl.colors.to_rgb(
+                    specific_style.get("color", base_style["color"])
+                ),
+                alpha=err_band_alpha,
+            )
+
+        plot_opts = {**base_style, **specific_style}
+
+        # do the plotting!
+        handle, = ax.plot(
+            xmdata, ymdata,
+            label=", ".join(map(str, sub_key.values())),
+            **plot_opts, **kwargs,
+        )
+
+        # add a text label next to each point
+        if text is not None:
+            smdata = ds_loc[text].values[mdata]
+            for txx, txy, txs in zip(xmdata, ymdata, smdata):
+
+                specific_text_opts = {}
+                if 'color' not in text_opts:
+                    # default to line color
+                    specific_text_opts['color'] = plot_opts['color']
+
+                ax.text(
+                    txx, txy, text_formatter(txs),
+                    **text_opts, **specific_text_opts,
+                )
+
+        # only want one legend entry per unique style
+        key = frozenset(sub_key.items())
+        handles.setdefault(key, handle)
+
+    # perform axes level formatting
+
+    for (i, j), ax in np.ndenumerate(axs):
+
+        if fig is not None:
+            # only change this stuff if we created the figure
+            title = []
+            if col is not None:
+                title.append(f"{labels[col]}={domains['col'][j]}")
+            if row is not None:
+                title.append(f"{labels[row]}={domains['row'][i]}")
+            if title:
+                title = ", ".join(title)
+                ax.text(0.5, 1.0, title, transform=ax.transAxes,
+                        horizontalalignment='center', verticalalignment='bottom')
+
+            # only label outermost plot axes
+            if i + 1 == sizes["row"]:
+                ax.set_xlabel(labels[x])
+            if j == 0:
+                ax.set_ylabel(labels[y])
+
+            # set some nice defaults
+            ax.spines['right'].set_visible(False)
+            ax.spines['top'].set_visible(False)
+
+            if grid:
+                ax.grid(True, which=grid_which, alpha=grid_alpha)
+                ax.set_axisbelow(True)
+
+            if xlim is not None:
+                ax.set_xlim(xlim)
+            if ylim is not None:
+                ax.set_ylim(ylim)
+
+            if xscale is not None:
+                ax.set_xscale(xscale)
+            if yscale is not None:
+                ax.set_yscale(yscale)
+
+            for scale, base, axis in [
+                (xscale, xbase, ax.xaxis),
+                (yscale, ybase, ax.yaxis),
+            ]:
+                if scale == 'log':
+                    axis.set_major_locator(LogLocator(base=base, numticks=6))
+                    if base != 10:
+                        if isinstance(base, int):
+                            axis.set_major_formatter(StrMethodFormatter("{x:.0f}"))
+                        else:
+                            axis.set_major_formatter(ScalarFormatter())
+                    if base < 3:
+                        subs = [1.5]
+                    else:
+                        subs = np.arange(2, base)
+                    axis.set_minor_locator(LogLocator(base=base, subs=subs))
+                    axis.set_minor_formatter(NullFormatter())
+                elif scale == 'symlog':
+                    # TODO: choose some nice defaults
+                    pass
+                else:
+                    axis.set_minor_locator(AutoMinorLocator(5))
+
+        for hline in hspans:
+            ax.axhline(hline, color=span_color, alpha=span_alpha,
+                       linestyle=span_linestyle, linewidth=span_linewidth)
+        for vline in vspans:
+            ax.axvline(vline, color=span_color, alpha=span_alpha,
+                       linestyle=span_linestyle, linewidth=span_linewidth)
+
+    # create a legend
+    if legend:
+        try:
+            # try to extend current legend with more entries
+            legend_handles = axs[0, -1].get_legend().get_lines()
+            legend_handles.append(
+                Line2D([0], [0], markersize=0, linewidth=0, label='')
+            )
+        except AttributeError:
+            legend_handles = []
+
+        legend_opts = {} if legend_opts is None else legend_opts
+
+        if handles and legend_merge:
+            # show every unique style combination as single legend try
+
+            if legend_entries:
+                # only keep manually specified legend entries
+                remove = set()
+                for k in handles:
+                    for dim, val in k:
+                        if dim in legend_entries:
+                            if val not in legend_entries[dim]:
+                                remove.add(k)
+                for k in remove:
+                    del handles[k]
+
+            sorters = []
+            legend_title = []
+            for dim, dim_order in [
+                (hue, hue_order),
+                (color, color_order),
+                (marker, marker_order),
+                (markersize, markersize_order),
+                (markeredgecolor, markeredgecolor_order),
+                (linewidth, linewidth_order),
+                (linestyle, linestyle_order),
+            ]:
+                if dim is not None and labels[dim] not in legend_title:
+                    # check if not in legend_title, as multiple attributes can
+                    # be mapped to the same dimension
+                    legend_title.append(labels[dim])
+
+                if dim is not None and dim_order is not None:
+                    sorters.append((dim, dim_order.index))
+                else:
+                    sorters.append((dim, lambda x: x))
+
+            def legend_sort(key_handle):
+                loc = dict(key_handle[0])
+                return tuple(
+                    sorter(loc.get(dim, None)) for dim, sorter in sorters
+                )
+
+            legend_handles.extend(
+                v for _, v in
+                sorted(
+                    handles.items(), key=legend_sort, reverse=legend_reverse
+                )
+            )
+
+            if legend_ncol is None:
+                if sizes["color"] == 1 or len(handles) <= 10:
+                    legend_ncol = 1
+                else:
+                    legend_ncol = sizes["hue"]
+
+            legend_opts.setdefault('title', ', '.join(legend_title))
+            legend_opts.setdefault('ncol', legend_ncol)
+
+        elif split_handles:
+            # separate legend for each style
+
+            if legend_entries:
+                # only keep manually specified legend entries
+                for k, vals in legend_entries.items():
+                    split_handles[k] = {
+                        key: val for key, val in split_handles[k].items()
+                        if key in vals
+                    }
+
+            base_style["color"] = (0.5, 0.5, 0.5)
+            base_style["marker"] = ''
+            base_style["linestyle"] = ''
+
+            ncol = len(split_handles)
+            nrow = max(map(len, split_handles.values()))
+
+            for legend_dim, inputs in split_handles.items():
+                legend_handles.append(
+                    Line2D(
+                        [0], [0],
+                        markersize=0,
+                        linewidth=0,
+                        label=labels[legend_dim]
+                    )
+                )
+                for key, style in sorted(
+                    inputs.items(),
+                    key=lambda x: x[0],
+                    # key=lambda x: 1,
+                    reverse=legend_reverse,
+                ):
+
+                    if any("marker" in prop for prop in style):
+                        style.setdefault('marker', 'o')
+                    if any("line" in prop for prop in style):
+                        style.setdefault('linestyle', '-')
+                    if 'color' in style:
+                        style.setdefault('marker', '.')
+                        style.setdefault('linestyle', '-')
+
+                    legend_handles.append(
+                        Line2D([0], [0], **{**base_style, **style}, label=str(key))
+                    )
+
+                if legend_ncol is None:
+                    npad = nrow - len(inputs)
+                else:
+                    npad = 1
+                for _ in range(npad):
+                    legend_handles.append(
+                        Line2D([0], [0], markersize=0, linewidth=0, label='')
+                    )
+
+            if legend_ncol is None:
+                legend_opts.setdefault('ncol', ncol)
+
+        else:
+            legend_handles = None
+
+        if legend_handles is not None:
+            lax = axs[0, -1]
+            legend_opts.setdefault('loc', 'upper left')
+            legend_opts.setdefault('bbox_to_anchor', (1.0, 1.0))
+            legend_opts.setdefault('columnspacing', 1.0)
+            legend_opts.setdefault('edgecolor', 'none')
+            legend_opts.setdefault('framealpha', 0.0)
+            lax.legend(handles=legend_handles, **legend_opts)
+
+    return fig, axs

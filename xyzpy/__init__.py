@@ -63,6 +63,7 @@ from .plot.color import (
 )
 # Making static plots with matplotlib
 from .plot.plotter_matplotlib import (
+    infiniplot,
     LinePlot,
     lineplot,
     AutoLinePlot,
@@ -175,6 +176,10 @@ class XYZPY(object):
         self._obj = xarray_obj
 
     # ------------------------------- Plotting ------------------------------ #
+
+    @functools.wraps(infiniplot)
+    def infiniplot(self, *args, **kwargs):
+        return infiniplot(self._obj, *args, **kwargs)
 
     @functools.wraps(LinePlot)
     def LinePlot(self, *args, **kwargs):
