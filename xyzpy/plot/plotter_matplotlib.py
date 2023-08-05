@@ -983,7 +983,8 @@ def add_visualize_legend(
     ax,
     complexobj,
     max_mag,
-    max_projections,
+    max_projections=2,
+    auto_pad=0.03,
     legend_loc='auto',
     legend_size=0.15,
     legend_bounds=None,
@@ -997,7 +998,7 @@ def add_visualize_legend(
             if (max_projections <= 2):
                 # move compass and legends beyond the plot rectangle, which
                 # will be filled when there are only 2 plot dimensions
-                legend_loc = (1 - 0.03, 0.0 - legend_size + 0.03)
+                legend_loc = (1 - auto_pad, 0.0 - legend_size + auto_pad)
             else:
                 # occupy space within the rectangle
                 legend_loc = (1.0 - legend_size, 0.0)
@@ -1747,12 +1748,288 @@ def init_mapped_dim(
     return ds, dim
 
 
+def _do_axes_formatting(
+    axs,
+    col,
+    row,
+    labels,
+    domains,
+    sizes,
+    x,
+    y,
+    grid,
+    grid_which,
+    grid_alpha,
+    xlim,
+    ylim,
+    xscale,
+    yscale,
+    xbase,
+    ybase,
+    hspans,
+    span_color,
+    span_alpha,
+    span_linestyle,
+    span_linewidth,
+    vspans,
+):
+    # perform axes level formatting
+    from matplotlib.ticker import (
+        AutoMinorLocator,
+        LogLocator,
+        NullFormatter,
+        ScalarFormatter,
+        StrMethodFormatter,
+    )
+
+    for (i, j), ax in np.ndenumerate(axs):
+
+        # only change this stuff if we created the figure
+        title = []
+        if col is not None:
+            title.append(f"{labels[col]}={domains['col'][j]}")
+        if row is not None:
+            title.append(f"{labels[row]}={domains['row'][i]}")
+        if title:
+            title = ", ".join(title)
+            ax.text(0.5, 1.0, title, transform=ax.transAxes,
+                    horizontalalignment='center', verticalalignment='bottom')
+
+        # only label outermost plot axes
+        if i + 1 == sizes["row"]:
+            ax.set_xlabel(labels[x])
+        if j == 0:
+            ax.set_ylabel(labels[y])
+
+        # set some nice defaults
+        ax.spines['right'].set_visible(False)
+        ax.spines['top'].set_visible(False)
+
+        if grid:
+            ax.grid(True, which=grid_which, alpha=grid_alpha)
+            ax.set_axisbelow(True)
+
+        if xlim is not None:
+            ax.set_xlim(xlim)
+        if ylim is not None:
+            ax.set_ylim(ylim)
+
+        if xscale is not None:
+            ax.set_xscale(xscale)
+        if yscale is not None:
+            ax.set_yscale(yscale)
+
+        for scale, base, axis in [
+            (xscale, xbase, ax.xaxis),
+            (yscale, ybase, ax.yaxis),
+        ]:
+            if scale == 'log':
+                axis.set_major_locator(LogLocator(base=base, numticks=6))
+                if base != 10:
+                    if isinstance(base, int):
+                        axis.set_major_formatter(StrMethodFormatter("{x:.0f}"))
+                    else:
+                        axis.set_major_formatter(ScalarFormatter())
+                if base < 3:
+                    subs = [1.5]
+                else:
+                    subs = np.arange(2, base)
+                axis.set_minor_locator(LogLocator(base=base, subs=subs))
+                axis.set_minor_formatter(NullFormatter())
+            elif scale == 'symlog':
+                # TODO: choose some nice defaults
+                pass
+            else:
+                axis.set_minor_locator(AutoMinorLocator(5))
+
+    for hline in hspans:
+        ax.axhline(hline, color=span_color, alpha=span_alpha,
+                    linestyle=span_linestyle, linewidth=span_linewidth)
+    for vline in vspans:
+        ax.axvline(vline, color=span_color, alpha=span_alpha,
+                    linestyle=span_linestyle, linewidth=span_linewidth)
+
+
+def _create_legend(
+    axs,
+    legend_opts,
+    handles,
+    legend_merge,
+    legend_entries,
+    legend_labels,
+    hue,
+    hue_order,
+    color,
+    color_order,
+    marker,
+    marker_order,
+    markersize,
+    markersize_order,
+    markeredgecolor,
+    markeredgecolor_order,
+    linewidth,
+    linewidth_order,
+    linestyle,
+    linestyle_order,
+    labels,
+    legend_reverse,
+    legend_ncol,
+    sizes,
+    split_handles,
+    base_style,
+):
+    from matplotlib.lines import Line2D
+
+    try:
+        # try to extend current legend with more entries
+        legend_handles = axs[0, -1].get_legend().get_lines()
+        legend_handles.append(
+            Line2D([0], [0], markersize=0, linewidth=0, label='')
+        )
+    except AttributeError:
+        legend_handles = []
+
+    legend_opts = {} if legend_opts is None else legend_opts
+
+    if handles and legend_merge:
+        # show every unique style combination as single legend try
+
+        if legend_entries:
+            # only keep manually specified legend entries
+            remove = set()
+            for k in handles:
+                for dim, val in k:
+                    if dim in legend_entries:
+                        if val not in legend_entries[dim]:
+                            remove.add(k)
+            for k in remove:
+                del handles[k]
+
+        sorters = []
+        legend_title = []
+        for dim, dim_order in [
+            (hue, hue_order),
+            (color, color_order),
+            (marker, marker_order),
+            (markersize, markersize_order),
+            (markeredgecolor, markeredgecolor_order),
+            (linewidth, linewidth_order),
+            (linestyle, linestyle_order),
+        ]:
+            if dim is not None and labels[dim] not in legend_title:
+                # check if not in legend_title, as multiple attributes can
+                # be mapped to the same dimension
+                legend_title.append(labels[dim])
+
+            if dim is not None and dim_order is not None:
+                sorters.append((dim, dim_order.index))
+            else:
+                sorters.append((dim, lambda x: x))
+
+        def legend_sort(key_handle):
+            loc = dict(key_handle[0])
+            return tuple(
+                sorter(loc.get(dim, None)) for dim, sorter in sorters
+            )
+
+        legend_handles.extend(
+            v for _, v in
+            sorted(
+                handles.items(), key=legend_sort, reverse=legend_reverse
+            )
+        )
+
+        if legend_ncol is None:
+            if sizes["color"] == 1 or len(handles) <= 10:
+                legend_ncol = 1
+            else:
+                legend_ncol = sizes["hue"]
+
+        legend_opts.setdefault('title', ', '.join(legend_title))
+        legend_opts.setdefault('ncol', legend_ncol)
+
+    elif split_handles:
+        # separate legend for each style
+
+        if legend_entries:
+            # only keep manually specified legend entries
+            for k, vals in legend_entries.items():
+                split_handles[k] = {
+                    key: val for key, val in split_handles[k].items()
+                    if key in vals
+                }
+
+        base_style["color"] = (0.5, 0.5, 0.5)
+        base_style["marker"] = ''
+        base_style["linestyle"] = ''
+
+        ncol = len(split_handles)
+        nrow = max(map(len, split_handles.values()))
+
+        for legend_dim, inputs in split_handles.items():
+            legend_handles.append(
+                Line2D(
+                    [0], [0],
+                    markersize=0,
+                    linewidth=0,
+                    label=labels[legend_dim]
+                )
+            )
+            for key, style in sorted(
+                inputs.items(),
+                key=lambda x: x[0],
+                # key=lambda x: 1,
+                reverse=legend_reverse,
+            ):
+
+                if any("marker" in prop for prop in style):
+                    style.setdefault('marker', 'o')
+                if any("line" in prop for prop in style):
+                    style.setdefault('linestyle', '-')
+                if 'color' in style:
+                    style.setdefault('marker', '.')
+                    style.setdefault('linestyle', '-')
+
+                legend_handles.append(
+                    Line2D([0], [0], **{**base_style, **style}, label=str(key))
+                )
+
+            if legend_ncol is None:
+                npad = nrow - len(inputs)
+            else:
+                npad = 1
+            for _ in range(npad):
+                legend_handles.append(
+                    Line2D([0], [0], markersize=0, linewidth=0, label='')
+                )
+
+        if legend_ncol is None:
+            legend_opts.setdefault('ncol', ncol)
+
+    else:
+        legend_handles = None
+
+    if legend_labels is not None:
+        for lh, label in zip(legend_handles, legend_labels):
+            lh.set_label(label)
+
+    if legend_handles is not None:
+        lax = axs[0, -1]
+        legend_opts.setdefault('loc', 'upper left')
+        legend_opts.setdefault('bbox_to_anchor', (1.0, 1.0))
+        legend_opts.setdefault('columnspacing', 1.0)
+        legend_opts.setdefault('edgecolor', 'none')
+        legend_opts.setdefault('framealpha', 0.0)
+        lax.legend(handles=legend_handles, **legend_opts)
+
+
 @show_and_close
 @use_neutral_style
 def infiniplot(
     ds,
     x,
     y=None,
+    z=None,
     *,
     bins=None,
     bins_density=True,
@@ -1807,6 +2084,7 @@ def infiniplot(
     row_order=None,
     row_label=None,
     alpha=1.0,
+    join_across_missing=False,
     err_band_alpha=0.1,
     err_bar_capsize=1,
     xlabel=None,
@@ -1831,10 +2109,12 @@ def infiniplot(
     legend_merge=False,
     legend_reverse=False,
     legend_entries=None,
+    legend_labels=None,
     legend_opts=None,
     title=None,
     ax=None,
     axs=None,
+    format_axs=None,
     figsize=None,
     height=3,
     width=None,
@@ -1862,14 +2142,6 @@ def infiniplot(
     """
     import matplotlib as mpl
     from matplotlib import pyplot as plt
-    from matplotlib.ticker import (
-        AutoMinorLocator,
-        LogLocator,
-        NullFormatter,
-        ScalarFormatter,
-        StrMethodFormatter,
-    )
-    from matplotlib.lines import Line2D
 
     autohue_opts = {} if autohue_opts is None else autohue_opts
     autohue_opts.setdefault("val1", 1.0)
@@ -1923,12 +2195,14 @@ def infiniplot(
         return [to_colormap(h, **autohue_opts) for h in hs]
 
     # drop irrelevant variables and dimensions
-    ds = ds.drop_vars([k for k in ds if k not in (x, y)])
+    ds = ds.drop_vars([k for k in ds if k not in (x, y, z)])
     possible_dims = set()
     if x in ds.data_vars:
         possible_dims.update(ds[x].dims)
     if y in ds.data_vars:
         possible_dims.update(ds[y].dims)
+    if z in ds.data_vars:
+        possible_dims.update(ds[z].dims)
     ds = ds.drop_dims([k for k in ds.dims if k not in possible_dims])
 
     mapped = set()
@@ -2004,7 +2278,7 @@ def infiniplot(
     )
 
     # compute which dimensions are not target or mapped dimensions
-    unmapped = sorted(set(ds.dims) - mapped - {x, y, xlink})
+    unmapped = sorted(set(ds.dims) - mapped - {x, y, z, xlink})
 
     is_histogram = y is None
     if is_histogram:
@@ -2098,7 +2372,7 @@ def infiniplot(
     remaining_dims = []
     remaining_sizes = []
     for dim, sz in ds.sizes.items():
-        if dim not in (x, xlink):
+        if dim not in (x, y, z, xlink):
             remaining_dims.append(dim)
             remaining_sizes.append(sz)
     ranges = list(map(range, remaining_sizes))
@@ -2130,6 +2404,40 @@ def infiniplot(
 
     if (fig is not None) and (title is not None):
         fig.suptitle(title)
+
+    if z is not None:
+        return _plot_pcolormesh(
+            ds,
+            x,
+            y,
+            z,
+            ranges,
+            remaining_dims,
+            row,
+            col,
+            axs,
+            palette,
+            fig,
+            format_axs,
+            labels,
+            domains,
+            sizes,
+            grid,
+            grid_which,
+            grid_alpha,
+            xlim,
+            ylim,
+            xscale,
+            yscale,
+            xbase,
+            ybase,
+            hspans,
+            span_color,
+            span_alpha,
+            span_linestyle,
+            span_linewidth,
+            vspans,
+        )
 
     # iterate over and plot all data
     handles = {}
@@ -2210,31 +2518,38 @@ def infiniplot(
 
         # get the masked x and y data
         ds_loc = ds.isel(loc)
-        mdata = ds_loc[y].notnull().values
+        mask = ds_loc[y].notnull().values
 
         if not x_is_constant:
             # x also varying
             xdata = ds_loc[x].values
             # both x and y must be non-null
-            mdata &= ds_loc[x].notnull().values
+            mask &= ds_loc[x].notnull().values
 
-        xmdata = xdata[mdata]
-        if not np.any(xmdata):
+        if not np.any(mask):
             # don't plot all null lines
             continue
-        ymdata = ds_loc[y].values[mdata]
+
+        if not join_across_missing:
+            # reset mask
+            data_mask = ()
+        else:
+            data_mask = mask
+
+        xmdata = xdata[data_mask]
+        ymdata = ds_loc[y].values[data_mask]
 
         if (err is not None):
 
             if (err is True) and (aggregate is not None):
                 da_ql_loc = da_ql.isel(loc)
                 da_qu_loc = da_qu.isel(loc)
-                y1 = da_ql_loc.values[mdata]
-                y2 = da_qu_loc.values[mdata]
+                y1 = da_ql_loc.values[data_mask]
+                y2 = da_qu_loc.values[data_mask]
                 yneg = ymdata - y1
                 ypos = y2 - ymdata
             else:
-                yerr_mdata = ds_loc[err].values[mdata]
+                yerr_mdata = ds_loc[err].values[data_mask]
                 yneg = - yerr_mdata
                 ypos = + yerr_mdata
                 y1 = ymdata + yneg
@@ -2242,7 +2557,7 @@ def infiniplot(
 
             if err_style == 'bars':
                 ax.errorbar(
-                    x=xmdata, y=ymdata, yerr=[abs(yneg), abs(ypos)],
+                    x=xmdata, y=ymdata, yerr=[np.abs(yneg), np.abs(ypos)],
                     fmt='none',
                     capsize=err_bar_capsize,
                     **{**base_style, **specific_style, **err_kws},
@@ -2283,8 +2598,9 @@ def infiniplot(
 
         # add a text label next to each point
         if text is not None:
-            smdata = ds_loc[text].values[mdata]
-            for txx, txy, txs in zip(xmdata, ymdata, smdata):
+            # need raw mask for text
+            smdata = ds_loc[text].values[mask]
+            for txx, txy, txs in zip(xdata[mask], ds_loc[y].values[mask], smdata):
 
                 specific_text_opts = {}
                 if 'color' not in text_opts:
@@ -2300,214 +2616,202 @@ def infiniplot(
         key = frozenset(sub_key.items())
         handles.setdefault(key, handle)
 
-    # perform axes level formatting
-
-    for (i, j), ax in np.ndenumerate(axs):
-
-        if fig is not None:
-            # only change this stuff if we created the figure
-            title = []
-            if col is not None:
-                title.append(f"{labels[col]}={domains['col'][j]}")
-            if row is not None:
-                title.append(f"{labels[row]}={domains['row'][i]}")
-            if title:
-                title = ", ".join(title)
-                ax.text(0.5, 1.0, title, transform=ax.transAxes,
-                        horizontalalignment='center', verticalalignment='bottom')
-
-            # only label outermost plot axes
-            if i + 1 == sizes["row"]:
-                ax.set_xlabel(labels[x])
-            if j == 0:
-                ax.set_ylabel(labels[y])
-
-            # set some nice defaults
-            ax.spines['right'].set_visible(False)
-            ax.spines['top'].set_visible(False)
-
-            if grid:
-                ax.grid(True, which=grid_which, alpha=grid_alpha)
-                ax.set_axisbelow(True)
-
-            if xlim is not None:
-                ax.set_xlim(xlim)
-            if ylim is not None:
-                ax.set_ylim(ylim)
-
-            if xscale is not None:
-                ax.set_xscale(xscale)
-            if yscale is not None:
-                ax.set_yscale(yscale)
-
-            for scale, base, axis in [
-                (xscale, xbase, ax.xaxis),
-                (yscale, ybase, ax.yaxis),
-            ]:
-                if scale == 'log':
-                    axis.set_major_locator(LogLocator(base=base, numticks=6))
-                    if base != 10:
-                        if isinstance(base, int):
-                            axis.set_major_formatter(StrMethodFormatter("{x:.0f}"))
-                        else:
-                            axis.set_major_formatter(ScalarFormatter())
-                    if base < 3:
-                        subs = [1.5]
-                    else:
-                        subs = np.arange(2, base)
-                    axis.set_minor_locator(LogLocator(base=base, subs=subs))
-                    axis.set_minor_formatter(NullFormatter())
-                elif scale == 'symlog':
-                    # TODO: choose some nice defaults
-                    pass
-                else:
-                    axis.set_minor_locator(AutoMinorLocator(5))
-
-        for hline in hspans:
-            ax.axhline(hline, color=span_color, alpha=span_alpha,
-                       linestyle=span_linestyle, linewidth=span_linewidth)
-        for vline in vspans:
-            ax.axvline(vline, color=span_color, alpha=span_alpha,
-                       linestyle=span_linestyle, linewidth=span_linewidth)
+    if (fig is not None) or format_axs is True:
+        _do_axes_formatting(
+            axs,
+            col,
+            row,
+            labels,
+            domains,
+            sizes,
+            x,
+            y,
+            grid,
+            grid_which,
+            grid_alpha,
+            xlim,
+            ylim,
+            xscale,
+            yscale,
+            xbase,
+            ybase,
+            hspans,
+            span_color,
+            span_alpha,
+            span_linestyle,
+            span_linewidth,
+            vspans,
+        )
 
     # create a legend
     if legend:
-        try:
-            # try to extend current legend with more entries
-            legend_handles = axs[0, -1].get_legend().get_lines()
-            legend_handles.append(
-                Line2D([0], [0], markersize=0, linewidth=0, label='')
-            )
-        except AttributeError:
-            legend_handles = []
+        _create_legend(
+            axs,
+            legend_opts,
+            handles,
+            legend_merge,
+            legend_entries,
+            legend_labels,
+            hue,
+            hue_order,
+            color,
+            color_order,
+            marker,
+            marker_order,
+            markersize,
+            markersize_order,
+            markeredgecolor,
+            markeredgecolor_order,
+            linewidth,
+            linewidth_order,
+            linestyle,
+            linestyle_order,
+            labels,
+            legend_reverse,
+            legend_ncol,
+            sizes,
+            split_handles,
+            base_style,
+        )
 
-        legend_opts = {} if legend_opts is None else legend_opts
+    return fig, axs
 
-        if handles and legend_merge:
-            # show every unique style combination as single legend try
 
-            if legend_entries:
-                # only keep manually specified legend entries
-                remove = set()
-                for k in handles:
-                    for dim, val in k:
-                        if dim in legend_entries:
-                            if val not in legend_entries[dim]:
-                                remove.add(k)
-                for k in remove:
-                    del handles[k]
+def _plot_pcolormesh(
+    ds,
+    x,
+    y,
+    z,
+    ranges,
+    remaining_dims,
+    row,
+    col,
+    axs,
+    palette,
+    fig,
+    format_axs,
+    labels,
+    domains,
+    sizes,
+    grid,
+    grid_which,
+    grid_alpha,
+    xlim,
+    ylim,
+    xscale,
+    yscale,
+    xbase,
+    ybase,
+    hspans,
+    span_color,
+    span_alpha,
+    span_linestyle,
+    span_linewidth,
+    vspans,
+):
+    import matplotlib as mpl
 
-            sorters = []
-            legend_title = []
-            for dim, dim_order in [
-                (hue, hue_order),
-                (color, color_order),
-                (marker, marker_order),
-                (markersize, markersize_order),
-                (markeredgecolor, markeredgecolor_order),
-                (linewidth, linewidth_order),
-                (linestyle, linestyle_order),
-            ]:
-                if dim is not None and labels[dim] not in legend_title:
-                    # check if not in legend_title, as multiple attributes can
-                    # be mapped to the same dimension
-                    legend_title.append(labels[dim])
+    xdata = ds[x].values
+    ydata = ds[y].values
 
-                if dim is not None and dim_order is not None:
-                    sorters.append((dim, dim_order.index))
-                else:
-                    sorters.append((dim, lambda x: x))
+    zdata_all = ds[z].values
+    zdata_all = zdata_all[np.isfinite(zdata_all)]
+    zmax = np.max(zdata_all)
+    zmin = np.min(zdata_all)
+    max_mag = max(abs(zmax), abs(zmin))
 
-            def legend_sort(key_handle):
-                loc = dict(key_handle[0])
-                return tuple(
-                    sorter(loc.get(dim, None)) for dim, sorter in sorters
-                )
+    norm = mpl.colors.Normalize(vmin=zmin, vmax=zmax)
 
-            legend_handles.extend(
-                v for _, v in
-                sorted(
-                    handles.items(), key=legend_sort, reverse=legend_reverse
-                )
-            )
+    for iloc in itertools.product(*ranges):
+        # current coordinates
+        loc = dict(zip(remaining_dims, iloc))
 
-            if legend_ncol is None:
-                if sizes["color"] == 1 or len(handles) <= 10:
-                    legend_ncol = 1
-                else:
-                    legend_ncol = sizes["hue"]
-
-            legend_opts.setdefault('title', ', '.join(legend_title))
-            legend_opts.setdefault('ncol', legend_ncol)
-
-        elif split_handles:
-            # separate legend for each style
-
-            if legend_entries:
-                # only keep manually specified legend entries
-                for k, vals in legend_entries.items():
-                    split_handles[k] = {
-                        key: val for key, val in split_handles[k].items()
-                        if key in vals
-                    }
-
-            base_style["color"] = (0.5, 0.5, 0.5)
-            base_style["marker"] = ''
-            base_style["linestyle"] = ''
-
-            ncol = len(split_handles)
-            nrow = max(map(len, split_handles.values()))
-
-            for legend_dim, inputs in split_handles.items():
-                legend_handles.append(
-                    Line2D(
-                        [0], [0],
-                        markersize=0,
-                        linewidth=0,
-                        label=labels[legend_dim]
-                    )
-                )
-                for key, style in sorted(
-                    inputs.items(),
-                    key=lambda x: x[0],
-                    # key=lambda x: 1,
-                    reverse=legend_reverse,
-                ):
-
-                    if any("marker" in prop for prop in style):
-                        style.setdefault('marker', 'o')
-                    if any("line" in prop for prop in style):
-                        style.setdefault('linestyle', '-')
-                    if 'color' in style:
-                        style.setdefault('marker', '.')
-                        style.setdefault('linestyle', '-')
-
-                    legend_handles.append(
-                        Line2D([0], [0], **{**base_style, **style}, label=str(key))
-                    )
-
-                if legend_ncol is None:
-                    npad = nrow - len(inputs)
-                else:
-                    npad = 1
-                for _ in range(npad):
-                    legend_handles.append(
-                        Line2D([0], [0], markersize=0, linewidth=0, label='')
-                    )
-
-            if legend_ncol is None:
-                legend_opts.setdefault('ncol', ncol)
-
+        # get the right set of axes to plot on
+        if row is not None:
+            i_ax = loc[row]
         else:
-            legend_handles = None
+            i_ax = 0
+        if col is not None:
+            j_ax = loc[col]
+        else:
+            j_ax = 0
+        ax = axs[i_ax, j_ax]
 
-        if legend_handles is not None:
-            lax = axs[0, -1]
-            legend_opts.setdefault('loc', 'upper left')
-            legend_opts.setdefault('bbox_to_anchor', (1.0, 1.0))
-            legend_opts.setdefault('columnspacing', 1.0)
-            legend_opts.setdefault('edgecolor', 'none')
-            legend_opts.setdefault('framealpha', 0.0)
-            lax.legend(handles=legend_handles, **legend_opts)
+        zdata = ds[z].isel(loc).transpose(y, x).values
+
+        # get the masked x and y data
+        if palette is None:
+            C = zdata
+            mask = np.isfinite(C)
+            zdata = np.empty(C.shape + (4,))
+            zdata[mask] = to_colors(C[mask], alpha_pow=0.0, max_mag=max_mag)[0]
+            zdata[~mask] = (.5, .5, .5, .5)
+        else:
+            zdata = ds[z].isel(loc).transpose(y, x).values
+        # mask = daz.notnull().values
+
+        ax.pcolormesh(
+            xdata,
+            ydata,
+            zdata,
+            shading="nearest",
+            # edgecolors="face",
+            rasterized=True,
+            cmap=palette,
+        )
+
+    if (fig is not None) or format_axs is True:
+        _do_axes_formatting(
+            axs,
+            col,
+            row,
+            labels,
+            domains,
+            sizes,
+            x,
+            y,
+            grid,
+            grid_which,
+            grid_alpha,
+            xlim,
+            ylim,
+            xscale,
+            yscale,
+            xbase,
+            ybase,
+            hspans,
+            span_color,
+            span_alpha,
+            span_linestyle,
+            span_linewidth,
+            vspans,
+        )
+
+    if True:
+        if (palette is None):
+            add_visualize_legend(
+                ax=axs[-1, -1],
+                complexobj=False,
+                max_mag=1,
+                legend_loc=(1.1, 0.8),
+                legend_size=0.2,
+                # complexobj=np.iscomplexobj(array),
+                # max_mag=max_mag,
+                # max_projections=max_projections,
+                # legend_loc=legend_loc,
+                # legend_size=legend_size,
+                # legend_bounds=legend_bounds,
+                # legend_resolution=legend_resolution,
+            )
+        else:
+            norm = mpl.colors.Normalize(0, 1)
+            cax = axs[0, -1].inset_axes((1.1, 0.1, 0.05, 0.8))
+
+            fig.colorbar(
+                mpl.cm.ScalarMappable(norm=norm, cmap=palette),
+                cax=cax,
+                orientation='vertical',
+                label=_make_bold(z)
+            )
 
     return fig, axs
