@@ -1857,6 +1857,7 @@ def _create_legend(
     legend_merge,
     legend_entries,
     legend_labels,
+    legend_extras,
     hue,
     hue_order,
     color,
@@ -2006,10 +2007,16 @@ def _create_legend(
         if legend_ncol is None:
             legend_opts.setdefault('ncol', ncol)
 
+        if legend_extras is not None:
+            for extra in legend_extras:
+                if not isinstance(extra, Line2D):
+                    extra = Line2D([0], [0], **extra)
+                legend_handles.append(extra)
     else:
         legend_handles = None
 
     if legend_labels is not None:
+
         for lh, label in zip(legend_handles, legend_labels):
             lh.set_label(label)
 
@@ -2110,6 +2117,7 @@ def infiniplot(
     legend_reverse=False,
     legend_entries=None,
     legend_labels=None,
+    legend_extras=None,
     legend_opts=None,
     title=None,
     ax=None,
@@ -2652,6 +2660,7 @@ def infiniplot(
             legend_merge,
             legend_entries,
             legend_labels,
+            legend_extras,
             hue,
             hue_order,
             color,
