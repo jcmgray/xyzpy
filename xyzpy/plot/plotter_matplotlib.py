@@ -2203,7 +2203,7 @@ def infiniplot(
         return [to_colormap(h, **autohue_opts) for h in hs]
 
     # drop irrelevant variables and dimensions
-    ds = ds.drop_vars([k for k in ds if k not in (x, y, z)])
+    ds = ds.drop_vars([k for k in ds if k not in (x, y, z, err)])
     possible_dims = set()
     if x in ds.data_vars:
         possible_dims.update(ds[x].dims)
