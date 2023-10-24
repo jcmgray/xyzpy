@@ -8,6 +8,7 @@ Functions for plotting datasets nicely.
 import functools
 import itertools
 import collections
+import contextlib
 
 import numpy as np
 
@@ -1536,6 +1537,8 @@ def get_neutral_style(draw_color=(.5, .5, .5)):
 
 
 def use_neutral_style(fn):
+    """Decorator to use xyzpy neutral style for a function.
+    """
     import matplotlib as mpl
 
     @functools.wraps(fn)
@@ -1554,6 +1557,19 @@ def use_neutral_style(fn):
             return fn(*args, **kwargs)
 
     return new_fn
+
+
+@contextlib.contextmanager
+def neutral_style(draw_color=(.5, .5, .5), **kwargs):
+    import matplotlib as mpl
+
+    style = {
+        **get_neutral_style(draw_color=draw_color),
+        **kwargs,
+    }
+
+    with mpl.rc_context(style):
+        yield
 
 
 # colorblind palettes by Bang Wong (https://www.nature.com/articles/nmeth.1618)

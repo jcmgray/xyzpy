@@ -119,7 +119,7 @@ def cimple(
     sat1=0.4,
     sat2=1.0,
     val1=0.95,
-    val2=0.25,
+    val2=0.35,
     hue_shift=0.0,
     name='cimple',
     auto_adjust_sat=0.2,

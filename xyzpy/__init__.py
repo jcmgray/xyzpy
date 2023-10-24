@@ -84,6 +84,8 @@ from .plot.plotter_matplotlib import (
     auto_heatmap,
     visualize_matrix,
     visualize_tensor,
+    get_neutral_style,
+    neutral_style,
 )
 # Making interactive plots with bokeh
 from .plot.plotter_bokeh import (
@@ -159,6 +161,8 @@ __all__ = [
     "auto_iheatmap",
     "visualize_matrix",
     "visualize_tensor",
+    "get_neutral_style",
+    "neutral_style",
     "unzip",
     "progbar",
     "getsizeof",
