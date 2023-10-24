@@ -15,6 +15,8 @@ from .utils import (
     RunningCovariance,
     RunningCovarianceMatrix,
     estimate_from_repeats,
+    report_memory,
+    report_memory_gpu,
 )
 from .gen.combo_runner import (
     combo_runner,
@@ -168,6 +170,8 @@ __all__ = [
     "RunningCovariance",
     "RunningCovarianceMatrix",
     "estimate_from_repeats",
+    "report_memory",
+    "report_memory_gpu",
 ]
 
 

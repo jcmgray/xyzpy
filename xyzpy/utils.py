@@ -20,8 +20,7 @@ def isiterable(obj):
 
 
 def prod(it):
-    """Product of an iterable.
-    """
+    """Product of an iterable."""
     return functools.reduce(operator.mul, it)
 
 
@@ -48,6 +47,7 @@ def unzip(its, zip_level=1):
     ((True, False, True), (True, False, True))
 
     """
+
     def _unzipper(its, zip_level):
         if zip_level > 1:
             return (zip(*_unzipper(it, zip_level - 1)) for it in its)
@@ -83,7 +83,7 @@ def _get_fn_name(fn):
         return fn.__name__
     # try dask delayed function with key
     elif hasattr(fn, "key"):
-        return fn.key.partition('-')[0]
+        return fn.key.partition("-")[0]
     # try functools.partial function syntax
     elif hasattr(fn, "func"):
         return fn.func.__name__
@@ -103,7 +103,7 @@ def progbar(it=None, nb=False, **kwargs):
         **kwargs: dict-like
             additional options to send to tqdm
     """
-    defaults = {'ascii': True, 'smoothing': 0.0}
+    defaults = {"ascii": True, "smoothing": 0.0}
     # Overide defaults with custom kwargs
     settings = {**defaults, **kwargs}
     if nb:  # pragma: no cover
@@ -126,7 +126,8 @@ def getsizeof(obj):
     excluded = type, ModuleType, FunctionType
     if isinstance(obj, excluded):
         raise TypeError(
-            'getsize() does not take argument of type: {}'.format(type(obj)))
+            "getsize() does not take argument of type: {}".format(type(obj))
+        )
 
     seen_ids = set()
     size = 0
@@ -167,7 +168,7 @@ class Timer:
         self.t = self.time = self.interval = self.end - self.start
 
 
-def _auto_min_time(timer, min_t=0.2, repeats=5, get='min'):
+def _auto_min_time(timer, min_t=0.2, repeats=5, get="min"):
     tot_t = 0
     number = 1
 
@@ -179,14 +180,15 @@ def _auto_min_time(timer, min_t=0.2, repeats=5, get='min'):
 
     results = [tot_t] + timer.repeat(repeats - 1, number)
 
-    if get == 'mean':
+    if get == "mean":
         return sum(results) / (number * len(results))
 
     return min(t / number for t in results)
 
 
-def benchmark(fn, setup=None, n=None, min_t=0.1,
-              repeats=3, get='min', starmap=False):
+def benchmark(
+    fn, setup=None, n=None, min_t=0.1, repeats=3, get="min", starmap=False
+):
     """Benchmark the time it takes to run ``fn``.
 
     Parameters
@@ -241,8 +243,9 @@ def benchmark(fn, setup=None, n=None, min_t=0.1,
         setup_str = "X=setup({})".format(n)
         stmnt_str = "fn(*X)" if starmap else "fn(X)"
 
-    timer = Timer(setup=setup_str, stmt=stmnt_str,
-                  globals={'setup': setup, 'fn': fn})
+    timer = Timer(
+        setup=setup_str, stmt=stmnt_str, globals={"setup": setup, "fn": fn}
+    )
 
     return _auto_min_time(timer, min_t=min_t, repeats=repeats, get=get)
 
@@ -276,8 +279,14 @@ class Benchmarker:
         Shortcut to the harvester's full dataset.
     """
 
-    def __init__(self, kernels, setup=None, names=None,
-                 benchmark_opts=None, data_name=None):
+    def __init__(
+        self,
+        kernels,
+        setup=None,
+        names=None,
+        benchmark_opts=None,
+        data_name=None,
+    ):
         import xyzpy as xyz
 
         self.kernels = kernels
@@ -289,7 +298,7 @@ class Benchmarker:
             fn = self.kernels[self.names.index(kernel)]
             return xyz.benchmark(fn, self.setup, n, **self.benchmark_opts)
 
-        self.runner = xyz.Runner(time, ['time'])
+        self.runner = xyz.Runner(time, ["time"])
         self.harvester = xyz.Harvester(self.runner, data_name=data_name)
 
     def run(self, ns, kernels=None, **harvest_opts):
@@ -311,7 +320,7 @@ class Benchmarker:
         if kernels is None:
             kernels = self.names
 
-        combos = {'n': ns, 'kernel': kernels}
+        combos = {"n": ns, "kernel": kernels}
         self.harvester.harvest_combos(combos, **harvest_opts)
 
     @property
@@ -319,18 +328,16 @@ class Benchmarker:
         return self.harvester.full_ds
 
     def lineplot(self, **plot_opts):
-        """Plot the benchmarking results.
-        """
-        plot_opts.setdefault('xlog', True)
-        plot_opts.setdefault('ylog', True)
-        return self.ds.xyz.lineplot('n', 'time', 'kernel', **plot_opts)
+        """Plot the benchmarking results."""
+        plot_opts.setdefault("xlog", True)
+        plot_opts.setdefault("ylog", True)
+        return self.ds.xyz.lineplot("n", "time", "kernel", **plot_opts)
 
     def ilineplot(self, **plot_opts):
-        """Interactively plot the benchmarking results.
-        """
-        plot_opts.setdefault('xlog', True)
-        plot_opts.setdefault('ylog', True)
-        return self.ds.xyz.ilineplot('n', 'time', 'kernel', **plot_opts)
+        """Interactively plot the benchmarking results."""
+        plot_opts.setdefault("xlog", True)
+        plot_opts.setdefault("ylog", True)
+        return self.ds.xyz.ilineplot("n", "time", "kernel", **plot_opts)
 
 
 def format_number_with_error(x, err):
@@ -361,13 +368,14 @@ def format_number_with_error(x, err):
     """
     # compute an overall scaling for both values
     x_exponent = max(
-        int(f'{x:e}'.split('e')[1]),
-        int(f'{err:e}'.split('e')[1]) + 1,
+        int(f"{x:e}".split("e")[1]),
+        int(f"{err:e}".split("e")[1]) + 1,
     )
     # for readability try and show values close to 1 with no exponent
     hide_exponent = (
-         # nicer showing 0.xxx(yy) than x.xx(yy)e-1
-        (x_exponent in (0, -1)) or
+        # nicer showing 0.xxx(yy) than x.xx(yy)e-1
+        (x_exponent in (0, -1))
+        or
         # also nicer showing xx.xx(yy) than x.xxx(yy)e+1
         ((x_exponent == +1) and (err < abs(x / 10)))
     )
@@ -380,9 +388,9 @@ def format_number_with_error(x, err):
 
     # work out how many digits to print
     # format the main number and bracketed error
-    mantissa, exponent = f'{err:.1e}'.split('e')
-    mantissa, exponent = mantissa.replace('.', ''), int(exponent)
-    return f'{x:.{abs(exponent) + 1}f}({mantissa}){suffix}'
+    mantissa, exponent = f"{err:.1e}".split("e")
+    mantissa, exponent = mantissa.replace(".", ""), int(exponent)
+    return f"{x:.{abs(exponent) + 1}f}({mantissa}){suffix}"
 
 
 class RunningStatistics:  # pragma: no cover
@@ -430,8 +438,7 @@ class RunningStatistics:  # pragma: no cover
         self.M2 = 0.0
 
     def update(self, x):
-        """Add a single value ``x`` to the statistics.
-        """
+        """Add a single value ``x`` to the statistics."""
         self.count += 1
         delta = x - self.mean
         self.mean += delta / self.count
@@ -439,8 +446,7 @@ class RunningStatistics:  # pragma: no cover
         self.M2 += delta * delta2
 
     def update_from_it(self, xs):
-        """Add all values from iterable ``xs`` to the statistics.
-        """
+        """Add all values from iterable ``xs`` to the statistics."""
         for x in xs:
             self.update(x)
 
@@ -482,13 +488,13 @@ class RunningStatistics:  # pragma: no cover
         return (
             f"RunningStatistics("
             f"mean={format_number_with_error(self.mean, self.err)}, "
-            f"count={self.count}"")"
+            f"count={self.count}"
+            ")"
         )
 
 
 class RunningCovariance:  # pragma: no cover
-    """Running covariance class.
-    """
+    """Running covariance class."""
 
     def __init__(self):
         self.count = 0
@@ -510,19 +516,16 @@ class RunningCovariance:  # pragma: no cover
 
     @property
     def covar(self):
-        """The covariance.
-        """
+        """The covariance."""
         return self.C / self.count
 
     @property
     def sample_covar(self):
-        """The covariance with "Bessel's correction".
-        """
+        """The covariance with "Bessel's correction"."""
         return self.C / (self.count - 1)
 
 
 class RunningCovarianceMatrix:
-
     def __init__(self, n=2):
         self.n = n
         self.rcs = {}
@@ -613,9 +616,17 @@ class RunningCovarianceMatrix:
         return uncertainties.correlated_values(means, covar)
 
 
-def estimate_from_repeats(fn, *fn_args, rtol=0.02, tol_scale=1.0, get='stats',
-                          verbosity=0, min_samples=5, max_samples=1000000,
-                          **fn_kwargs):
+def estimate_from_repeats(
+    fn,
+    *fn_args,
+    rtol=0.02,
+    tol_scale=1.0,
+    get="stats",
+    verbosity=0,
+    min_samples=5,
+    max_samples=1000000,
+    **fn_kwargs,
+):
     """
     Parameters
     ----------
@@ -675,13 +686,13 @@ def estimate_from_repeats(fn, *fn_args, rtol=0.02, tol_scale=1.0, get='stats',
     if verbosity >= 1:
         repeats = progbar(repeats)
 
-    if get == 'samples':
+    if get == "samples":
         xs = []
 
     try:
         for i in repeats:
             x = fn(*fn_args, **fn_kwargs)
-            if get == 'samples':
+            if get == "samples":
                 xs.append(x)
             rs.update(x)
 
@@ -691,7 +702,7 @@ def estimate_from_repeats(fn, *fn_args, rtol=0.02, tol_scale=1.0, get='stats',
                 )
 
             # need at least min_samples to check convergence
-            if (i > min_samples):
+            if i > min_samples:
                 if rs.converged(rtol, tol_scale * rtol):
                     break
 
@@ -709,10 +720,94 @@ def estimate_from_repeats(fn, *fn_args, rtol=0.02, tol_scale=1.0, get='stats',
         sys.stderr.flush()
         print(rs)
 
-    if get == 'samples':
+    if get == "samples":
         return rs, xs
 
-    if get == 'mean':
+    if get == "mean":
         return rs.mean
 
     return rs
+
+
+def report_memory():
+    try:
+        import psutil
+
+        # Get total memory
+        total_memory = psutil.virtual_memory().total
+
+        # Get memory used
+        used_memory = psutil.virtual_memory().used
+
+        # Get memory used by current process
+        process_memory = psutil.Process().memory_info().rss
+
+        # Return memory report
+        return (
+            f"Process memory: {process_memory/1e9:>10.2f}GB / "
+            f"Memory used: {used_memory/1e9:>10.2f}GB / "
+            f"Total memory: {total_memory/1e9:>10.2f}GB "
+        )
+    except Exception as e:
+        return f"failed to read memory: {e}"
+
+
+def report_memory_gpu():
+    try:
+        import psutil
+        import subprocess
+
+        pid = psutil.Process().pid
+
+        process = subprocess.run(
+            [
+                "nvidia-smi",
+                "--query-compute-apps=pid,gpu_uuid,used_memory",
+                "--format=csv,noheader,nounits",
+            ],
+            capture_output=True,
+        )
+        stdout = process.stdout.decode()
+
+        if not stdout:
+            return (
+                f"GPU Process memory: {'... ':>6}GB / "
+                f"GPU Memory used: {'... ':>6}GB / "
+                f"GPU Total memory: {'... ':>6}GB "
+            )
+        else:
+            process_info = {
+                int(entries[0]): (entries[1], entries[2])
+                for entries in (
+                    line.split(", ") for line in stdout.strip().split("\n")
+                )
+            }
+            if pid in process_info:
+                gpu_uuid, gpu_process_memory = process_info[pid]
+                gpu_process_memory = int(gpu_process_memory)
+            else:
+                return (
+                    f"GPU Process memory: {'... ':>6}GB / "
+                    f"GPU Memory used: {'... ':>6}GB / "
+                    f"GPU Total memory: {'... ':>6}GB "
+                )
+
+        process = subprocess.run(
+            [
+                "nvidia-smi",
+                "--query-gpu=memory.used,memory.total",
+                "--format=csv,noheader,nounits",
+                f"--id={gpu_uuid}",
+            ],
+            capture_output=True,
+        )
+        stdout = process.stdout.decode().strip()
+        gpu_memory_used, gpu_memory_total = map(int, stdout.split(", "))
+
+        return (
+            f"GPU Process memory: {gpu_process_memory/1e3:>6.2f}GB / "
+            f"GPU Memory used: {gpu_memory_used/1e3:>6.2f}GB / "
+            f"GPU Total memory: {gpu_memory_total/1e3:>6.2f}GB "
+        )
+    except Exception as e:
+        return f"failed to read gpu memory: {e}"
