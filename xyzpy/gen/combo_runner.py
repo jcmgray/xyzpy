@@ -491,7 +491,14 @@ def results_to_ds(
             if k in ds.dims:
                 ds.coords[k] = v
             else:
-                ds.attrs[k] = v
+                try:
+                    ds.attrs[k] = v
+                except Exception as e:
+                    import warnings
+
+                    warnings.warn(
+                        f"Failed to add constant {k}={v} to dataset attrs: {e}"
+                    )
     return ds
 
 
