@@ -429,7 +429,16 @@ def combo_runner(
 def multi_concat(results, dims):
     """Concatenate a nested list of xarray objects along several dimensions."""
     if len(dims) == 1:
-        return xr.concat(results, dim=dims[0])
+        return xr.concat(
+            [
+                # if a dict, convert to dataset
+                xr.Dataset(obj) if isinstance(obj, dict)
+                # else assume it's a dataset or datarray
+                else obj
+                for obj in results
+            ],
+            dim=dims[0],
+        )
     else:
         return xr.concat(
             [multi_concat(sub_results, dims[1:]) for sub_results in results],
@@ -463,7 +472,8 @@ def results_to_ds(
 
     # Check if the results are an array of xarray objects
     xobj_results = isinstance(
-        get_ndim_first(results, len(fn_args) + 1), (xr.Dataset, xr.DataArray)
+        get_ndim_first(results, len(fn_args) + 1),
+        (dict, xr.Dataset, xr.DataArray),
     )
 
     if xobj_results:
