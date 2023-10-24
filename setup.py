@@ -22,6 +22,11 @@ setup(
     author_email="johnniemcgray@gmail.com",
     license='MIT',
     packages=find_packages(exclude=['docs', 'test*']),
+    entry_points={
+        'console_scripts': [
+            'xyzpy-grow = xyzpy.gen.xyzpy_grow_cli:main'
+        ]
+    },
     install_requires=[
         'numpy>=1.10.0',
         'dask>=0.11.1',
