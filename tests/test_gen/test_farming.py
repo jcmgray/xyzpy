@@ -1,4 +1,5 @@
 import os
+import importlib.util
 import tempfile
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -12,98 +13,142 @@ from xyzpy.gen.farming import Runner, Harvester, Sampler, label
 from xyzpy.gen.cropping import grow
 
 
+found_h5netcdf = importlib.util.find_spec("h5netcdf") is not None
+found_netcdf4 = importlib.util.find_spec("netcdf4") is not None
+found_zarr = importlib.util.find_spec("zarr") is not None
+
+h5netcdf_case = pytest.param(
+    "h5netcdf",
+    marks=pytest.mark.skipif(
+        not found_h5netcdf, reason="h5netcdf not installed"
+    ),
+)
+netcdf4_case = pytest.param(
+    "netcdf4",
+    marks=pytest.mark.skipif(
+        not found_netcdf4, reason="netcdf4 not installed"
+    ),
+)
+zarr_case = pytest.param(
+    "zarr",
+    marks=pytest.mark.skipif(not found_zarr, reason="zarr not installed"),
+)
+
+
 # -------------------------------- Fixtures --------------------------------- #
 
+
 def fn1_x(x):
-    return x ** 2
+    return x**2
 
 
 def fn3_fba(a, b, c):
     sm = a + b + c
-    ev = ((a + b + c) % 2 == 0)
+    ev = (a + b + c) % 2 == 0
     ts = a * (b * np.linspace(0, 1.0, 3) + c)
     return sm, int(ev), ts
 
 
 @pytest.fixture
 def fn3_fba_runner():
-    r = Runner(fn3_fba, fn_args=('a', 'b'),
-               var_names=['sum', 'even', 'array'],
-               var_dims={'array': ['time']},
-               var_coords={'time': np.linspace(0, 1.0, 3)},
-               constants={'c': 100},
-               attrs={'fruit': 'apples'})
+    r = Runner(
+        fn3_fba,
+        fn_args=("a", "b"),
+        var_names=["sum", "even", "array"],
+        var_dims={"array": ["time"]},
+        var_coords={"time": np.linspace(0, 1.0, 3)},
+        constants={"c": 100},
+        attrs={"fruit": "apples"},
+    )
     return r
 
 
 @pytest.fixture
 def fn3_fba_ds():
     return xr.Dataset(
-        coords={'a': [1, 2], 'b': [3, 4], 'time': np.linspace(0, 1.0, 3)},
-        data_vars={'sum': (('a', 'b'), [[104, 105],
-                                        [105, 106]]),
-                   'even': (('a', 'b'), [[True, False],
-                                         [False, True]]),
-                   'array': (('a', 'b', 'time'),
-                             [[[100, 101.5, 103], [100, 102, 104]],
-                              [[200, 203, 206], [200, 204, 208]]])},
-        attrs={'c': 100, 'fruit': 'apples'})
+        coords={"a": [1, 2], "b": [3, 4], "time": np.linspace(0, 1.0, 3)},
+        data_vars={
+            "sum": (("a", "b"), [[104, 105], [105, 106]]),
+            "even": (("a", "b"), [[True, False], [False, True]]),
+            "array": (
+                ("a", "b", "time"),
+                [
+                    [[100, 101.5, 103], [100, 102, 104]],
+                    [[200, 203, 206], [200, 204, 208]],
+                ],
+            ),
+        },
+        attrs={"c": 100, "fruit": "apples"},
+    )
 
 
 # ------------------------------ Runner Tests ------------------------------- #
 
-class TestRunner:
 
+class TestRunner:
     def test_basic(self):
         r = Runner(fn1_x, "x^2")
         print(str(r))
         print(repr(r))
         assert r(2) == 4
 
-    @pytest.mark.parametrize("prop, vals", [('var_names', ['S', 'E', 'A']),
-                                            ('fn_args', ['A', 'B', 'C']),
-                                            ('var_dims', {'array': ['t']}),
-                                            ('var_coords', {'time': [1, 2]}),
-                                            ('constants', [('c', 200)]),
-                                            ('resources', [('c', 300)])])
+    @pytest.mark.parametrize(
+        "prop, vals",
+        [
+            ("var_names", ["S", "E", "A"]),
+            ("fn_args", ["A", "B", "C"]),
+            ("var_dims", {"array": ["t"]}),
+            ("var_coords", {"time": [1, 2]}),
+            ("constants", [("c", 200)]),
+            ("resources", [("c", 300)]),
+        ],
+    )
     def test_properties(self, prop, vals):
-        r = Runner(fn3_fba, fn_args=('a', 'b', 'c'),
-                   var_names=['sum', 'even', 'array'],
-                   var_dims={'array': ['time']},
-                   var_coords={'time': np.linspace(0, 1.0, 3)},
-                   constants={'c': 100},
-                   attrs={'fruit': 'apples'})
+        r = Runner(
+            fn3_fba,
+            fn_args=("a", "b", "c"),
+            var_names=["sum", "even", "array"],
+            var_dims={"array": ["time"]},
+            var_coords={"time": np.linspace(0, 1.0, 3)},
+            constants={"c": 100},
+            attrs={"fruit": "apples"},
+        )
         getattr(r, prop)
         setattr(r, prop, vals)
         delattr(r, prop)
         assert getattr(r, prop) is None
 
-    @pytest.mark.parametrize("var_names", ['sq', ('sq',), ['sq']])
-    @pytest.mark.parametrize("var_dims", [[], (), {}, {'sq': ()}])
-    @pytest.mark.parametrize("combos", [('x', (1, 2, 3)),
-                                        (('x', (1, 2, 3)),),
-                                        ('x', [1, 2, 3]),
-                                        [('x', [1, 2, 3])],
-                                        {'x': (1, 2, 3)},
-                                        {'x': [1, 2, 3]}])
+    @pytest.mark.parametrize("var_names", ["sq", ("sq",), ["sq"]])
+    @pytest.mark.parametrize("var_dims", [[], (), {}, {"sq": ()}])
+    @pytest.mark.parametrize(
+        "combos",
+        [
+            ("x", (1, 2, 3)),
+            (("x", (1, 2, 3)),),
+            ("x", [1, 2, 3]),
+            [("x", [1, 2, 3])],
+            {"x": (1, 2, 3)},
+            {"x": [1, 2, 3]},
+        ],
+    )
     def test_runner_combos_parse(self, var_names, var_dims, combos):
         r = Runner(fn1_x, var_names=var_names, var_dims=var_dims)
         r.run_combos(combos)
-        expected_ds = xr.Dataset(coords={'x': [1, 2, 3]},
-                                 data_vars={'sq': ('x', [1, 4, 9])})
+        expected_ds = xr.Dataset(
+            coords={"x": [1, 2, 3]}, data_vars={"sq": ("x", [1, 4, 9])}
+        )
         assert r.last_ds.identical(expected_ds)
 
     def test_runner_combos(self, fn3_fba_runner, fn3_fba_ds):
         r = fn3_fba_runner
-        r.run_combos((('a', (1, 2)), ('b', (3, 4))))
+        r.run_combos((("a", (1, 2)), ("b", (3, 4))))
         assert r.last_ds.identical(fn3_fba_ds)
 
     def test_sow_reap_seperate(self, fn3_fba_runner, fn3_fba_ds):
         with tempfile.TemporaryDirectory() as tmpdir:
             r = fn3_fba_runner
             crop = r.Crop(parent_dir=tmpdir, num_batches=2)
-            crop.sow_combos((('a', (1, 2)),
-                             ('b', (3, 4))))
+            crop.sow_combos((("a", (1, 2)), ("b", (3, 4))))
             for i in [1, 2]:
                 grow(i, crop)
             crop.reap()
@@ -123,52 +168,53 @@ class TestRunner:
             with ThreadPoolExecutor(1) as pool:
                 pool.submit(concurrent_grow)
 
-                crop.sow_combos((('a', (1, 2)),
-                                 ('b', (3, 4))))
+                crop.sow_combos((("a", (1, 2)), ("b", (3, 4))))
                 crop.reap(wait=True)
 
             assert r.last_ds.identical(fn3_fba_ds)
 
-    @pytest.mark.parametrize("cases", [(1, 2, 3),
-                                       ([1], [2], [3])])
+    @pytest.mark.parametrize("cases", [(1, 2, 3), ([1], [2], [3])])
     def test_runner_cases_parse(self, cases):
-        r = Runner(fn1_x, var_names='sq', fn_args='x')
+        r = Runner(fn1_x, var_names="sq", fn_args="x")
         r.run_cases(cases)
-        expected_ds = xr.Dataset(coords={'x': [1, 2, 3]},
-                                 data_vars={'sq': ('x', [1, 4, 9])})
+        expected_ds = xr.Dataset(
+            coords={"x": [1, 2, 3]}, data_vars={"sq": ("x", [1, 4, 9])}
+        )
         assert r.last_ds.identical(expected_ds)
 
     @pytest.mark.parametrize("dict_cases", [False, True])
     def test_runner_cases(self, fn3_fba_runner, dict_cases):
-
         if dict_cases:
-            cases = [{'a': 2, 'b': 3}, {'a': 1, 'b': 4}]
+            cases = [{"a": 2, "b": 3}, {"a": 1, "b": 4}]
         else:
             cases = [(2, 3), (1, 4)]
 
         fn3_fba_runner.run_cases(cases)
         expected_ds = xr.Dataset(
-            coords={'a': [1, 2], 'b': [3, 4], 'time': np.linspace(0, 1.0, 3)},
-            data_vars={'sum': (('a', 'b'), [[np.nan, 105],
-                                            [105, np.nan]]),
-                       'even': (('a', 'b'), [[None, False],
-                                             [False, None]]),
-                       'array': (('a', 'b', 'time'),
-                                 [[[np.nan, np.nan, np.nan],
-                                   [100, 102, 104]],
-                                  [[200, 203, 206],
-                                   [np.nan, np.nan, np.nan]]])},
-            attrs={'c': 100, 'fruit': 'apples'})
+            coords={"a": [1, 2], "b": [3, 4], "time": np.linspace(0, 1.0, 3)},
+            data_vars={
+                "sum": (("a", "b"), [[np.nan, 105], [105, np.nan]]),
+                "even": (("a", "b"), [[None, False], [False, None]]),
+                "array": (
+                    ("a", "b", "time"),
+                    [
+                        [[np.nan, np.nan, np.nan], [100, 102, 104]],
+                        [[200, 203, 206], [np.nan, np.nan, np.nan]],
+                    ],
+                ),
+            },
+            attrs={"c": 100, "fruit": "apples"},
+        )
         assert fn3_fba_runner.last_ds.identical(expected_ds)
 
 
 # -------------------------- Harvester Tests -------------------------------- #
 
-class TestHarvester:
 
+class TestHarvester:
     def test_save_and_load_ds(self, fn3_fba_runner, fn3_fba_ds):
         with tempfile.TemporaryDirectory() as tmpdir:
-            fl_pth = os.path.join(tmpdir, 'test.h5')
+            fl_pth = os.path.join(tmpdir, "test.h5")
             h = Harvester(fn3_fba_runner, fl_pth, full_ds=fn3_fba_ds)
             h.save_full_ds()
             h.load_full_ds()
@@ -176,9 +222,9 @@ class TestHarvester:
 
     def test_harvest_combos_new(self, fn3_fba_runner, fn3_fba_ds):
         with tempfile.TemporaryDirectory() as tmpdir:
-            fl_pth = os.path.join(tmpdir, 'test.h5')
+            fl_pth = os.path.join(tmpdir, "test.h5")
             h = Harvester(fn3_fba_runner, fl_pth)
-            h.harvest_combos((('a', (1, 2)), ('b', (3, 4))))
+            h.harvest_combos((("a", (1, 2)), ("b", (3, 4))))
             hds = load_ds(fl_pth)
         assert h.last_ds.identical(fn3_fba_ds)
         assert h.full_ds.identical(fn3_fba_ds)
@@ -186,30 +232,31 @@ class TestHarvester:
 
     def test_label_as_harvester(self, fn3_fba_runner, fn3_fba_ds):
         with tempfile.TemporaryDirectory() as tmpdir:
-            fl_pth = os.path.join(tmpdir, 'test.h5')
+            fl_pth = os.path.join(tmpdir, "test.h5")
             h = label(
                 harvester=fl_pth,
-                fn_args=('a', 'b'),
-                var_names=['sum', 'even', 'array'],
-                var_dims={'array': ['time']},
-                var_coords={'time': np.linspace(0, 1.0, 3)},
-                constants={'c': 100},
-                attrs={'fruit': 'apples'},
+                fn_args=("a", "b"),
+                var_names=["sum", "even", "array"],
+                var_dims={"array": ["time"]},
+                var_coords={"time": np.linspace(0, 1.0, 3)},
+                constants={"c": 100},
+                attrs={"fruit": "apples"},
             )(fn3_fba)
-            h.harvest_combos((('a', (1, 2)), ('b', (3, 4))))
+            h.harvest_combos((("a", (1, 2)), ("b", (3, 4))))
             hds = load_ds(fl_pth)
         assert h.last_ds.identical(fn3_fba_ds)
         assert h.full_ds.identical(fn3_fba_ds)
         assert hds.identical(fn3_fba_ds)
 
-    def test_harvest_combos_new_sow_reap_separate(self, fn3_fba_runner,
-                                                  fn3_fba_ds):
+    def test_harvest_combos_new_sow_reap_separate(
+        self, fn3_fba_runner, fn3_fba_ds
+    ):
         with tempfile.TemporaryDirectory() as tmpdir:
-            fl_pth = os.path.join(tmpdir, 'test.h5')
+            fl_pth = os.path.join(tmpdir, "test.h5")
             h = Harvester(fn3_fba_runner, fl_pth)
             crop = h.Crop(parent_dir=tmpdir, num_batches=2)
 
-            crop.sow_combos((('a', (1, 2)), ('b', (3, 4))))
+            crop.sow_combos((("a", (1, 2)), ("b", (3, 4))))
 
             for i in [1, 2]:
                 grow(i, crop)
@@ -221,10 +268,11 @@ class TestHarvester:
             assert h.full_ds.identical(fn3_fba_ds)
             assert hds.identical(fn3_fba_ds)
 
-    def test_harvest_combos_sow_and_reap_thread_wait(self, fn3_fba_runner,
-                                                     fn3_fba_ds):
+    def test_harvest_combos_sow_and_reap_thread_wait(
+        self, fn3_fba_runner, fn3_fba_ds
+    ):
         with tempfile.TemporaryDirectory() as tmpdir:
-            fl_pth = os.path.join(tmpdir, 'test.h5')
+            fl_pth = os.path.join(tmpdir, "test.h5")
             h = Harvester(fn3_fba_runner, fl_pth)
             crop = h.Crop(parent_dir=tmpdir, num_batches=2)
 
@@ -236,7 +284,7 @@ class TestHarvester:
 
             with ThreadPoolExecutor(1) as pool:
                 pool.submit(concurrent_grow)
-                crop.sow_combos((('a', (1, 2)), ('b', (3, 4))))
+                crop.sow_combos((("a", (1, 2)), ("b", (3, 4))))
                 crop.reap(wait=True)
 
             hds = load_ds(fl_pth)
@@ -245,13 +293,14 @@ class TestHarvester:
         assert h.full_ds.identical(fn3_fba_ds)
         assert hds.identical(fn3_fba_ds)
 
-    def test_harvest_combos_new_sow_reap_incomplete(self, fn3_fba_runner,
-                                                    fn3_fba_ds):
+    def test_harvest_combos_new_sow_reap_incomplete(
+        self, fn3_fba_runner, fn3_fba_ds
+    ):
         with tempfile.TemporaryDirectory() as tmpdir:
-            fl_pth = os.path.join(tmpdir, 'test.h5')
+            fl_pth = os.path.join(tmpdir, "test.h5")
             h = Harvester(fn3_fba_runner, fl_pth)
             crop = h.Crop(parent_dir=tmpdir, num_batches=3)
-            crop.sow_combos((('a', (1, 2)), ('b', (3, 4))))
+            crop.sow_combos((("a", (1, 2)), ("b", (3, 4))))
 
             grow(1, crop)
             crop.reap(allow_incomplete=True)
@@ -268,10 +317,10 @@ class TestHarvester:
 
     def test_harvest_combos_merge(self, fn3_fba_runner, fn3_fba_ds):
         with tempfile.TemporaryDirectory() as tmpdir:
-            fl_pth = os.path.join(tmpdir, 'test.h5')
+            fl_pth = os.path.join(tmpdir, "test.h5")
             h = Harvester(fn3_fba_runner, fl_pth)
-            h.harvest_combos((('a', (1,)), ('b', (3, 4))))
-            h.harvest_combos((('a', (2,)), ('b', (3, 4))))
+            h.harvest_combos((("a", (1,)), ("b", (3, 4))))
+            h.harvest_combos((("a", (2,)), ("b", (3, 4))))
             hds = load_ds(fl_pth)
         assert not h.last_ds.identical(fn3_fba_ds)
         assert h.full_ds.identical(fn3_fba_ds)
@@ -279,26 +328,29 @@ class TestHarvester:
 
     def test_harvest_combos_overwrite(self, fn3_fba_runner, fn3_fba_ds):
         with tempfile.TemporaryDirectory() as tmpdir:
-            fl_pth = os.path.join(tmpdir, 'test.h5')
+            fl_pth = os.path.join(tmpdir, "test.h5")
             mod_ds = fn3_fba_ds.copy(deep=True)
-            mod_ds['array'].loc[{'a': 1, 'b': 3}] = 999
+            mod_ds["array"].loc[{"a": 1, "b": 3}] = 999
             h = Harvester(fn3_fba_runner, fl_pth, full_ds=mod_ds)
             h.save_full_ds()
             assert not h.full_ds.equals(fn3_fba_ds)
-            h.harvest_combos((('a', (1,)), ('b', (3,))), overwrite=True)
+            h.harvest_combos((("a", (1,)), ("b", (3,))), overwrite=True)
             assert h.full_ds.equals(fn3_fba_ds)
 
-    @pytest.mark.parametrize('dict_cases', [False, True])
+    @pytest.mark.parametrize("dict_cases", [False, True])
     def test_harvest_cases_new(self, fn3_fba_runner, fn3_fba_ds, dict_cases):
-
         if dict_cases:
-            cases = [{'a': 1, 'b': 3}, {'a': 1, 'b': 4},
-                     {'a': 2, 'b': 3}, {'a': 2, 'b': 4}]
+            cases = [
+                {"a": 1, "b": 3},
+                {"a": 1, "b": 4},
+                {"a": 2, "b": 3},
+                {"a": 2, "b": 4},
+            ]
         else:
             cases = [(1, 3), (1, 4), (2, 3), (2, 4)]
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            fl_pth = os.path.join(tmpdir, 'test.h5')
+            fl_pth = os.path.join(tmpdir, "test.h5")
             h = Harvester(fn3_fba_runner, fl_pth)
             h.harvest_cases(cases)
             hds = load_ds(fl_pth)
@@ -308,7 +360,7 @@ class TestHarvester:
 
     def test_harvest_cases_merge(self, fn3_fba_runner, fn3_fba_ds):
         with tempfile.TemporaryDirectory() as tmpdir:
-            fl_pth = os.path.join(tmpdir, 'test.h5')
+            fl_pth = os.path.join(tmpdir, "test.h5")
             h = Harvester(fn3_fba_runner, fl_pth)
             h.harvest_cases([(1, 3), (2, 4)])
             h.harvest_cases([(1, 4), (2, 3)])
@@ -319,99 +371,111 @@ class TestHarvester:
 
     def test_harvest_cases_overwrite(self, fn3_fba_runner, fn3_fba_ds):
         with tempfile.TemporaryDirectory() as tmpdir:
-            fl_pth = os.path.join(tmpdir, 'test.h5')
+            fl_pth = os.path.join(tmpdir, "test.h5")
             mod_ds = fn3_fba_ds.copy(deep=True)
-            mod_ds['array'].loc[{'a': 1, 'b': 3}] = 999
+            mod_ds["array"].loc[{"a": 1, "b": 3}] = 999
             h = Harvester(fn3_fba_runner, fl_pth, full_ds=mod_ds)
             h.save_full_ds()
             assert not h.full_ds.equals(fn3_fba_ds)
             h.harvest_cases([(1, 3)], overwrite=True)
             assert h.full_ds.equals(fn3_fba_ds)
 
-    @pytest.mark.parametrize('engine', ['h5netcdf', 'netcdf4', 'zarr'])
-    def test_harvest_cases_merge_dask(self, fn3_fba_runner,
-                                      fn3_fba_ds, engine):
+    @pytest.mark.parametrize(
+        "engine", [h5netcdf_case, netcdf4_case, zarr_case]
+    )
+    def test_harvest_cases_merge_dask(
+        self, fn3_fba_runner, fn3_fba_ds, engine
+    ):
         import dask
-        dask.config.set(scheduler='threads')
+
+        dask.config.set(scheduler="threads")
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            fl_pth = os.path.join(tmpdir, 'test.h5')
+            fl_pth = os.path.join(tmpdir, "test.h5")
             h = Harvester(fn3_fba_runner, fl_pth, engine=engine)
             h.harvest_cases([(1, 3), (2, 4)], chunks=1)
             h.harvest_cases([(1, 4), (2, 3)], chunks=1)
             assert not h.last_ds.identical(fn3_fba_ds)
             assert h.full_ds.identical(fn3_fba_ds)
-            assert h.full_ds['sum'].chunks is not None
+            assert h.full_ds["sum"].chunks is not None
             h.full_ds.close()
 
-    def test_harvest_cases_merge_dask_default(self, fn3_fba_runner,
-                                              fn3_fba_ds):
-
+    @pytest.mark.parametrize("engine", [netcdf4_case])
+    def test_harvest_cases_merge_dask_default(
+        self, fn3_fba_runner, fn3_fba_ds, engine
+    ):
         import dask
-        dask.config.set(scheduler='threads')
+
+        dask.config.set(scheduler="threads")
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            fl_pth = os.path.join(tmpdir, 'test.h5')
-            h = Harvester(fn3_fba_runner, fl_pth, engine='netcdf4',
-                          chunks=1)
+            fl_pth = os.path.join(tmpdir, "test.h5")
+            h = Harvester(fn3_fba_runner, fl_pth, engine=engine, chunks=1)
             h.harvest_cases([(1, 3), (2, 4)])
             h.harvest_cases([(1, 4), (2, 3)])
             assert not h.last_ds.identical(fn3_fba_ds)
             assert h.full_ds.identical(fn3_fba_ds)
-            assert h.full_ds['sum'].chunks is not None
+            assert h.full_ds["sum"].chunks is not None
             h.full_ds.close()
 
     def test_expand_dims_and_ellipsis_combos(self):
-
-        @label('x', harvester=True)
+        @label("x", harvester=True)
         def foo(a, b, c=5):
             return a + b + c
 
-        foo.harvest_combos({
-            'a': [1, 2],
-            'b': [3, 4],
-        })
+        foo.harvest_combos(
+            {
+                "a": [1, 2],
+                "b": [3, 4],
+            }
+        )
 
-        assert foo.full_ds['x'].ndim == 2
-        foo.expand_dims('c', 5)
-        assert foo.full_ds['x'].ndim == 3
+        assert foo.full_ds["x"].ndim == 2
+        foo.expand_dims("c", 5)
+        assert foo.full_ds["x"].ndim == 3
 
-        foo.harvest_combos({
-            'a': ...,
-            'b': ...,
-            'c': [8, 9],
-        })
-        assert list(foo.full_ds['c'].values) == [5, 8, 9]
+        foo.harvest_combos(
+            {
+                "a": ...,
+                "b": ...,
+                "c": [8, 9],
+            }
+        )
+        assert list(foo.full_ds["c"].values) == [5, 8, 9]
 
     def test_drop_sel(self):
-        @label('x', harvester=True)
+        @label("x", harvester=True)
         def foo(a, b, c):
             return a + b + c
 
-        foo.harvest_combos({
-            'a': [1, 2],
-            'b': [3, 4],
-            'c': [5, 6, 7],
-        })
+        foo.harvest_combos(
+            {
+                "a": [1, 2],
+                "b": [3, 4],
+                "c": [5, 6, 7],
+            }
+        )
 
-        assert foo.full_ds['x'].ndim == 3
-        assert foo.full_ds['x'].size == 12
+        assert foo.full_ds["x"].ndim == 3
+        assert foo.full_ds["x"].size == 12
         foo.drop_sel(c=6)
-        assert foo.full_ds['x'].ndim == 3
-        assert foo.full_ds['x'].size == 8
-        assert 6 not in foo.full_ds.coords['c'].values
+        assert foo.full_ds["x"].ndim == 3
+        assert foo.full_ds["x"].size == 8
+        assert 6 not in foo.full_ds.coords["c"].values
 
 
 class TestSampler:
-
-    @pytest.mark.parametrize("fname,engine", [
-        ('test.pkl', 'pickle'),
-        ('test.csv', 'csv'),
-    ])
+    @pytest.mark.parametrize(
+        "fname,engine",
+        [
+            ("test.pkl", "pickle"),
+            ("test.csv", "csv"),
+        ],
+    )
     def test_sample_combos_new(self, fname, engine):
-
-        @label(var_names=['sum', 'diff', 'divisor', 'const'],
-               constants={'c': 42})
+        @label(
+            var_names=["sum", "diff", "divisor", "const"], constants={"c": 42}
+        )
         def sum_diff(a, b, c):
             return a + b, a - b, a % b == 0, c
 
@@ -420,8 +484,8 @@ class TestSampler:
             s = Sampler(sum_diff, fl_pth, engine=engine)
             print(s)
             combos = (
-                ('a', (1, 2, 3, 4, 5)),
-                ('b', lambda: np.random.randint(10, 20))
+                ("a", (1, 2, 3, 4, 5)),
+                ("b", lambda: np.random.randint(10, 20)),
             )
             s.sample_combos(10, combos)
             hdf = load_df(fl_pth, engine=engine)
@@ -436,28 +500,28 @@ class TestSampler:
             assert not s.last_df.equals(hdf)
             assert s.full_df.equals(hdf)
 
-            assert set(s.full_df['const']) == set(s.full_df['c']) == {42}
+            assert set(s.full_df["const"]) == set(s.full_df["c"]) == {42}
 
-            for col in ['sum', 'diff', 'divisor', 'const', 'a', 'b', 'c']:
+            for col in ["sum", "diff", "divisor", "const", "a", "b", "c"]:
                 assert col in s.full_df
 
-    @pytest.mark.parametrize('batchsize', [1, 3])
+    @pytest.mark.parametrize("batchsize", [1, 3])
     def test_sow_reap_samples(self, batchsize):
-
-        @label(var_names=['sum', 'diff', 'divisor', 'const'],
-               constants={'c': 42})
+        @label(
+            var_names=["sum", "diff", "divisor", "const"], constants={"c": 42}
+        )
         def sum_diff(a, b, c):
             return a + b, a - b, a % b == 0, c
 
         default_combos = (
-            ('a', (1, 2, 3, 4, 5)),
-            ('b', lambda: np.random.randint(10, 20))
+            ("a", (1, 2, 3, 4, 5)),
+            ("b", lambda: np.random.randint(10, 20)),
         )
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            fl_pth = os.path.join(tmpdir, 'test.pkl')
+            fl_pth = os.path.join(tmpdir, "test.pkl")
             s = Sampler(sum_diff, fl_pth, default_combos=default_combos)
-            c = s.Crop('test-crop-def', batchsize=batchsize, parent_dir=tmpdir)
+            c = s.Crop("test-crop-def", batchsize=batchsize, parent_dir=tmpdir)
             c.sow_samples(10)
             c.grow_missing()
             c.reap()
