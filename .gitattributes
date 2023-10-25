@@ -1,1 +1,4 @@
 xyzpy/_version.py export-subst
+
+# make xyzpy appear as a python project on github
+*.ipynb linguist-language=Python
