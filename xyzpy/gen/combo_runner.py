@@ -57,6 +57,9 @@ def nan_like_result(res):
                             [nan, nan, nan]]), array(nan), None)
 
     """
+    if isinstance(res, dict):
+        res = xr.Dataset(res)
+
     if isinstance(res, (xr.Dataset, xr.DataArray)):
         return xr.full_like(res, np.nan, dtype=float)
 
