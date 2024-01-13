@@ -1,7 +1,7 @@
 import os
 import tempfile
 
-from pytest import fixture, mark, param, raises
+from pytest import fixture, mark, param, raises, importorskip
 import numpy as np
 import xarray as xr
 
@@ -71,6 +71,8 @@ class TestSaveAndLoad:
                        param('netcdf4', 'h5netcdf', marks=mark.xfail),
                        param('netcdf4', 'netcdf4', marks=mark.xfail)])
     def test_io_only_real(self, ds_real, engine_save, engine_load):
+        importorskip(engine_save)
+        importorskip(engine_load)
         with tempfile.TemporaryDirectory() as tmpdir:
             save_ds(ds_real, os.path.join(tmpdir, "test.h5"),
                     engine=engine_save)
@@ -85,6 +87,9 @@ class TestSaveAndLoad:
                        param('netcdf4', 'h5netcdf', marks=mark.xfail),
                        param('netcdf4', 'netcdf4', marks=mark.xfail)])
     def test_io_complex_data(self, ds1, engine_save, engine_load):
+        importorskip(engine_save)
+        importorskip(engine_load)
+
         with tempfile.TemporaryDirectory() as tmpdir:
             save_ds(ds1, os.path.join(tmpdir, "test.h5"), engine=engine_save)
             ds2 = load_ds(os.path.join(tmpdir, "test.h5"), engine=engine_load)
@@ -93,6 +98,8 @@ class TestSaveAndLoad:
     @mark.parametrize(("engine_load"),
                       ['h5netcdf', 'netcdf4'])
     def test_dask_load(self, ds_real, engine_load):
+        importorskip(engine_load)
+
         with tempfile.TemporaryDirectory() as tmpdir:
             save_ds(ds_real, os.path.join(tmpdir, "test.nc"))
             ds2 = load_ds(os.path.join(tmpdir, "test.nc"),
