@@ -327,6 +327,12 @@ class Benchmarker:
     def ds(self):
         return self.harvester.full_ds
 
+    def plot(self, **plot_opts):
+        """Plot the benchmarking results."""
+        plot_opts.setdefault("xscale", "log")
+        plot_opts.setdefault("yscale", "log")
+        return self.ds.xyz.plot(x="n", y="time", color="kernel", **plot_opts)
+
     def lineplot(self, **plot_opts):
         """Plot the benchmarking results."""
         plot_opts.setdefault("xlog", True)
@@ -811,3 +817,49 @@ def report_memory_gpu():
         )
     except Exception as e:
         return f"failed to read gpu memory: {e}"
+
+
+def autocorrect_kwargs(func=None, valid_kwargs=None):
+    """A decorator that suggests the right keyword arguments if you get them
+    wrong. Useful for functions with many specific options.
+
+    Parameters
+    ----------
+    func : callable, optional
+        The function to decorate.
+    valid_kwargs : sequence[str], optional
+        The valid keyword arguments for ``func``, if not given these are
+        inferred from the function signature.
+    """
+    if func is None:
+        # decorator with options
+        return functools.partial(autocorrect_kwargs, valid_kwargs=valid_kwargs)
+
+    if valid_kwargs is None:
+        import inspect
+
+        sig = inspect.signature(func)
+        params = sig.parameters
+        valid_kwargs = set(params.keys())
+    else:
+        valid_kwargs = set(valid_kwargs)
+
+    @functools.wraps(func)
+    def wrapped(*args, **kwargs):
+        wrong_opts = {kw for kw in kwargs if kw not in valid_kwargs}
+        if wrong_opts:
+            import difflib
+
+            right_opts = (
+                difflib.get_close_matches(opt, valid_kwargs, n=3)
+                for opt in wrong_opts
+            )
+            msg = "Option(s) {} not valid.\n Did you mean: {}?".format(
+                wrong_opts, ", ".join(map(str, right_opts))
+            )
+            print(msg)
+            raise ValueError(msg)
+
+        return func(*args, **kwargs)
+
+    return wrapped

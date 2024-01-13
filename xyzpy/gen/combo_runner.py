@@ -226,11 +226,26 @@ def combo_runner_core(
 
     run_linear_opts = {"fn": fn, "settings": settings, "verbosity": verbosity}
 
+    if executor == "ray":
+        from .ray_executor import RayExecutor
+
+        executor = RayExecutor(num_cpus=num_workers)
+
     if executor is not None:
         # custom pool supplied
         results_linear = _run_linear_executor(executor, **run_linear_opts)
     elif parallel or num_workers:
         # else for parallel, by default use a process pool-exceutor
+
+        if (
+            # bools are ints, so check for that first since True != 1 here
+            (not isinstance(parallel, bool)) and
+            isinstance(parallel, int) and
+            (num_workers is None)
+        ):
+            # assume parallel is the number of workers
+            num_workers = parallel
+
         executor = get_reusable_executor(num_workers)
         results_linear = _run_linear_executor(executor, **run_linear_opts)
     else:

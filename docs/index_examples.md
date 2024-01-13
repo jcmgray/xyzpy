@@ -9,5 +9,5 @@ examples/complex output example
 examples/farming example
 examples/crop example
 examples/dask distributed example
-examples/visualize matrix
+examples/visualize linear algebra
 ```
