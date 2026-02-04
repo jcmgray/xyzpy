@@ -3,6 +3,7 @@
 # For the full list of built-in configuration values, see the documentation:
 # https://www.sphinx-doc.org/en/master/usage/configuration.html
 
+import datetime
 import os
 import sys
 
@@ -12,7 +13,7 @@ sys.path.append(os.path.abspath("./_pygments"))
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
 project = "xyzpy"
-copyright = "2019-2023, Johnnie Gray"
+copyright = f"2016-{datetime.date.today().year}, Johnnie Gray"
 author = "Johnnie Gray"
 
 try:
