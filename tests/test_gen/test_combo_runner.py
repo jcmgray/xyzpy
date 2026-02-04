@@ -1,25 +1,26 @@
 from collections import OrderedDict
 from functools import partial
-import pytest
+
 import numpy as np
-from numpy.testing import assert_allclose
+import pytest
 import xarray as xr
+from numpy.testing import assert_allclose
 
 from xyzpy.gen.combo_runner import (
     combo_runner,
-    results_to_ds,
     combo_runner_to_ds,
-)
-from . import (
-    foo3_scalar,
-    foo3_float_bool,
-    foo2_array,
-    foo2_array_bool,
-    foo2_array_array,
-    foo2_zarray1_zarray2,
-    foo_array_input,
+    results_to_ds,
 )
 
+from . import (
+    foo2_array,
+    foo2_array_array,
+    foo2_array_bool,
+    foo2_zarray1_zarray2,
+    foo3_float_bool,
+    foo3_scalar,
+    foo_array_input,
+)
 
 # --------------------------------------------------------------------------- #
 # COMBO_RUNNER tests                                                          #

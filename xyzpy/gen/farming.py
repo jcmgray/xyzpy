@@ -1,35 +1,34 @@
-"""Objects for labelling and succesively running functions.
-"""
+"""Objects for labelling and succesively running functions."""
 
+import functools
 import os
 import shutil
-import functools
 
 import numpy as np
 import pandas as pd
 import xarray as xr
 
+from ..manage import load_df, load_ds, save_df, save_ds
+from . import cropping
+from .case_runner import case_runner_to_ds, parse_into_cases
+from .combo_runner import combo_runner_to_ds
 from .prepare import (
     XYZError,
-    parse_fn_args,
-    parse_var_names,
-    parse_var_dims,
-    parse_var_coords,
-    parse_constants,
-    parse_resources,
-    parse_combos,
-    parse_cases,
     parse_attrs,
+    parse_cases,
+    parse_combos,
+    parse_constants,
+    parse_fn_args,
+    parse_resources,
+    parse_var_coords,
+    parse_var_dims,
+    parse_var_names,
 )
-from .combo_runner import combo_runner_to_ds
-from .case_runner import case_runner_to_ds, parse_into_cases
-from ..manage import load_ds, save_ds, load_df, save_df
-from . import cropping
-
 
 # --------------------------------------------------------------------------- #
 #                                   RUNNER                                    #
 # --------------------------------------------------------------------------- #
+
 
 class Runner(object):
     """Container class with all the information needed to systematically
@@ -63,14 +62,18 @@ class Runner(object):
         These keyword arguments will be supplied as defaults to any runner.
     """
 
-    def __init__(self, fn, var_names,
-                 fn_args=None,
-                 var_dims=None,
-                 var_coords=None,
-                 constants=None,
-                 resources=None,
-                 attrs=None,
-                 **default_runner_settings):
+    def __init__(
+        self,
+        fn,
+        var_names,
+        fn_args=None,
+        var_dims=None,
+        var_coords=None,
+        constants=None,
+        resources=None,
+        attrs=None,
+        **default_runner_settings,
+    ):
         self.fn = fn
         self._var_names = parse_var_names(var_names)
         self._fn_args = parse_fn_args(fn, fn_args)
@@ -95,9 +98,13 @@ class Runner(object):
 
     def _del_fn_args(self):
         self._fn_args = None
-    fn_args = property(_get_fn_args, _set_fn_args, _del_fn_args,
-                       "List of the names of the arguments that the "
-                       "Runner's function takes.")
+
+    fn_args = property(
+        _get_fn_args,
+        _set_fn_args,
+        _del_fn_args,
+        "List of the names of the arguments that the Runner's function takes.",
+    )
 
     def _get_var_names(self):
         return self._var_names
@@ -107,9 +114,14 @@ class Runner(object):
 
     def _del_var_names(self):
         self._var_names = None
-    var_names = property(_get_var_names, _set_var_names, _del_var_names,
-                         "List of the names of the variables that the "
-                         "Runner's function produces.")
+
+    var_names = property(
+        _get_var_names,
+        _set_var_names,
+        _del_var_names,
+        "List of the names of the variables that the "
+        "Runner's function produces.",
+    )
 
     def _get_var_dims(self):
         return self._var_dims
@@ -121,9 +133,13 @@ class Runner(object):
 
     def _del_var_dims(self):
         self._var_dims = None
-    var_dims = property(_get_var_dims, _set_var_dims, _del_var_dims,
-                        "Mapping of each output variable to its named "
-                        "dimensions")
+
+    var_dims = property(
+        _get_var_dims,
+        _set_var_dims,
+        _del_var_dims,
+        "Mapping of each output variable to its named dimensions",
+    )
 
     def _get_var_coords(self):
         return self._var_coords
@@ -133,9 +149,13 @@ class Runner(object):
 
     def _del_var_coords(self):
         self._var_coords = None
-    var_coords = property(_get_var_coords, _set_var_coords, _del_var_coords,
-                          "Mapping of each variable named dimension to its "
-                          "coordinate values.")
+
+    var_coords = property(
+        _get_var_coords,
+        _set_var_coords,
+        _del_var_coords,
+        "Mapping of each variable named dimension to its coordinate values.",
+    )
 
     def _get_constants(self):
         return self._constants
@@ -145,9 +165,13 @@ class Runner(object):
 
     def _del_constants(self):
         self._constants = None
-    constants = property(_get_constants, _set_constants, _del_constants,
-                         "Mapping of constant arguments supplied to the "
-                         "Runner's function.")
+
+    constants = property(
+        _get_constants,
+        _set_constants,
+        _del_constants,
+        "Mapping of constant arguments supplied to the Runner's function.",
+    )
 
     def _get_resources(self):
         return self._resources
@@ -157,10 +181,15 @@ class Runner(object):
 
     def _del_resources(self):
         self._resources = None
-    resources = property(_get_resources, _set_resources, _del_resources,
-                         "Mapping of constant arguments supplied to the "
-                         "Runner's function that are *not* saved with the "
-                         "dataset.")
+
+    resources = property(
+        _get_resources,
+        _set_resources,
+        _del_resources,
+        "Mapping of constant arguments supplied to the "
+        "Runner's function that are *not* saved with the "
+        "dataset.",
+    )
 
     @property
     def last_ds(self):
@@ -193,7 +222,8 @@ class Runner(object):
             resources=self._resources,
             attrs=self._attrs,
             parse=False,
-            **{**self.default_runner_settings, **runner_settings})
+            **{**self.default_runner_settings, **runner_settings},
+        )
         return self._last_ds
 
     def run_cases(self, cases, constants=(), fn_args=None, **runner_settings):
@@ -225,15 +255,18 @@ class Runner(object):
             resources=self._resources,
             attrs=self._attrs,
             parse=False,
-            **{**self.default_runner_settings, **runner_settings})
+            **{**self.default_runner_settings, **runner_settings},
+        )
         return self._last_ds
 
-    def Crop(self,
-             name=None,
-             parent_dir=None,
-             save_fn=None,
-             batchsize=None,
-             num_batches=None):
+    def Crop(
+        self,
+        name=None,
+        parent_dir=None,
+        save_fn=None,
+        batchsize=None,
+        num_batches=None,
+    ):
         """Return a Crop instance with this runner, from which ``fn``
         will be set, and then combos can be sown, grown, and reaped into the
         ``Runner.last_ds``. See :class:`~xyzpy.Crop`.
@@ -242,9 +275,14 @@ class Runner(object):
         -------
         Crop
         """
-        return cropping.Crop(farmer=self, name=name, parent_dir=parent_dir,
-                             save_fn=save_fn, batchsize=batchsize,
-                             num_batches=num_batches)
+        return cropping.Crop(
+            farmer=self,
+            name=name,
+            parent_dir=parent_dir,
+            save_fn=save_fn,
+            batchsize=batchsize,
+            num_batches=num_batches,
+        )
 
     def __repr__(self):
         string = "<xyzpy.Runner>\n"
@@ -269,17 +307,19 @@ class Runner(object):
         return string.format(self=self)
 
 
-def label(var_names,
-          fn_args=None,
-          var_dims=None,
-          var_coords=None,
-          constants=None,
-          resources=None,
-          attrs=None,
-          harvester=False,
-          sampler=False,
-          engine=None,
-          **default_runner_settings):
+def label(
+    var_names,
+    fn_args=None,
+    var_dims=None,
+    var_coords=None,
+    constants=None,
+    resources=None,
+    attrs=None,
+    harvester=False,
+    sampler=False,
+    engine=None,
+    **default_runner_settings,
+):
     """Convenient decorator to automatically wrap a function as a
     :class:`~xyzpy.Runner` or :class:`~xyzpy.Harvester`.
 
@@ -339,9 +379,17 @@ def label(var_names,
 
     def wrapper(fn):
 
-        r = Runner(fn, var_names, fn_args=fn_args, var_dims=var_dims,
-                   var_coords=var_coords, constants=constants,
-                   resources=resources, attrs=attrs, **default_runner_settings)
+        r = Runner(
+            fn,
+            var_names,
+            fn_args=fn_args,
+            var_dims=var_dims,
+            var_coords=var_coords,
+            constants=constants,
+            resources=resources,
+            attrs=attrs,
+            **default_runner_settings,
+        )
 
         if harvester:
             if harvester is True:
@@ -365,6 +413,7 @@ def label(var_names,
 # --------------------------------------------------------------------------- #
 #                                 HARVESTER                                   #
 # --------------------------------------------------------------------------- #
+
 
 class Harvester(object):
     """Container class for collecting and aggregating data to disk.
@@ -405,7 +454,7 @@ class Harvester(object):
         self.data_name = data_name
         if engine is None:
             # allow None for default
-            engine = 'h5netcdf'
+            engine = "h5netcdf"
         self.engine = engine
         self.chunks = chunks
         self._full_ds = full_ds
@@ -423,8 +472,7 @@ class Harvester(object):
 
     @property
     def last_ds(self):
-        """Dataset containing the last runs' data.
-        """
+        """Dataset containing the last runs' data."""
         return self.runner.last_ds
 
     def load_full_ds(self, chunks=None, engine=None):
@@ -446,9 +494,9 @@ class Harvester(object):
 
         # Check file exists and can be written to
         if os.access(self.data_name, os.W_OK):
-            self._full_ds = load_ds(self.data_name,
-                                    engine=engine,
-                                    chunks=chunks)
+            self._full_ds = load_ds(
+                self.data_name, engine=engine, chunks=chunks
+            )
 
         # Do nothing if file does not exist at all
         elif not os.path.isfile(self.data_name):  # pragma: no cover
@@ -456,13 +504,15 @@ class Harvester(object):
 
         # Catch read-only errors etc.
         else:
-            raise OSError("The file '{}' exists but cannot be written "
-                          "to".format(self.data_name))
+            raise OSError(
+                "The file '{}' exists but cannot be written to".format(
+                    self.data_name
+                )
+            )
 
     @property
     def full_ds(self):
-        """Dataset containing all saved runs.
-        """
+        """Dataset containing all saved runs."""
         if self._full_ds is None:
             self.load_full_ds()
         return self._full_ds
@@ -482,14 +532,15 @@ class Harvester(object):
         from ..manage import auto_add_extension
 
         if self.data_name is None:
-            raise XYZError("You didn't set a ``data_name`` for this harvester "
-                           "to use for persistent storage.")
+            raise XYZError(
+                "You didn't set a ``data_name`` for this harvester "
+                "to use for persistent storage."
+            )
 
         if engine is None:
             engine = self.engine
 
         if new_full_ds is not None:
-
             if self._full_ds is not None:
                 self._full_ds.close()
 
@@ -502,7 +553,7 @@ class Harvester(object):
         if os.path.exists(file_name):
             if os.path.exists(backup_name):
                 # delete any old backups
-                if engine == 'zarr':
+                if engine == "zarr":
                     shutil.rmtree(backup_name)
                 else:
                     os.remove(backup_name)
@@ -514,7 +565,7 @@ class Harvester(object):
             # restore backup on error
             if os.path.exists(backup_name):
                 if os.path.exists(file_name):
-                    if engine == 'zarr':
+                    if engine == "zarr":
                         shutil.rmtree(file_name)
                     else:
                         os.remove(file_name)
@@ -523,36 +574,34 @@ class Harvester(object):
         else:
             # successful save, delete backup
             if os.path.exists(backup_name):
-                if engine == 'zarr':
+                if engine == "zarr":
                     shutil.rmtree(backup_name)
                 else:
                     os.remove(backup_name)
 
     def delete_ds(self, backup=False):
-        """Delete the on-disk dataset, optionally backing it up first.
-        """
+        """Delete the on-disk dataset, optionally backing it up first."""
         from ..manage import auto_add_extension
 
         file_name = auto_add_extension(self.data_name, self.engine)
 
         if backup:
             import datetime
-            ts = '{:%Y%m%d-%H%M%S}'.format(datetime.datetime.now())
-            shutil.copy(file_name, file_name + '.BAK-{}'.format(ts))
+
+            ts = "{:%Y%m%d-%H%M%S}".format(datetime.datetime.now())
+            shutil.copy(file_name, file_name + ".BAK-{}".format(ts))
 
         if self._full_ds is not None:
             self._full_ds.close()
 
-        if self.engine == 'zarr':
+        if self.engine == "zarr":
             shutil.rmtree(file_name)
         else:
             os.remove(file_name)
 
-    def add_ds(self, new_ds,
-               sync=True,
-               overwrite=None,
-               chunks=None,
-               engine=None):
+    def add_ds(
+        self, new_ds, sync=True, overwrite=None, chunks=None, engine=None
+    ):
         """Merge a new dataset into the in-memory full dataset.
 
         Parameters
@@ -608,7 +657,7 @@ class Harvester(object):
                 new_full_ds = self._full_ds.merge(
                     new_ds,
                     join="outer",
-                    compat='no_conflicts',
+                    compat="no_conflicts",
                 )
 
         # we do this as if the string encoding of the old dataset is a smaller
@@ -642,7 +691,7 @@ class Harvester(object):
         self,
         labels=None,
         *,
-        errors='raise',
+        errors="raise",
         engine=None,
         **labels_kwargs,
     ):
@@ -668,7 +717,7 @@ class Harvester(object):
         overwrite=None,
         chunks=None,
         engine=None,
-        **runner_settings
+        **runner_settings,
     ):
         """Run combos, automatically merging into an on-disk dataset.
 
@@ -728,12 +777,16 @@ class Harvester(object):
             engine=engine,
         )
 
-    def harvest_cases(self, cases, *,
-                      sync=True,
-                      overwrite=None,
-                      chunks=None,
-                      engine=None,
-                      **runner_settings):
+    def harvest_cases(
+        self,
+        cases,
+        *,
+        sync=True,
+        overwrite=None,
+        chunks=None,
+        engine=None,
+        **runner_settings,
+    ):
         """Run cases, automatically merging into an on-disk dataset.
 
         Parameters
@@ -761,15 +814,18 @@ class Harvester(object):
             Supplied to :func:`~xyzpy.case_runner`.
         """
         ds = self.runner.run_cases(cases, **runner_settings)
-        self.add_ds(ds, sync=sync, overwrite=overwrite, chunks=chunks,
-                    engine=engine)
+        self.add_ds(
+            ds, sync=sync, overwrite=overwrite, chunks=chunks, engine=engine
+        )
 
-    def Crop(self,
-             name=None,
-             parent_dir=None,
-             save_fn=None,
-             batchsize=None,
-             num_batches=None):
+    def Crop(
+        self,
+        name=None,
+        parent_dir=None,
+        save_fn=None,
+        batchsize=None,
+        num_batches=None,
+    ):
         """Return a Crop instance with this Harvester, from which `fn`
         will be set, and then combos can be sown, grown, and reaped into the
         ``Harvester.full_ds``. See :class:`~xyzpy.Crop`.
@@ -778,15 +834,22 @@ class Harvester(object):
         -------
         Crop
         """
-        return cropping.Crop(farmer=self, name=name, parent_dir=parent_dir,
-                             save_fn=save_fn, batchsize=batchsize,
-                             num_batches=num_batches)
+        return cropping.Crop(
+            farmer=self,
+            name=name,
+            parent_dir=parent_dir,
+            save_fn=save_fn,
+            batchsize=batchsize,
+            num_batches=num_batches,
+        )
 
     def __repr__(self):
-        string = ("<xyzpy.Harvester>\n"
-                  "Runner: {self.runner}"
-                  "Sync file -->\n"
-                  "    {self.data_name}    [{self.engine}]")
+        string = (
+            "<xyzpy.Harvester>\n"
+            "Runner: {self.runner}"
+            "Sync file -->\n"
+            "    {self.data_name}    [{self.engine}]"
+        )
 
         return string.format(self=self)
 
@@ -817,17 +880,24 @@ class Sampler:
         Dataframe describing the data harvested on the previous run.
     """
 
-    def __init__(self, runner, data_name=None, default_combos=None,
-                 full_df=None, engine='pickle'):
+    def __init__(
+        self,
+        runner,
+        data_name=None,
+        default_combos=None,
+        full_df=None,
+        engine="pickle",
+    ):
         self.runner = runner
         self.data_name = data_name
-        self.default_combos = ({} if default_combos is None
-                               else dict(default_combos))
+        self.default_combos = (
+            {} if default_combos is None else dict(default_combos)
+        )
         self._full_df = full_df
         self._last_df = None
         if engine is None:
             # allow None for default
-            engine = 'pickle'
+            engine = "pickle"
         self.engine = engine
 
     @property
@@ -839,8 +909,7 @@ class Sampler:
         self.runner.fn = fn
 
     def load_full_df(self, engine=None):
-        """Load the on-disk full dataframe into memory.
-        """
+        """Load the on-disk full dataframe into memory."""
         if engine is None:
             engine = self.engine
 
@@ -854,21 +923,22 @@ class Sampler:
 
         # Catch read-only errors etc.
         else:
-            raise OSError("The file '{}' exists but cannot be written "
-                          "to".format(self.data_name))
+            raise OSError(
+                "The file '{}' exists but cannot be written to".format(
+                    self.data_name
+                )
+            )
 
     @property
     def full_df(self):
-        """The dataframe describing all data harvested so far.
-        """
+        """The dataframe describing all data harvested so far."""
         if self._full_df is None:
             self.load_full_df()
         return self._full_df
 
     @property
     def last_df(self):
-        """The dataframe describing the last set of data harvested.
-        """
+        """The dataframe describing the last set of data harvested."""
         return self._last_df
 
     def save_full_df(self, new_full_df=None, engine=None):
@@ -893,12 +963,12 @@ class Sampler:
         save_df(self._full_df, self.data_name, engine=engine)
 
     def delete_df(self, backup=False):
-        """Delete the on-disk dataframe, optionally backing it up first.
-        """
+        """Delete the on-disk dataframe, optionally backing it up first."""
         if backup:
             import datetime
-            ts = '{:%Y%m%d-%H%M%S}'.format(datetime.datetime.now())
-            shutil.copy(self.data_name, self.data_name + '.BAK-{}'.format(ts))
+
+            ts = "{:%Y%m%d-%H%M%S}".format(datetime.datetime.now())
+            shutil.copy(self.data_name, self.data_name + ".BAK-{}".format(ts))
 
         os.remove(self.data_name)
 
@@ -928,8 +998,9 @@ class Sampler:
             #   'full_df' and 'last_df'.
             new_full_df = new_df.copy(deep=True)
         else:
-            new_full_df = pd.concat([self._full_df, new_df],
-                                    ignore_index=True, sort=True)
+            new_full_df = pd.concat(
+                [self._full_df, new_df], ignore_index=True, sort=True
+            )
 
         if sync_with_disk:
             self.save_full_df(new_full_df, engine=engine)
@@ -937,15 +1008,15 @@ class Sampler:
             self._full_df = new_full_df
 
     def gen_cases_fnargs(self, n, combos=None):
-        """
-        """
+        """ """
         combos = {} if combos is None else dict(combos)
         combos = {**self.default_combos, **combos}
         cases = tuple(
             tuple(
                 v() if callable(v) else np.random.choice(v)
                 for v in combos.values()
-            ) for _ in range(n)
+            )
+            for _ in range(n)
         )
         return tuple(combos.keys()), cases
 
@@ -975,8 +1046,9 @@ class Sampler:
             :func:`~xyzpy.combo_runner`. This includes ``parallel=True`` etc.
         """
         fn_args, cases = self.gen_cases_fnargs(n, combos)
-        last_df = self.runner.run_cases(cases, fn_args=fn_args,
-                                        to_df=True, **case_runner_settings)
+        last_df = self.runner.run_cases(
+            cases, fn_args=fn_args, to_df=True, **case_runner_settings
+        )
         self._last_df = last_df
         self.add_df(last_df, engine=engine)
         return last_df
@@ -997,14 +1069,21 @@ class Sampler:
         -------
         Crop
         """
-        return cropping.Crop(farmer=self, name=name, parent_dir=parent_dir,
-                             save_fn=save_fn, batchsize=batchsize,
-                             num_batches=num_batches)
+        return cropping.Crop(
+            farmer=self,
+            name=name,
+            parent_dir=parent_dir,
+            save_fn=save_fn,
+            batchsize=batchsize,
+            num_batches=num_batches,
+        )
 
     def __repr__(self):
-        string = ("<xyzpy.Sampler>\n"
-                  "Runner: {self.runner}"
-                  "Sync file -->\n"
-                  "    {self.data_name}    [{self.engine}]")
+        string = (
+            "<xyzpy.Sampler>\n"
+            "Runner: {self.runner}"
+            "Sync file -->\n"
+            "    {self.data_name}    [{self.engine}]"
+        )
 
         return string.format(self=self)

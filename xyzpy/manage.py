@@ -1,21 +1,19 @@
-""" Manage datasets --- loading, saving, merging etc. """
+"""Manage datasets --- loading, saving, merging etc."""
 
 # TODO: add singlet dimensions (for all or given vars) ---------------------- #
 
 import os
 from glob import glob
 
+import joblib
 import numpy as np
 import xarray as xr
-import joblib
 
-
-_DEFAULT_FN_CACHE_PATH = '__xyz_cache__'
+_DEFAULT_FN_CACHE_PATH = "__xyz_cache__"
 
 
 def cache_to_disk(fn=None, *, cachedir=_DEFAULT_FN_CACHE_PATH, **kwargs):
-    """Cache this function to disk, using joblib.
-    """
+    """Cache this function to disk, using joblib."""
     mem = joblib.Memory(cachedir, verbose=0, **kwargs)
 
     # bare decorator
@@ -24,16 +22,18 @@ def cache_to_disk(fn=None, *, cachedir=_DEFAULT_FN_CACHE_PATH, **kwargs):
 
     # decorator called with kwargs
     else:
+
         def cache_to_disk_decorator(fn):
             return mem.cache(fn)
+
         return cache_to_disk_decorator
 
 
 _engine_extensions = {
-    'h5netcdf': '.h5',
-    'netcdf4': '.nc',
-    'joblib': '.dmp',
-    'zarr': '.zarr',
+    "h5netcdf": ".h5",
+    "netcdf4": ".nc",
+    "joblib": ".dmp",
+    "zarr": ".zarr",
 }
 
 
@@ -66,7 +66,7 @@ def save_ds(ds, file_name, engine="h5netcdf", **kwargs):
     file_name = auto_add_extension(file_name, engine)
 
     # Parse out 'bad' netcdf types (only attributes -> values not so important)
-    if engine not in {'joblib', 'zarr'}:
+    if engine not in {"joblib", "zarr"}:
         for attr, val in ds.attrs.items():
             if callable(val):
                 ds.attrs[attr] = str(val)
@@ -77,9 +77,9 @@ def save_ds(ds, file_name, engine="h5netcdf", **kwargs):
             if val is False:
                 ds.attrs[attr] = "False"
 
-    if engine == 'joblib':
+    if engine == "joblib":
         joblib.dump(ds, file_name, **kwargs)
-    elif engine == 'zarr':
+    elif engine == "zarr":
         ds.to_zarr(file_name, **kwargs)
     else:
         # officially: complex data dtypes are not valid for netcdf
@@ -88,12 +88,14 @@ def save_ds(ds, file_name, engine="h5netcdf", **kwargs):
         ds.to_netcdf(file_name, engine=engine, **kwargs)
 
 
-def load_ds(file_name,
-            engine="h5netcdf",
-            load_to_mem=None,
-            create_new=False,
-            chunks=None,
-            **kwargs):
+def load_ds(
+    file_name,
+    engine="h5netcdf",
+    load_to_mem=None,
+    create_new=False,
+    chunks=None,
+    **kwargs,
+):
     """Loads a xarray dataset. Basically ``xarray.open_dataset`` with some
     different defaults and convenient behaviour.
 
@@ -123,7 +125,7 @@ def load_ds(file_name,
     if not os.path.exists(file_name) and create_new:
         return xr.Dataset()
 
-    if engine == 'joblib':
+    if engine == "joblib":
         return joblib.load(file_name, **kwargs)
 
     if (load_to_mem is None) and (chunks is None):
@@ -134,7 +136,7 @@ def load_ds(file_name,
         else:
             load_to_mem = False
 
-    if engine == 'zarr':
+    if engine == "zarr":
         ds = xr.open_zarr(file_name, chunks=chunks, **kwargs)
 
     else:
@@ -143,8 +145,8 @@ def load_ds(file_name,
         try:
             ds = xr.open_dataset(file_name, **opts)
         except AttributeError as e1:
-            if "object has no attribute" in str(e1) and engine == 'h5netcdf':
-                opts['engine'] = 'netcdf4'
+            if "object has no attribute" in str(e1) and engine == "h5netcdf":
+                opts["engine"] = "netcdf4"
                 ds = xr.open_dataset(file_name, **opts)
             else:
                 raise e1
@@ -196,11 +198,10 @@ def save_merge_ds(ds, fname, overwrite=None, **kwargs):
 
 
 def trimna(obj):
-    """Drop values across all dimensions for which all values are NaN.
-    """
+    """Drop values across all dimensions for which all values are NaN."""
     trimmed_obj = obj.copy()
     for d in obj.dims:
-        trimmed_obj = trimmed_obj.dropna(d, how='all')
+        trimmed_obj = trimmed_obj.dropna(d, how="all")
     return trimmed_obj
 
 
@@ -216,12 +217,11 @@ def sort_dims(ds):
 
 
 def post_fix(ds, postfix):
-    """Add ``postfix`` to the name of every data variable in ``ds``.
-    """
-    return ds.rename({old: old + '_' + postfix for old in ds.data_vars})
+    """Add ``postfix`` to the name of every data variable in ``ds``."""
+    return ds.rename({old: old + "_" + postfix for old in ds.data_vars})
 
 
-def check_runs(obj, dim='run', var=None, sel=()):
+def check_runs(obj, dim="run", var=None, sel=()):
     """Print out information about the range and any missing values for an
     integer dimension.
 
@@ -243,7 +243,7 @@ def check_runs(obj, dim='run', var=None, sel=()):
             obj = obj[var]
 
         obj = trimna(obj)
-        obj = obj.dropna(dim, how='all')
+        obj = obj.dropna(dim, how="all")
         obj = obj[dim].values
     except KeyError:
         print("* NO DATA *")
@@ -253,7 +253,7 @@ def check_runs(obj, dim='run', var=None, sel=()):
         print("* NO DATA *")
         return
 
-    if 'int' not in str(obj.dtype):
+    if "int" not in str(obj.dtype):
         raise TypeError("check_runs can only check integer dimesions.")
 
     xmin, xmax = obj.min(), obj.max() + 1
@@ -279,8 +279,8 @@ def auto_xyz_ds(x, y_z=None):
     """
     # assume non-coordinated - e.g. for auto_histogram
     if y_z is None:
-        dims = ['yzwvu'[i] for i in range(x.ndim)]
-        return xr.Dataset(data_vars={'x': (dims, x)})
+        dims = ["yzwvu"[i] for i in range(x.ndim)]
+        return xr.Dataset(data_vars={"x": (dims, x)})
 
     # Infer dimensions to coords mapping
     y_z = np.array(np.squeeze(y_z), ndmin=2)
@@ -291,16 +291,20 @@ def auto_xyz_ds(x, y_z=None):
 
     # Turn into dataset
     if x.ndim == 2:
-        ds = xr.Dataset(data_vars={'y': (['z', '_x'], y_z),
-                                   'x': (['z', '_x'], x)})
+        ds = xr.Dataset(
+            data_vars={"y": (["z", "_x"], y_z), "x": (["z", "_x"], x)}
+        )
     else:
-        ds = xr.Dataset(coords={'x': x, 'z': np.arange(n_y)},
-                        data_vars={'y': (['z', 'x'], y_z)})
+        ds = xr.Dataset(
+            coords={"x": x, "z": np.arange(n_y)},
+            data_vars={"y": (["z", "x"], y_z)},
+        )
     return ds
 
 
-def merge_sync_conflict_datasets(base_name, engine='h5netcdf',
-                                 combine_first=False):
+def merge_sync_conflict_datasets(
+    base_name, engine="h5netcdf", combine_first=False
+):
     """Glob files based on `base_name`, merge them, save this new dataset if
     it contains new info, then clean up the conflicts.
 
@@ -313,7 +317,7 @@ def merge_sync_conflict_datasets(base_name, engine='h5netcdf',
     """
     fnames = glob(base_name)
     if len(fnames) < 2:
-        print('Nothing to do - need multiple files to merge.')
+        print("Nothing to do - need multiple files to merge.")
         return
 
     # make sure first filename is the shortest -> assumed original
@@ -349,22 +353,21 @@ def merge_sync_conflict_datasets(base_name, engine='h5netcdf',
         os.remove(fname)
 
 
-def save_df(df, name, engine='pickle', key='df', **kwargs):
-    """Save a dataframe to disk.
-    """
+def save_df(df, name, engine="pickle", key="df", **kwargs):
+    """Save a dataframe to disk."""
     meth = "to_{}".format(engine)
-    if engine == 'hdf':
-        kwargs['key'] = key
-    if engine == 'csv':
-        kwargs.setdefault('index', False)
+    if engine == "hdf":
+        kwargs["key"] = key
+    if engine == "csv":
+        kwargs.setdefault("index", False)
     getattr(df, meth)(name, **kwargs)
 
 
-def load_df(name, engine='pickle', key='df', **kwargs):
-    """Load a dataframe from disk.
-    """
+def load_df(name, engine="pickle", key="df", **kwargs):
+    """Load a dataframe from disk."""
     import pandas as pd
+
     func = "read_{}".format(engine)
-    if engine == 'hdf':
-        kwargs['key'] = key
+    if engine == "hdf":
+        kwargs["key"] = key
     return getattr(pd, func)(name)

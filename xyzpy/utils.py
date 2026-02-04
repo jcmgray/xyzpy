@@ -1,14 +1,14 @@
 """Utility functions."""
 
 import functools
-import operator
 import itertools
-import time
+import operator
 import sys
+import time
 from collections.abc import Iterable
 
-import tqdm
 import numpy as np
+import tqdm
 
 
 class XYZError(Exception):
@@ -117,8 +117,8 @@ def getsizeof(obj):
     https://stackoverflow.com/a/30316760/5640201
     """
     import sys
-    from types import ModuleType, FunctionType
     from gc import get_referents
+    from types import FunctionType, ModuleType
 
     # Custom objects know their class.
     # Function objects seem to know way too much, including modules.
@@ -774,8 +774,7 @@ class MemoryMonitor:
             time.sleep(self.interval)
 
     def start(self):
-        """Start the memory monitoring thread.
-        """
+        """Start the memory monitoring thread."""
         import threading
 
         self.is_running = True
@@ -784,8 +783,7 @@ class MemoryMonitor:
         self.monitor_thread.start()
 
     def stop(self):
-        """Stop the memory monitoring thread.
-        """
+        """Stop the memory monitoring thread."""
         self.is_running = False
         if self.monitor_thread:
             self.monitor_thread.join()
@@ -849,9 +847,9 @@ def report_memory():
 
         # Return memory report
         return (
-            f"Process memory: {process_memory/1e9:>10.2f}GB / "
-            f"Memory used: {used_memory/1e9:>10.2f}GB / "
-            f"Total memory: {total_memory/1e9:>10.2f}GB "
+            f"Process memory: {process_memory / 1e9:>10.2f}GB / "
+            f"Memory used: {used_memory / 1e9:>10.2f}GB / "
+            f"Total memory: {total_memory / 1e9:>10.2f}GB "
         )
     except Exception as e:
         return f"failed to read memory: {e}"
@@ -859,8 +857,9 @@ def report_memory():
 
 def report_memory_gpu():
     try:
-        import psutil
         import subprocess
+
+        import psutil
 
         pid = psutil.Process().pid
 
@@ -910,9 +909,9 @@ def report_memory_gpu():
         gpu_memory_used, gpu_memory_total = map(int, stdout.split(", "))
 
         return (
-            f"GPU Process memory: {gpu_process_memory/1e3:>6.2f}GB / "
-            f"GPU Memory used: {gpu_memory_used/1e3:>6.2f}GB / "
-            f"GPU Total memory: {gpu_memory_total/1e3:>6.2f}GB "
+            f"GPU Process memory: {gpu_process_memory / 1e3:>6.2f}GB / "
+            f"GPU Memory used: {gpu_memory_used / 1e3:>6.2f}GB / "
+            f"GPU Total memory: {gpu_memory_total / 1e3:>6.2f}GB "
         )
     except Exception as e:
         return f"failed to read gpu memory: {e}"

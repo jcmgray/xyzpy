@@ -2,18 +2,16 @@
 
 import inspect
 
-from ..utils import isiterable, XYZError
+from ..utils import XYZError, isiterable
 
 
 def _str_2_tuple(x):
-    """Ensure `x` is at least a 1-tuple of str.
-    """
+    """Ensure `x` is at least a 1-tuple of str."""
     return (x,) if isinstance(x, str) else tuple(x)
 
 
 def dictify(x):
-    """Ensure `x` is a dict.
-    """
+    """Ensure `x` is a dict."""
     if isinstance(x, dict):
         return x
     elif x:
@@ -43,8 +41,7 @@ def check_for_duplicates(arg, values):
 
 
 def parse_combos(combos):
-    """Turn dicts and single tuples into proper form for combo runners.
-    """
+    """Turn dicts and single tuples into proper form for combo runners."""
     if not combos:
         return ()
     if isinstance(combos, dict):
@@ -53,8 +50,7 @@ def parse_combos(combos):
         combos = (combos,)
 
     combos = tuple(
-        (arg, list(vals) if isiterable(vals) else vals)
-        for arg, vals in combos
+        (arg, list(vals) if isiterable(vals) else vals) for arg, vals in combos
     )
 
     for arg, values in combos:
@@ -64,19 +60,19 @@ def parse_combos(combos):
 
 
 def parse_combo_results(results, var_names):
-    """
-    """
-    if var_names is not None and (isinstance(var_names, str) or
-                                  len(var_names) == 1):
+    """ """
+    if var_names is not None and (
+        isinstance(var_names, str) or len(var_names) == 1
+    ):
         results = (results,)
     return results
 
 
 # case_runner --------------------------------------------------------------- #
 
+
 def parse_cases(cases, fn_args=None):
-    """
-    """
+    """ """
     if not cases:
         return ()
 
@@ -90,8 +86,10 @@ def parse_cases(cases, fn_args=None):
         return cases
 
     if fn_args is None:
-        raise TypeError("`fn_args` must be provided when `cases` is not "
-                        "provided as a iterable of `dict`.")
+        raise TypeError(
+            "`fn_args` must be provided when `cases` is not "
+            "provided as a iterable of `dict`."
+        )
 
     # e.g. if fn_args = ('a',) and cases = (1, 10, 100)
     #     we want cases --> ((1,), (10,), (100,))
@@ -103,8 +101,7 @@ def parse_cases(cases, fn_args=None):
 
 
 def parse_case_results(results, var_names):
-    """
-    """
+    """ """
     if isinstance(var_names, str) or len(var_names) == 1:
         results = tuple((r,) for r in results)
     return results
@@ -112,12 +109,16 @@ def parse_case_results(results, var_names):
 
 # common variable description ----------------------------------------------- #
 
+
 def parse_var_names(var_names):
-    """
-    """
-    return ((None,) if var_names is None else
-            (var_names,) if isinstance(var_names, str) else
-            tuple(var_names))
+    """ """
+    return (
+        (None,)
+        if var_names is None
+        else (var_names,)
+        if isinstance(var_names, str)
+        else tuple(var_names)
+    )
 
 
 def parse_var_dims(var_dims, var_names):
@@ -146,8 +147,10 @@ def parse_var_dims(var_dims, var_names):
     """
     if var_names is None:
         if var_dims is not None:
-            raise ValueError("Cannot specify variable dimensions if using"
-                             "automatic dataset output (var_names=None).")
+            raise ValueError(
+                "Cannot specify variable dimensions if using"
+                "automatic dataset output (var_names=None)."
+            )
         return dict()
 
     new_var_dims = {k: () for k in var_names}  # default to empty tuple
@@ -157,18 +160,23 @@ def parse_var_dims(var_dims, var_names):
     # check if single output with single dim
     elif isinstance(var_dims, str):
         if len(var_names) != 1:
-            raise ValueError("When `var_dims` is specified as a single "
-                             "string, there must be a single output, for "
-                             "which it is the single dimension.")
+            raise ValueError(
+                "When `var_dims` is specified as a single "
+                "string, there must be a single output, for "
+                "which it is the single dimension."
+            )
         var_dims = {var_names[0]: (var_dims,)}
     # check for direct correspondence to var_names
-    elif (isinstance(var_dims, (tuple, list)) and
-          any(isinstance(x, str) or x[0] not in var_names for x in var_dims)):
+    elif isinstance(var_dims, (tuple, list)) and any(
+        isinstance(x, str) or x[0] not in var_names for x in var_dims
+    ):
         if len(var_dims) != len(var_names):
-            raise ValueError("`var_dims` cannot be interpreted as a "
-                             "mapping of `var_names` to their dimensions "
-                             "and is the wrong length to be in one to "
-                             "one correspondence.")
+            raise ValueError(
+                "`var_dims` cannot be interpreted as a "
+                "mapping of `var_names` to their dimensions "
+                "and is the wrong length to be in one to "
+                "one correspondence."
+            )
         var_dims = dict(zip(var_names, var_dims))
     # assume dict-like
     else:
@@ -194,8 +202,10 @@ def parse_var_dims(var_dims, var_names):
                     new_var_dims[sub_k] = v
 
     except KeyError:
-        raise ValueError("An unexpected output name was specified in the "
-                         "output dimensions mapping.")
+        raise ValueError(
+            "An unexpected output name was specified in the "
+            "output dimensions mapping."
+        )
 
     return new_var_dims
 

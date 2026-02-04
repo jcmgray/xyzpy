@@ -1,22 +1,22 @@
-"""Functions for systematically evaluating a function over specific cases.
-"""
+"""Functions for systematically evaluating a function over specific cases."""
+
 import functools
 import itertools
 
 from ..utils import progbar
-from .prepare import (
-    parse_fn_args,
-    parse_cases,
-    parse_combos,
-    parse_constants,
-    parse_resources,
-    parse_var_names,
-    parse_var_dims,
-    parse_var_coords,
-)
 from .combo_runner import (
     combo_runner_core,
     combo_runner_to_ds,
+)
+from .prepare import (
+    parse_cases,
+    parse_combos,
+    parse_constants,
+    parse_fn_args,
+    parse_resources,
+    parse_var_coords,
+    parse_var_dims,
+    parse_var_names,
 )
 
 
@@ -214,7 +214,7 @@ case_runner_to_df = functools.partial(case_runner_to_ds, to_df=True)
 # --------------------------------------------------------------------------- #
 
 
-def is_case_missing(ds, setting, method='isnull'):
+def is_case_missing(ds, setting, method="isnull"):
     """Does the dataset or dataarray ``ds`` not contain any non-null data for
     location ``setting``?
 
@@ -237,12 +237,12 @@ def is_case_missing(ds, setting, method='isnull'):
     try:
         sds = ds.sel(setting)
 
-        if method == 'isnull':
+        if method == "isnull":
             sds = sds.isnull()
-        elif method == 'isfinite':
+        elif method == "isfinite":
             sds = ~np.isfinite(sds)
         else:
-            raise ValueError('Unknown method: {}'.format(method))
+            raise ValueError("Unknown method: {}".format(method))
 
         nds = sds.all()
     except KeyError:
@@ -260,10 +260,7 @@ def is_case_missing(ds, setting, method='isnull'):
 
 
 def find_missing_cases(
-    ds,
-    ignore_dims=None,
-    method='isnull',
-    show_progbar=False
+    ds, ignore_dims=None, method="isnull", show_progbar=False
 ):
     """Find all cases in a dataset with missing data.
 
@@ -282,8 +279,13 @@ def find_missing_cases(
         Function arguments and missing cases.
     """
     # Parse ignore_dims
-    ignore_dims = ({ignore_dims} if isinstance(ignore_dims, str) else
-                   set(ignore_dims) if ignore_dims else set())
+    ignore_dims = (
+        {ignore_dims}
+        if isinstance(ignore_dims, str)
+        else set(ignore_dims)
+        if ignore_dims
+        else set()
+    )
 
     # Find all configurations
     fn_args = tuple(coo for coo in ds.dims if coo not in ignore_dims)
@@ -299,7 +301,7 @@ def find_missing_cases(
     return fn_args, tuple(gen_missing_list())
 
 
-def parse_into_cases(combos=None, cases=None, ds=None, method='isnull'):
+def parse_into_cases(combos=None, cases=None, ds=None, method="isnull"):
     """Convert maybe ``combos`` and maybe ``cases`` to a single list of
     ``cases`` only, also optionally filtering based on whether any data at each
     location is already present in Dataset or DataArray ``ds``.

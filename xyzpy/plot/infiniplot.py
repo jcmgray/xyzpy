@@ -111,6 +111,7 @@ def mod_sat(c, mod):
 
 def auto_colors(N):
     import math
+
     from matplotlib.colors import LinearSegmentedColormap
 
     if N < len(_COLORS_DEFAULT):
@@ -168,6 +169,7 @@ def get_default_cmap(i, vdiff=0.5, sdiff=0.25):
 
 def to_colormap(c, **autohue_opts):
     import numbers
+
     import matplotlib as mpl
     from matplotlib import pyplot as plt
 
@@ -352,8 +354,8 @@ class Infiniplotter:
         z=None,
         **kwargs,
     ):
-        from matplotlib import pyplot as plt
         import numpy as np
+        from matplotlib import pyplot as plt
 
         self.x = x
         self.y = y

@@ -11,19 +11,18 @@ import numpy as np
 
 from ..manage import auto_xyz_ds
 from ..utils import autocorrect_kwargs
+from .color import xyz_colormaps
 from .core import (
-    Plotter,
+    PLOTTER_DEFAULTS,
+    AbstractHeatMap,
+    AbstractHistogram,
     AbstractLinePlot,
     AbstractScatter,
-    AbstractHistogram,
-    AbstractHeatMap,
-    PLOTTER_DEFAULTS,
+    Plotter,
     calc_row_col_datasets,
     intercept_call_arg,
     prettify,
 )
-from .color import xyz_colormaps
-
 
 # ----------------- Main lineplot interface for matplotlib ------------------ #
 
@@ -744,7 +743,7 @@ class Histogram(PlotterMatplotlib, AbstractHistogram):
         super().__init__(ds, x, None, z=z, **kwargs)
 
     def plot_histogram(self):
-        from matplotlib.patches import Rectangle, Polygon
+        from matplotlib.patches import Polygon, Rectangle
 
         def gen_ind_plots():
             for data in self._gen_xy():
@@ -981,6 +980,7 @@ def show_and_close(fn):
     @functools.wraps(fn)
     def wrapped(*args, show_and_close=True, **kwargs):
         import warnings
+
         import matplotlib.pyplot as plt
 
         # remove annoying regular warning about all-nan slices
@@ -1775,7 +1775,7 @@ def visualize_tensor(
             compass_labels = [""] * len(angles)
 
         for i, phi in enumerate(angles):
-            modifier = (1 + skew_scale_factor * np.cos(4 * angles[i]))
+            modifier = 1 + skew_scale_factor * np.cos(4 * angles[i])
             dx = np.sin(phi) * group_rank[i] * modifier
             dy = -np.cos(phi) * group_rank[i] * modifier
             cax.arrow(0, 0, dx, dy, **compass_opts)
@@ -1797,6 +1797,142 @@ def visualize_tensor(
             complexobj=np.iscomplexobj(array),
             max_mag=max_mag,
             legend_inside=max_projections > 2,
+            legend_loc=legend_loc,
+            legend_size=legend_size,
+            legend_bounds=legend_bounds,
+            legend_resolution=legend_resolution,
+        )
+
+    return fig, ax
+
+
+def _draw_tensor_tree_branch(
+    lines,
+    widths,
+    colors,
+    array,
+    x=0.0,
+    y=0.0,
+    phi_center=np.pi / 2,
+    phi_range=np.pi,
+    level=1,
+    z=None,
+    mag=None,
+    mag_weight=None,
+    linewidth=10,
+):
+    if not array.shape:
+        # stop drawing
+        return
+
+    d, *subshape = array.shape
+    phis = np.linspace(-0.5, 0.5, 2 * d + 1)[1:-1:2]
+
+    for i in range(d):
+        subarray = array[i]
+        subphi = phi_center + phi_range * phis[i]
+
+        subx = -level * np.cos(subphi)
+        suby = level * np.sin(subphi)
+
+        subz = z[i]
+        submag = mag[i]
+
+        _draw_tensor_tree_branch(
+            lines,
+            widths,
+            colors,
+            subarray,
+            x=subx,
+            y=suby,
+            phi_center=subphi,
+            phi_range=(phi_range / d),
+            level=level + 1,
+            z=subz,
+            mag=submag,
+            mag_weight=mag_weight,
+            linewidth=linewidth,
+        )
+
+        width = linewidth * (np.sum(submag) / mag_weight) ** 0.5
+
+        if not subshape:
+            color = subz
+        else:
+            color = np.mean(subz, axis=tuple(range(subz.ndim - 1)))
+
+        lines.append([(x, y), (subx, suby)])
+        widths.append(width)
+        colors.append(color)
+
+
+def visualize_tensor_tree(
+    array,
+    phi_center=np.pi / 2,
+    phi_range=np.pi,
+    linewidth=10,
+    legend=True,
+    legend_loc="top right",
+    legend_size=0.15,
+    legend_bounds=None,
+    legend_resolution=3,
+    facecolor=None,
+    rasterize=4096,
+    rasterize_dpi=300,
+    figsize=(5, 5),
+    ax=None,
+):
+    from matplotlib.collections import LineCollection
+
+    z, mag, max_mag = to_colors(
+        array,
+        magscale=0.5,
+        alpha_map=False,
+    )
+    mag_weight = np.sum(mag)
+
+    lines = []
+    widths = []
+    colors = []
+
+    _draw_tensor_tree_branch(
+        lines=lines,
+        widths=widths,
+        colors=colors,
+        array=array,
+        z=z,
+        mag=mag,
+        mag_weight=mag_weight,
+        phi_center=phi_center,
+        phi_range=phi_range,
+        linewidth=linewidth,
+    )
+
+    fig, ax = setup_fig_ax(
+        facecolor=facecolor,
+        rasterize=rasterize,
+        rasterize_dpi=rasterize_dpi,
+        figsize=figsize,
+        ax=ax,
+    )
+
+    lc = LineCollection(
+        lines,
+        linewidths=widths,
+        colors=colors,
+        zorder=-1,
+        capstyle="round",
+    )
+
+    ax.add_collection(lc)
+    ax.autoscale()
+
+    if legend:
+        add_visualize_legend(
+            ax=ax,
+            complexobj=np.iscomplexobj(array),
+            max_mag=max_mag,
+            legend_inside=True,
             legend_loc=legend_loc,
             legend_size=legend_size,
             legend_bounds=legend_bounds,

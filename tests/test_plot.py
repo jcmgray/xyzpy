@@ -1,11 +1,10 @@
-from pytest import fixture, mark
+import matplotlib
 import numpy as np
 import xarray as xr
-import matplotlib
+from pytest import fixture, mark
 
 import xyzpy as xyz
 from xyzpy.plot.color import convert_colors
-
 
 matplotlib.use("Template")
 

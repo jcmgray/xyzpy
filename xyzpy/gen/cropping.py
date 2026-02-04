@@ -665,7 +665,7 @@ class Crop(object):
         more robust memory wise, and allows controlling the number of threads
         used.
         """
-        from subprocess import Popen, PIPE
+        from subprocess import PIPE, Popen
 
         if batch_ids is None:
             batch_ids = self.missing_results()
@@ -716,9 +716,11 @@ class Crop(object):
                 # still work to do!
                 while (
                     # there are batches still
-                    bool(queue) and
+                    bool(queue)
+                    and
                     # and there are free workers
-                    (len(processing) < num_workers) and
+                    (len(processing) < num_workers)
+                    and
                     # and there are free affinities if using them
                     (affinities is None or bool(free_affinities))
                 ):
@@ -794,7 +796,7 @@ class Crop(object):
         debugging=False,
         verbosity=1,
         verbosity_grow=0,
-        **combo_runner_opts
+        **combo_runner_opts,
     ):
         """Grow specific batch numbers using this process.
 
@@ -827,7 +829,7 @@ class Crop(object):
                 raise_errors=raise_errors,
                 verbosity=verbosity,
                 verbosity_grow=verbosity_grow,
-                **combo_runner_opts
+                **combo_runner_opts,
             )
         else:
             combo_runner_core(
@@ -1592,9 +1594,7 @@ _BASE = (
     "    )\n"
 )
 
-_CLUSTER_SGE_GROW_ALL_SCRIPT = (
-    "    crop.grow($SGE_TASK_ID, **grow_kwargs)\n"
-)
+_CLUSTER_SGE_GROW_ALL_SCRIPT = "    crop.grow($SGE_TASK_ID, **grow_kwargs)\n"
 
 _CLUSTER_PBS_GROW_ALL_SCRIPT = (
     "    crop.grow($PBS_ARRAY_INDEX, **grow_kwargs)\n"
@@ -1626,8 +1626,7 @@ _BASE_CLUSTER_GROW_SINGLE = (
 )
 
 _BASE_CLUSTER_SCRIPT_END = (
-    "EOM\n"
-    "{launcher} -c \"$SCRIPT\"\necho 'XYZPY script finished'\n"
+    "EOM\n{launcher} -c \"$SCRIPT\"\necho 'XYZPY script finished'\n"
 )
 
 

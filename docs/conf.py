@@ -90,8 +90,9 @@ def linkcode_resolve(domain, info):
     """
     Determine the URL corresponding to Python object
     """
-    import xyzpy
     import inspect
+
+    import xyzpy
 
     if domain != "py":
         return None
@@ -131,8 +132,7 @@ def linkcode_resolve(domain, info):
 
     if "+" in xyzpy.__version__:
         return (
-            f"https://github.com/jcmgray/xyzpy/blob/"
-            f"HEAD/xyzpy/{fn}{linespec}"
+            f"https://github.com/jcmgray/xyzpy/blob/HEAD/xyzpy/{fn}{linespec}"
         )
     else:
         return (
@@ -140,9 +140,10 @@ def linkcode_resolve(domain, info):
             f"v{xyzpy.__version__}/xyzpy/{fn}{linespec}"
         )
 
+
 extlinks = {
-    'issue': ('https://github.com/jcmgray/xyzpy/issues/%s', 'GH %s'),
-    'pull': ('https://github.com/jcmgray/xyzpy/pull/%s', 'PR %s'),
+    "issue": ("https://github.com/jcmgray/xyzpy/issues/%s", "GH %s"),
+    "pull": ("https://github.com/jcmgray/xyzpy/pull/%s", "PR %s"),
 }
 intersphinx_mapping = {
     "python": ("https://docs.python.org/3/", None),

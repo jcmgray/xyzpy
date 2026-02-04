@@ -61,7 +61,7 @@ def main():
         const=True,
         default=False,
         type=parse_bool_flag,
-        help="Raise batch errors."
+        help="Raise batch errors.",
     )
     parser.add_argument(
         "--num-threads",

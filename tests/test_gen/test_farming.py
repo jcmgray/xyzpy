@@ -1,17 +1,16 @@
-import os
 import importlib.util
+import os
 import tempfile
 import time
 from concurrent.futures import ThreadPoolExecutor
 
-import pytest
 import numpy as np
+import pytest
 import xarray as xr
 
-from xyzpy.manage import load_ds, load_df
-from xyzpy.gen.farming import Runner, Harvester, Sampler, label
 from xyzpy.gen.cropping import grow
-
+from xyzpy.gen.farming import Harvester, Runner, Sampler, label
+from xyzpy.manage import load_df, load_ds
 
 found_h5netcdf = importlib.util.find_spec("h5netcdf") is not None
 found_netcdf4 = importlib.util.find_spec("netcdf4") is not None

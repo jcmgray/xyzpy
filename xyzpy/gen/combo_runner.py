@@ -1,9 +1,9 @@
-"""Functions for systematically evaluating a function over all combinations.
-"""
-import random
+"""Functions for systematically evaluating a function over all combinations."""
+
 import functools
 import itertools
 import multiprocessing
+import random
 
 import numpy as np
 import xarray as xr
@@ -11,14 +11,14 @@ from joblib.externals.loky import get_reusable_executor
 
 from ..utils import progbar
 from .prepare import (
-    parse_var_names,
-    parse_var_dims,
+    parse_cases,
+    parse_combo_results,
+    parse_combos,
     parse_constants,
     parse_resources,
     parse_var_coords,
-    parse_cases,
-    parse_combos,
-    parse_combo_results,
+    parse_var_dims,
+    parse_var_names,
 )
 
 
@@ -239,9 +239,9 @@ def combo_runner_core(
 
         if (
             # bools are ints, so check for that first since True != 1 here
-            (not isinstance(parallel, bool)) and
-            isinstance(parallel, int) and
-            (num_workers is None)
+            (not isinstance(parallel, bool))
+            and isinstance(parallel, int)
+            and (num_workers is None)
         ):
             # assume parallel is the number of workers
             num_workers = parallel
@@ -451,7 +451,8 @@ def multi_concat(results, dims):
         return xr.concat(
             [
                 # if a dict, convert to dataset
-                xr.Dataset(obj) if isinstance(obj, dict)
+                xr.Dataset(obj)
+                if isinstance(obj, dict)
                 # else assume it's a dataset or datarray
                 else obj
                 for obj in results
@@ -517,7 +518,6 @@ def results_to_ds(
     # Add constants to attrs, but filter out those which should be coords
     if constants:
         for k, v in constants.items():
-
             if callable(v):
                 # should't store functions as attrs or coords
                 continue

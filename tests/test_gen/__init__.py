@@ -1,4 +1,3 @@
-
 # FIXTURES ------------------------------------------------------------------ #
 
 
@@ -51,8 +50,7 @@ def foo2_array_array(a, b):
     assert abs(a) < 10
     assert abs(b) >= 10
     assert abs(b) < 100
-    return ([b + i * a for i in range(5)],
-            [b - i * a for i in range(5)])
+    return ([b + i * a for i in range(5)], [b - i * a for i in range(5)])
 
 
 def foo2_zarray1_zarray2(a, b):
@@ -60,8 +58,10 @@ def foo2_zarray1_zarray2(a, b):
     assert abs(a) < 10
     assert abs(b) >= 10
     assert abs(b) < 100
-    return ([b + a + 0.1j * i for i in range(5)],
-            [b + a - 0.1j * i for i in range(5)])
+    return (
+        [b + a + 0.1j * i for i in range(5)],
+        [b + a - 0.1j * i for i in range(5)],
+    )
 
 
 def foo_array_input(a, t):
@@ -71,5 +71,6 @@ def foo_array_input(a, t):
 def foo2_dataset(a, b):
     import numpy as np
     import xarray as xr
+
     x = np.tile(a + b, (2, 3))
-    return xr.Dataset({'x': (['t1', 't2'], x)})
+    return xr.Dataset({"x": (["t1", "t2"], x)})

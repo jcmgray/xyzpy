@@ -5,10 +5,9 @@ Helper functions for generating color spectrums.
 import itertools
 import math
 
-import numpy as np
-
 import matplotlib as mpl
 import matplotlib.cm as cm
+import numpy as np
 from matplotlib.colors import (
     BASE_COLORS,
     CSS4_COLORS,

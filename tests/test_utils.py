@@ -1,7 +1,7 @@
 import functools
 
-import pytest
 import numpy as np
+import pytest
 from dask import delayed
 from numpy.testing import assert_allclose
 
@@ -14,21 +14,21 @@ class TestGetFnName:
         def foo(a, b):
             pass
 
-        assert _get_fn_name(foo) == 'foo'
+        assert _get_fn_name(foo) == "foo"
 
     def test_partial(self):
         def foo(a, b):
             pass
 
         pfoo = functools.partial(foo, b=2)
-        assert _get_fn_name(pfoo) == 'foo'
+        assert _get_fn_name(pfoo) == "foo"
 
     def test_delayed(self):
         @delayed
         def dfoo(a, b):
             pass
 
-        assert _get_fn_name(dfoo) == 'dfoo'
+        assert _get_fn_name(dfoo) == "dfoo"
 
 
 class TestProgbar:
@@ -42,7 +42,6 @@ class TestProgbar:
 
 
 class TestTimer:
-
     def test_simple(self):
         import time
 
@@ -52,7 +51,6 @@ class TestTimer:
 
 
 class TestBenchmark:
-
     def test_no_setup_no_size(self):
         t = xyz.benchmark(lambda: np.linalg.eig(np.random.randn(100, 100)))
         assert t > 0
@@ -79,7 +77,6 @@ class TestBenchmark:
 
 
 class TestBenchmarker:
-
     def test_basic(self):
 
         def add1(a, b):
@@ -97,7 +94,7 @@ class TestBenchmarker:
             b = np.random.randn(n)
             return a, b
 
-        benchmark_opts = {'starmap': True, 'min_t': 0.01, 'repeats': 3}
+        benchmark_opts = {"starmap": True, "min_t": 0.01, "repeats": 3}
 
         b = xyz.Benchmarker(kernels, setup, benchmark_opts=benchmark_opts)
 
@@ -109,29 +106,27 @@ class TestBenchmarker:
 
 
 class TestRunningStatistics:
-
     def test_basic(self):
         rs = xyz.RunningStatistics()
 
-        rs.update(42.)
-        rs.update(42.)
-        rs.update(42.)
-        rs.update(42.)
+        rs.update(42.0)
+        rs.update(42.0)
+        rs.update(42.0)
+        rs.update(42.0)
 
         assert rs.mean == pytest.approx(42.0)
         assert rs.var == pytest.approx(0.0)
         assert rs.std == pytest.approx(0.0)
         assert rs.err == pytest.approx(0.0)
 
-        rs.update_from_it([44., 44., 44., 44.])
+        rs.update_from_it([44.0, 44.0, 44.0, 44.0])
 
         assert rs.mean == pytest.approx(43.0)
         assert rs.std == pytest.approx(1.0)
-        assert rs.rel_err == pytest.approx(1. / (43 * 8**0.5))
+        assert rs.rel_err == pytest.approx(1.0 / (43 * 8**0.5))
 
 
 class TestRunningCovariance:
-
     def test_matches_numpy(self):
         xs = np.random.randn(100)
         ys = np.random.randn(100)
@@ -155,7 +150,6 @@ class TestRunningCovariance:
 
 
 class TestFromRepeats:
-
     def test_basic(self):
 
         def fn(n):
@@ -166,9 +160,9 @@ class TestFromRepeats:
 
 
 class TestGetSizeOf:
-
     def test_nested_list(self):
         import sys
+
         obj1 = [[1]]
         obj2 = [[1 << 100 - 1]]
         assert sys.getsizeof(obj1) == sys.getsizeof(obj2)
