@@ -8,8 +8,9 @@ except ImportError:
     # -- Source mode --
     try:
         # use setuptools_scm to get the current version from src using git
-        from setuptools_scm import get_version as _gv
         from pathlib import Path as _Path
+
+        from setuptools_scm import get_version as _gv
 
         __version__ = _gv(_Path(__file__).parent.parent)
     except ImportError:
@@ -18,48 +19,34 @@ except ImportError:
 
 
 import functools
+
 import xarray as xr
 
-from .utils import (
-    benchmark,
-    Benchmarker,
-    estimate_from_repeats,
-    format_number_with_error,
-    getsizeof,
-    progbar,
-    report_memory_gpu,
-    report_memory,
-    RunningCovariance,
-    RunningCovarianceMatrix,
-    RunningStatistics,
-    Timer,
-    unzip,
-)
-from .gen.combo_runner import (
-    combo_runner_to_df,
-    combo_runner_to_ds,
-    combo_runner,
-)
 from .gen.case_runner import (
+    case_runner,
     case_runner_to_df,
     case_runner_to_ds,
-    case_runner,
     find_missing_cases,
     is_case_missing,
     parse_into_cases,
 )
+from .gen.combo_runner import (
+    combo_runner,
+    combo_runner_to_df,
+    combo_runner_to_ds,
+)
 from .gen.cropping import (
-    clean_slurm_outputs,
     Crop,
+    clean_slurm_outputs,
     grow,
     load_crops,
     manage_slurm_outputs,
 )
 from .gen.farming import (
     Harvester,
-    label,
     Runner,
     Sampler,
+    label,
 )
 from .gen.ray_executor import (
     RayExecutor,
@@ -84,29 +71,6 @@ from .plot.color import (
     cimple,
     convert_colors,
 )
-
-# Making static plots with matplotlib
-from .plot.plotter_matplotlib import (
-    auto_heatmap,
-    auto_histogram,
-    auto_lineplot,
-    auto_scatter,
-    AutoHeatMap,
-    AutoHistogram,
-    AutoLinePlot,
-    AutoScatter,
-    heatmap,
-    HeatMap,
-    histogram,
-    Histogram,
-    lineplot,
-    LinePlot,
-    scatter,
-    Scatter,
-    visualize_matrix,
-    visualize_tensor,
-)
-
 from .plot.infiniplot import (
     get_neutral_style,
     infiniplot,
@@ -123,6 +87,44 @@ from .plot.plotter_bokeh import (
     iscatter,
 )
 
+# Making static plots with matplotlib
+from .plot.plotter_matplotlib import (
+    AutoHeatMap,
+    AutoHistogram,
+    AutoLinePlot,
+    AutoScatter,
+    HeatMap,
+    Histogram,
+    LinePlot,
+    Scatter,
+    auto_heatmap,
+    auto_histogram,
+    auto_lineplot,
+    auto_scatter,
+    heatmap,
+    histogram,
+    lineplot,
+    scatter,
+    visualize_matrix,
+    visualize_tensor,
+)
+from .utils import (
+    benchmark,
+    Benchmarker,
+    estimate_from_repeats,
+    format_number_with_error,
+    get_peak_memory_usage,
+    getsizeof,
+    MemoryMonitor,
+    progbar,
+    report_memory_gpu,
+    report_memory,
+    RunningCovariance,
+    RunningCovarianceMatrix,
+    RunningStatistics,
+    Timer,
+    unzip,
+)
 
 __all__ = [
     "auto_heatmap",
@@ -156,6 +158,7 @@ __all__ = [
     "find_missing_cases",
     "format_number_with_error",
     "get_neutral_style",
+    "get_peak_memory_usage",
     "getsizeof",
     "grow",
     "Harvester",
@@ -174,6 +177,7 @@ __all__ = [
     "load_df",
     "load_ds",
     "manage_slurm_outputs",
+    "MemoryMonitor",
     "merge_sync_conflict_datasets",
     "neutral_style",
     "parse_into_cases",

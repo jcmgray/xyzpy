@@ -735,6 +735,105 @@ def estimate_from_repeats(
     return rs
 
 
+class MemoryMonitor:
+    """Monitor this process' peak memory usage with specified sampling interval
+    in a daemon thread. This is intended to be used as a context manager for
+    long running and memory intensive processes, not fine grained memory
+    tracking.
+
+    Parameters
+    ----------
+    interval : float, optional
+        Time between memory measurements in seconds. Fluctuations in peak
+        memory between measurements might not be captured.
+
+    Attributes
+    ----------
+    interval : float
+        Time between memory measurements in seconds.
+    peak : float
+        The peak memory usage in gigabytes.
+    """
+
+    def __init__(self, interval: float = 0.1):
+        self.interval = interval
+        self.peak = None
+        self.is_running = False
+        self.monitor_thread = None
+
+    def _monitor(self):
+        import psutil
+
+        if self.peak is None:
+            self.peak = 0.0
+
+        process = psutil.Process()
+        while self.is_running:
+            current = process.memory_info().rss / (1 << 30)
+            self.peak = max(self.peak, current)
+            time.sleep(self.interval)
+
+    def start(self):
+        """Start the memory monitoring thread.
+        """
+        import threading
+
+        self.is_running = True
+        self.monitor_thread = threading.Thread(target=self._monitor)
+        self.monitor_thread.daemon = True  # don't prevent program exit
+        self.monitor_thread.start()
+
+    def stop(self):
+        """Stop the memory monitoring thread.
+        """
+        self.is_running = False
+        if self.monitor_thread:
+            self.monitor_thread.join()
+
+    def __enter__(self):
+        self.start()
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.stop()
+
+    def __del__(self):
+        self.stop()
+
+    def __repr__(self):
+        s = f"MemoryMonitor(interval={self.interval}, peak={self.peak:.2f}GB)"
+        return s
+
+
+def get_peak_memory_usage():
+    """Get the peak memory usage of the current process in *gigabytes*. This
+    uses the `psutil` package on Windows, and the `resource` package on
+    Linux and macOS.
+    """
+    if sys.platform == "win32":
+        import psutil
+
+        process = psutil.Process()
+        mem_info = process.memory_info()
+        peak = mem_info.peak_wset / (1 << 30)
+
+    elif sys.platform == "darwin":
+        import resource
+
+        usage = resource.getrusage(resource.RUSAGE_SELF)
+        # returned in bytes
+        peak = usage.ru_maxrss / (1 << 30)
+
+    elif sys.platform.startswith("linux"):
+        import resource
+
+        usage = resource.getrusage(resource.RUSAGE_SELF)
+        # returned in kilobytes
+        peak = usage.ru_maxrss / (1 << 20)
+
+    return peak
+
+
 def report_memory():
     try:
         import psutil
