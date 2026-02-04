@@ -285,6 +285,7 @@ INFINIPLOTTER_DEFAULTS = dict(
     ylabel=None,
     xlim=None,
     ylim=None,
+    zlim=None,
     xscale=None,
     yscale=None,
     zscale=None,
@@ -305,7 +306,7 @@ INFINIPLOTTER_DEFAULTS = dict(
     grid_alpha=0.1,
     legend=True,
     legend_ncol=None,
-    legend_merge=False,
+    legend_merge="auto",
     legend_reverse=False,
     legend_entries=None,
     legend_labels=None,
@@ -1037,17 +1038,32 @@ class Infiniplotter:
         """Create a legend for lines plot."""
         from matplotlib.lines import Line2D
 
-        try:
-            # try to extend current legend with more entries
-            legend_handles = self.axs[0, -1].get_legend().get_lines()
-            # add a space
-            legend_handles.append(
-                Line2D([0], [0], markersize=0, linewidth=0, label="")
-            )
-        except AttributeError:
+        legend_opts = {} if self.legend_opts is None else self.legend_opts
+
+        if ("bbox_to_anchor" in legend_opts) or ("loc" in legend_opts):
+            # we are manually placing legend, assume its a new one, rather
+            # than trying to extend
+            try:
+                legend_old = self.axs[0, -1].get_legend()
+                # later call to legend will overwrite this one: explicitly add
+                self.axs[0, -1].add_artist(legend_old)
+            except AttributeError:
+                pass
             legend_handles = []
 
-        legend_opts = {} if self.legend_opts is None else self.legend_opts
+        else:
+            # try to extend current legend with more entries
+            try:
+                legend_handles = self.axs[0, -1].get_legend().get_lines()
+                # add a space
+                legend_handles.append(
+                    Line2D([0], [0], markersize=0, linewidth=0, label="")
+                )
+            except AttributeError:
+                legend_handles = []
+
+        if self.legend_merge == "auto":
+            self.legend_merge = len(self.mapped) <= 1
 
         if self.handles and self.legend_merge:
             # show every unique style combination as single legend try
@@ -1140,12 +1156,12 @@ class Infiniplotter:
                         label=self.labels[legend_dim],
                     )
                 )
-                for key, style in sorted(
-                    inputs.items(),
-                    key=lambda x: x[0],
-                    # key=lambda x: 1,
-                    reverse=self.legend_reverse,
-                ):
+
+                key_styles = list(inputs.items())
+                if self.legend_reverse:
+                    key_styles.reverse()
+
+                for key, style in key_styles:
                     label = self.ticklabels[legend_dim].get(key, str(key))
 
                     if any("marker" in prop for prop in style):
@@ -1186,11 +1202,26 @@ class Infiniplotter:
         else:
             legend_handles = None
 
-        if self.legend_labels is not None:
-            for lh, label in zip(legend_handles, self.legend_labels):
-                lh.set_label(label)
-
         if legend_handles is not None:
+            # we have some legend entries
+
+            if self.legend_labels is not None:
+                # we have explicit labels for each handle
+                for lh, label in zip(
+                    # only update the handles that were added by this plot call
+                    legend_handles[-len(self.handles) :],
+                    self.legend_labels,
+                ):
+                    lh.set_label(label)
+
+            if (
+                legend_opts.get("title", "") == "" and len(legend_handles) == 1
+            ) and (self.label is None):
+                # promote single legend entry to title
+                lh0 = legend_handles[0]
+                legend_opts["title"] = lh0.get_label()
+                lh0.set_label("")
+
             lax = self.axs[0, -1]
             legend_opts.setdefault("loc", "upper left")
             legend_opts.setdefault("bbox_to_anchor", (1.0, 1.0))
@@ -1208,8 +1239,16 @@ class Infiniplotter:
 
         zdata_all = self.ds[self.z].values
         zdata_all = zdata_all[np.isfinite(zdata_all)]
-        zmax = np.max(zdata_all)
-        zmin = np.min(zdata_all)
+
+        # set coloring limits
+        try:
+            zmin, zmax = self.zlim
+        except (TypeError, ValueError):
+            zmin = zmax = None
+        if zmax is None:
+            zmax = np.max(zdata_all)
+        if zmin is None:
+            zmin = np.min(zdata_all)
         max_mag = max(abs(zmax), abs(zmin))
 
         if self.palette is None:
@@ -1217,7 +1256,9 @@ class Infiniplotter:
         elif self.zscale == "log":
             self.norm = mpl.colors.LogNorm(vmin=zmin, vmax=zmax)
         elif self.zscale == "symlog":
-            self.norm = mpl.colors.SymLogNorm(vmin=zmin, vmax=zmax, linthresh=1)
+            self.norm = mpl.colors.SymLogNorm(
+                vmin=zmin, vmax=zmax, linthresh=1
+            )
         else:
             self.norm = mpl.colors.Normalize(vmin=zmin, vmax=zmax)
 
@@ -1265,26 +1306,27 @@ class Infiniplotter:
 
         self.do_axes_formatting()
 
-        if self.palette is None:
-            add_visualize_legend(
-                ax=self.axs[0, -1],
-                complexobj=np.iscomplexobj(zdata_all),
-                max_mag=max_mag,
-                legend_loc=(1.1, 0.8),
-                legend_size=0.2,
-                # max_projections=max_projections,
-                # legend_bounds=legend_bounds,
-                # legend_resolution=legend_resolution,
-            )
-        else:
-            cax = self.axs[0, -1].inset_axes((1.1, 0.1, 0.05, 0.8))
+        if self.legend:
+            if self.palette is None:
+                add_visualize_legend(
+                    ax=self.axs[0, -1],
+                    complexobj=np.iscomplexobj(zdata_all),
+                    max_mag=max_mag,
+                    legend_loc=(1.1, 0.8),
+                    legend_size=0.2,
+                    # max_projections=max_projections,
+                    # legend_bounds=legend_bounds,
+                    # legend_resolution=legend_resolution,
+                )
+            else:
+                cax = self.axs[0, -1].inset_axes((1.1, 0.1, 0.05, 0.8))
 
-            self.fig.colorbar(
-                mpl.cm.ScalarMappable(norm=self.norm, cmap=self.palette),
-                cax=cax,
-                orientation="vertical",
-                label=_make_bold(self.z),
-            )
+                self.fig.colorbar(
+                    mpl.cm.ScalarMappable(norm=self.norm, cmap=self.palette),
+                    cax=cax,
+                    orientation="vertical",
+                    label=_make_bold(self.z),
+                )
 
     def do_axes_formatting(self):
         if (self.fig is None) and (not self.format_axs):

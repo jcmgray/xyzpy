@@ -1025,6 +1025,35 @@ def to_colors(
     alpha_map=True,
     alpha_pow=1 / 2,
 ):
+    """Convert complex array to RGBA colors.
+
+    Parameters
+    ----------
+    zs : array_like
+        Complex array to convert to colors.
+    magscale : {"linear", "log", float}, optional
+        Scale to apply to the magnitude before mapping to saturation.
+        If "linear", no scaling is applied. If "log", logarithmic scaling
+        is applied. If float, the magnitude is raised to this power.
+        Default is "linear".
+    max_mag : float, optional
+        Maximum magnitude to map to full saturation. If None, the maximum
+        magnitude in `zs` is used.
+    alpha_map : bool, optional
+        Whether to append an alpha channel based on magnitude. Default is True.
+    alpha_pow : float, optional
+        Power to raise the magnitude to when computing the alpha channel.
+        Default is 1/2.
+
+    Returns
+    -------
+    colors : ndarray
+        Array of shape (..., 3) or (..., 4) of RGB(A) colors.
+    mapped_mag : ndarray
+        The mapped magnitudes used for saturation and alpha.
+    max_mag : float
+        The maximum magnitude used for saturation mapping.
+    """
     import matplotlib as mpl
 
     arraymag = np.abs(zs)
@@ -1058,7 +1087,7 @@ def add_visualize_legend(
     ax,
     complexobj,
     max_mag,
-    max_projections=2,
+    legend_inside=False,
     auto_pad=0.03,
     legend_loc="auto",
     legend_size=0.15,
@@ -1069,14 +1098,21 @@ def add_visualize_legend(
 
     # choose where to put the legend
     if legend_bounds is None:
-        if legend_loc == "auto":
-            if max_projections <= 2:
+        if legend_loc in ("auto", "bottom right"):
+            if not legend_inside:
                 # move compass and legends beyond the plot rectangle, which
                 # will be filled when there are only 2 plot dimensions
                 legend_loc = (1 - auto_pad, 0.0 - legend_size + auto_pad)
             else:
                 # occupy space within the rectangle
                 legend_loc = (1.0 - legend_size, 0.0)
+
+        elif legend_loc == "top right":
+            if not legend_inside:
+                legend_loc = (1 - auto_pad, 1 - legend_size - auto_pad)
+            else:
+                legend_loc = (1.0 - legend_size, 1.0 - legend_size)
+
         legend_bounds = (*legend_loc, legend_size, legend_size)
 
     lax = ax.inset_axes(legend_bounds)
@@ -1357,7 +1393,7 @@ def visualize_matrix(
             ax=ax,
             complexobj=np.iscomplexobj(array),
             max_mag=max_mag,
-            max_projections=2,
+            legend_inside=False,
             legend_loc=legend_loc,
             legend_size=legend_size,
             legend_bounds=legend_bounds,
@@ -1760,7 +1796,7 @@ def visualize_tensor(
             ax=ax,
             complexobj=np.iscomplexobj(array),
             max_mag=max_mag,
-            max_projections=max_projections,
+            legend_inside=max_projections > 2,
             legend_loc=legend_loc,
             legend_size=legend_size,
             legend_bounds=legend_bounds,

@@ -332,8 +332,12 @@ class TestHistogram:
 
 
 class TestVisualizeMatrix:
-    def test_single(self):
+    def test_single_real(self):
         x = np.random.randn(10, 10)
+        xyz.visualize_matrix(x)
+
+    def test_single_complex(self):
+        x = np.random.randn(10, 10) + 1j * np.random.randn(10, 10)
         xyz.visualize_matrix(x)
 
 
