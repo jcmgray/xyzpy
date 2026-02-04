@@ -68,6 +68,8 @@ def save_ds(ds, file_name, engine="h5netcdf", **kwargs):
     # Parse out 'bad' netcdf types (only attributes -> values not so important)
     if engine not in {'joblib', 'zarr'}:
         for attr, val in ds.attrs.items():
+            if callable(val):
+                ds.attrs[attr] = str(val)
             if val is None:
                 ds.attrs[attr] = "None"
             if val is True:
@@ -184,7 +186,10 @@ def save_merge_ds(ds, fname, overwrite=None, **kwargs):
     elif overwrite is False:
         new_ds = old_ds.combine_first(ds)
     else:
-        new_ds = xr.merge([old_ds, ds])
+        new_ds = xr.merge([old_ds, ds], join="outer")
+
+    # avoid string truncation
+    new_ds = new_ds.drop_encoding()
 
     # write to disk
     save_ds(new_ds, fname, **kwargs)
@@ -327,7 +332,10 @@ def merge_sync_conflict_datasets(base_name, engine='h5netcdf',
         for ds in datasets[1:]:
             full_dataset = full_dataset.combine_first(ds)
     else:
-        full_dataset = xr.merge(datasets)
+        full_dataset = xr.merge(datasets, join="outer")
+
+    # avoid string truncation
+    full_dataset = full_dataset.drop_encoding()
 
     # save new dataset?
     if full_dataset.identical(datasets[0]):

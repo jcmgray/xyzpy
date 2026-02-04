@@ -468,7 +468,8 @@ class Harvester(object):
         return self._full_ds
 
     def save_full_ds(self, new_full_ds=None, engine=None):
-        """Save `full_ds` onto disk.
+        """Save `full_ds` onto disk. The old file is moved and kept as a backup
+        in case of errors when writing the new dataset to disk.
 
         Parameters
         ----------
@@ -478,6 +479,8 @@ class Harvester(object):
         engine : str, optional
             Engine to use to save and load datasets.
         """
+        from ..manage import auto_add_extension
+
         if self.data_name is None:
             raise XYZError("You didn't set a ``data_name`` for this harvester "
                            "to use for persistent storage.")
@@ -490,14 +493,40 @@ class Harvester(object):
             if self._full_ds is not None:
                 self._full_ds.close()
 
-            if os.path.exists(self.data_name):
-                if engine == 'zarr':
-                    shutil.rmtree(self.data_name)
-                else:
-                    os.remove(self.data_name)
             self._full_ds = new_full_ds
 
-        save_ds(self._full_ds, self.data_name, engine=engine)
+        file_name = auto_add_extension(self.data_name, engine)
+        backup_name = file_name + ".bak"
+
+        # first move existing file to backup
+        if os.path.exists(file_name):
+            if os.path.exists(backup_name):
+                # delete any old backups
+                if engine == 'zarr':
+                    shutil.rmtree(backup_name)
+                else:
+                    os.remove(backup_name)
+            os.rename(file_name, backup_name)
+
+        try:
+            save_ds(self._full_ds, self.data_name, engine=engine)
+        except Exception:
+            # restore backup on error
+            if os.path.exists(backup_name):
+                if os.path.exists(file_name):
+                    if engine == 'zarr':
+                        shutil.rmtree(file_name)
+                    else:
+                        os.remove(file_name)
+                os.rename(backup_name, file_name)
+            raise
+        else:
+            # successful save, delete backup
+            if os.path.exists(backup_name):
+                if engine == 'zarr':
+                    shutil.rmtree(backup_name)
+                else:
+                    os.remove(backup_name)
 
     def delete_ds(self, backup=False):
         """Delete the on-disk dataset, optionally backing it up first.
@@ -577,7 +606,14 @@ class Harvester(object):
             # Merge, raising error if the two datasets conflict
             else:
                 new_full_ds = self._full_ds.merge(
-                    new_ds, compat='no_conflicts')
+                    new_ds,
+                    join="outer",
+                    compat='no_conflicts',
+                )
+
+        # we do this as if the string encoding of the old dataset is a smaller
+        # type than the new one, strings will be silently truncated
+        new_full_ds = new_full_ds.drop_encoding()
 
         if sync_with_disk:
             self.save_full_ds(new_full_ds, engine=engine)

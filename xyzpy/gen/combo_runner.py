@@ -517,6 +517,11 @@ def results_to_ds(
     # Add constants to attrs, but filter out those which should be coords
     if constants:
         for k, v in constants.items():
+
+            if callable(v):
+                # should't store functions as attrs or coords
+                continue
+
             if k in ds.dims:
                 ds.coords[k] = v
             else:
