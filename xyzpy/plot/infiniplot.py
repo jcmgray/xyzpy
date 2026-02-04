@@ -612,6 +612,13 @@ class Infiniplotter:
                 .to_dataset(name=self.y)
                 .assign_coords({self.x: bin_coords})
             )
+
+            if isinstance(self.hspans, str):
+                ds_binned[self.hspans] = self.ds[self.hspans]
+            if isinstance(self.vspans, str):
+                ds_binned[self.vspans] = self.ds[self.vspans]
+
+            self.ds = ds_binned
             self.kwargs.setdefault("drawstyle", "steps-mid")
 
         if self.is_heatmap and self.unmapped:
@@ -1006,6 +1013,21 @@ class Infiniplotter:
             if key or self.label:
                 self.handles.setdefault(key, handle)
 
+            # add spans that depend on location
+            for _spans, ax_func in (
+                (self.hspans, ax.axhline),
+                (self.vspans, ax.axvline),
+            ):
+                if isinstance(_spans, str):
+                    for spn in ds_loc[_spans].values.flat:
+                        ax_func(
+                            spn,
+                            color=self.span_color,
+                            alpha=self.span_alpha,
+                            linestyle=self.span_linestyle,
+                            linewidth=self.span_linewidth,
+                        )
+
         self.do_axes_formatting()
 
         if self.legend:
@@ -1360,22 +1382,49 @@ class Infiniplotter:
                 else:
                     axis.set_minor_locator(AutoMinorLocator(5))
 
-        for hline in self.hspans:
-            ax.axhline(
-                hline,
-                color=self.span_color,
-                alpha=self.span_alpha,
-                linestyle=self.span_linestyle,
-                linewidth=self.span_linewidth,
-            )
-        for vline in self.vspans:
-            ax.axvline(
-                vline,
-                color=self.span_color,
-                alpha=self.span_alpha,
-                linestyle=self.span_linestyle,
-                linewidth=self.span_linewidth,
-            )
+                if ticks is not None:
+                    axis.set_ticks(ticks, labels=ticklabels)
+
+            for _spans, ax_func, h_or_v in (
+                (self.hspans, ax.axhline, "h"),
+                (self.vspans, ax.axvline, "v"),
+            ):
+                if not isinstance(_spans, str):
+                    for line in _spans:
+                        if isinstance(_spans, dict):
+                            import matplotlib.transforms as transforms
+
+                            # label each span using key from dict
+                            spanlabel = line
+                            # actual line location is value in dict
+                            line = _spans[spanlabel]
+                            trans = transforms.blended_transform_factory(
+                                ax.transAxes, ax.transData
+                            )
+
+                            if h_or_v == "h":
+                                _span_label_coo = (0.0, line)
+                                va = "bottom"
+                            else:
+                                _span_label_coo = (line, 1.0)
+                                va = "top"
+
+                            ax.text(
+                                *_span_label_coo,
+                                spanlabel,
+                                ha="left",
+                                va=va,
+                                transform=trans,
+                                color=self.span_color,
+                            )
+
+                        ax_func(
+                            line,
+                            color=self.span_color,
+                            alpha=self.span_alpha,
+                            linestyle=self.span_linestyle,
+                            linewidth=self.span_linewidth,
+                        )
 
 
 @show_and_close
