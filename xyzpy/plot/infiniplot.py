@@ -6,7 +6,7 @@ import warnings
 
 import numpy as np
 
-from .color import cimple
+from .color import cmoke
 from .plotter_matplotlib import (
     add_visualize_legend,
     show_and_close,
@@ -67,7 +67,7 @@ def neutral_style(draw_color=(0.5, 0.5, 0.5), **kwargs):
         yield
 
 
-# colorblind palettes by Bang Wong (https://www.nature.com/articles/nmeth.1618)
+# colorblind palettes by Okabe & Ito: https://siegal.bio.nyu.edu/color-palette/
 
 _COLORS_DEFAULT = (
     "#56B4E9",  # light blue
@@ -89,6 +89,18 @@ _COLORS_SORTED = (
 )
 
 
+@functools.lru_cache(6)
+def get_default_colormaps(N):
+    return (
+        cmoke(0.65, hue_shift=-0.05, val2=0.75),
+        cmoke(0.13, hue_shift=-0.05, val2=0.80),
+        cmoke(0.38, hue_shift=-0.05, val2=0.70),
+        cmoke(0.04, hue_shift=-0.05, val2=0.60),
+        cmoke(0.24, hue_shift=-0.05, val2=0.90),
+        cmoke(0.90, hue_shift=-0.05, val2=0.75),
+    )[:N]
+
+
 def mod_sat(c, mod):
     """Modify the luminosity of rgb color ``c``."""
     from matplotlib.colors import hsv_to_rgb, rgb_to_hsv
@@ -104,7 +116,7 @@ def auto_colors(N):
     if N < len(_COLORS_DEFAULT):
         return _COLORS_DEFAULT[:N]
 
-    cmap = LinearSegmentedColormap.from_list("wong", _COLORS_SORTED)
+    cmap = LinearSegmentedColormap.from_list("okabe-ito", _COLORS_SORTED)
 
     xs = list(map(cmap, np.linspace(0, 1.0, N)))
 
@@ -121,31 +133,33 @@ def auto_colors(N):
     ]
 
 
-def color_to_colormap(c, vdiff=0.5, sdiff=0.25):
+def color_to_colormap(c, **autohue_opts):
     import matplotlib as mpl
 
     rgb = mpl.colors.to_rgb(c)
     h, s, v = mpl.colors.rgb_to_hsv(rgb)
 
-    vhi = min(1.0, v + vdiff / 2)
-    vlo = max(0.0, vhi - vdiff)
-    vhi = vlo + vdiff
+    return cmoke(h, **autohue_opts)
 
-    shi = min(1.0, s + sdiff / 2)
-    slo = max(0.0, shi - sdiff)
-    shi = slo + sdiff
+    # vhi = min(1.0, v + vdiff / 2)
+    # vlo = max(0.0, vhi - vdiff)
+    # vhi = vlo + vdiff
 
-    hsv_i = (h, max(slo, 0.0), min(vhi, 1.0))
-    hsv_f = (h, min(shi, 1.0), max(vlo, 0.0))
+    # shi = min(1.0, s + sdiff / 2)
+    # slo = max(0.0, shi - sdiff)
+    # shi = slo + sdiff
 
-    c1 = mpl.colors.hsv_to_rgb(hsv_i)
-    c2 = mpl.colors.hsv_to_rgb(hsv_f)
-    cdict = {
-        "red": [(0.0, c1[0], c1[0]), (1.0, c2[0], c2[0])],
-        "green": [(0.0, c1[1], c1[1]), (1.0, c2[1], c2[1])],
-        "blue": [(0.0, c1[2], c1[2]), (1.0, c2[2], c2[2])],
-    }
-    return mpl.colors.LinearSegmentedColormap("", cdict)
+    # hsv_i = (h, max(slo, 0.0), min(vhi, 1.0))
+    # hsv_f = (h, min(shi, 1.0), max(vlo, 0.0))
+
+    # c1 = mpl.colors.hsv_to_rgb(hsv_i)
+    # c2 = mpl.colors.hsv_to_rgb(hsv_f)
+    # cdict = {
+    #     "red": [(0.0, c1[0], c1[0]), (1.0, c2[0], c2[0])],
+    #     "green": [(0.0, c1[1], c1[1]), (1.0, c2[1], c2[1])],
+    #     "blue": [(0.0, c1[2], c1[2]), (1.0, c2[2], c2[2])],
+    # }
+    # return mpl.colors.LinearSegmentedColormap("", cdict)
 
 
 def get_default_cmap(i, vdiff=0.5, sdiff=0.25):
@@ -161,12 +175,12 @@ def to_colormap(c, **autohue_opts):
         return c
 
     if isinstance(c, numbers.Number):
-        return cimple(c, **autohue_opts)
+        return cmoke(c, **autohue_opts)
 
     try:
         return plt.get_cmap(c)
     except ValueError:
-        return color_to_colormap(c)
+        return color_to_colormap(c, **autohue_opts)
 
 
 def _make_bold(s):
@@ -224,8 +238,8 @@ INFINIPLOTTER_DEFAULTS = dict(
     hue_label=None,
     hue_ticklabels=None,
     palette=None,
-    autohue_start=0.6,
-    autohue_sweep=-1.0,
+    autohue_start=0.25,
+    autohue_sweep=1.0,
     autohue_opts=None,
     marker=None,
     markers=None,
@@ -419,8 +433,8 @@ class Infiniplotter:
         # work out all the dim mapping information
 
         def default_colormaps(N):
-            if N <= 0:
-                hs = _COLORS_DEFAULT[:N]
+            if N <= 6:
+                hs = get_default_colormaps(N)
             else:
                 hs = np.linspace(
                     self.autohue_start,
@@ -428,6 +442,8 @@ class Infiniplotter:
                     N,
                     endpoint=False,
                 )
+
+            self.autohue_opts.setdefault("hue_shift", 0.5 / N)
             return [to_colormap(h, **self.autohue_opts) for h in hs]
 
         # drop irrelevant variables and dimensions
@@ -474,7 +490,7 @@ class Infiniplotter:
             # set a global colormap or sequence
             if self.colors is None:
                 self.cmap_or_colors = (
-                    to_colormap(self.palette)
+                    to_colormap(self.palette, **self.autohue_opts)
                     if self.palette is not None
                     else auto_colors(self.sizes["color"])
                 )
@@ -1417,7 +1433,7 @@ def infiniplot(
         generating a sequence of hues.
     autohue_opts : dict, optional
         Additional keyword arguments to pass to the automatic hue generator -
-        see {func}`xyzpy.color.cimple`.
+        see {func}`xyzpy.color.cmoke`.
     marker : str, optional
         If specified, the name of a dimension to use for mapping the marker
         style of each line. If not a dimension, this is used as a constant
