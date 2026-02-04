@@ -1,16 +1,81 @@
-[build-system]
-build-backend = "setuptools.build_meta"
-requires = [
-    "setuptools>=45",
-    "setuptools_scm[toml]>=6.2"
+[project]
+name = "xyzpy"
+description = "Easily generate large parameter space data"
+readme = { file = "README.md", content-type = "text/markdown" }
+dynamic = ["version"]
+authors = [{ name = "Johnnie Gray", email = "johnniemcgray@gmail.com" }]
+license = { text = "MIT" }
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+keywords = [
+    "xarray",
+    "generate",
+    "parallel",
+    "plot",
+    "tensor"
+]
+requires-python = ">=3.9"
+dependencies = [
+    "numpy>=1.10.0",
+    "dask>=0.11.1",
+    "xarray>=0.9.0",
+    "pandas>=0.20",
+    "h5py>=2.6.0",
+    "h5netcdf>=0.2.2",
+    "joblib>=0.12",
+    "tqdm>=4.7.6"
 ]
 
-[tool.setuptools_scm]
-write_to = "xyzpy/_version.py"
+[project.optional-dependencies]
+tests = [
+    "coverage",
+    "pytest",
+    "pytest-cov"
+]
+plotting = [
+    "matplotlib",
+    "bokeh"
+]
+docs = [
+    "matplotlib",
+    "bokeh",
+    "furo",
+    "ipython!=8.7.0",
+    "myst-nb",
+    "setuptools_scm",
+    "sphinx-autoapi",
+    "astroid<3.0.0",
+    "sphinx-copybutton",
+    "sphinx-design"
+]
+[project.urls]
+"Documentation" = "https://xyzpy.readthedocs.io/"
+"Repository" = "https://github.com/jcmgray/xyzpy/"
+"Issues" = "https://github.com/jcmgray/xyzpy/issues"
+"Changelog" = "https://xyzpy.readthedocs.io/en/latest/changelog.html"
+
+[project.scripts]
+xyzpy-grow = "xyzpy.gen.xyzpy_grow_cli:main"
+
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.build.hooks.vcs]
+version-file = "xyzpy/_version.py"
 
 [tool.pytest.ini_options]
 testpaths = "tests"
-# addopts = "--cov=xyzpy --cov-report term-missing --cov-report xml:coverage.xml --verbose --durations=10"
 filterwarnings = "once"
 
 [tool.coverage.run]
