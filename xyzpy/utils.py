@@ -1,5 +1,5 @@
-"""Utility functions.
-"""
+"""Utility functions."""
+
 import functools
 import operator
 import itertools
@@ -168,7 +168,7 @@ class Timer:
         self.t = self.time = self.interval = self.end - self.start
 
 
-def _auto_min_time(timer, min_t=0.2, repeats=5, get="min"):
+def _auto_min_time(timer, min_t=0.2, repeats=2, get="min"):
     tot_t = 0
     number = 1
 
@@ -187,7 +187,7 @@ def _auto_min_time(timer, min_t=0.2, repeats=5, get="min"):
 
 
 def benchmark(
-    fn, setup=None, n=None, min_t=0.1, repeats=3, get="min", starmap=False
+    fn, setup=None, n=None, min_t=0.2, repeats=2, get="min", starmap=False
 ):
     """Benchmark the time it takes to run ``fn``.
 
