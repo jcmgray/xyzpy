@@ -359,6 +359,7 @@ class Infiniplotter:
 
         self.is_histogram = self.y is None
         self.is_heatmap = self.z is not None
+        self.is_scatter = (not self.is_histogram) and (self.x in ds.data_vars)
 
         settings = {**INFINIPLOTTER_DEFAULTS, **kwargs}
         for opt in _PLOTTER_OPTS:
@@ -387,9 +388,6 @@ class Infiniplotter:
         self.autohue_opts = (
             {} if self.autohue_opts is None else dict(self.autohue_opts)
         )
-        self.autohue_opts.setdefault("val1", 1.0)
-        self.autohue_opts.setdefault("sat1", 0.3)
-        self.autohue_opts.setdefault("val2", 0.6)
 
         if self.text is not None:
             self.text_opts = (
@@ -452,8 +450,21 @@ class Infiniplotter:
 
         # drop irrelevant variables and dimensions
         ds = ds.drop_vars(
-            [k for k in ds if k not in (self.x, self.y, self.z, self.err)]
+            [
+                k
+                for k in ds
+                if k
+                not in (
+                    self.x,
+                    self.y,
+                    self.z,
+                    self.err,
+                    self.hspans,
+                    self.vspans,
+                )
+            ]
         )
+
         possible_dims = set()
         if self.x in ds.data_vars:
             possible_dims.update(ds[self.x].dims)
@@ -485,9 +496,9 @@ class Infiniplotter:
         if (self.hue is not None) and (self.color is not None):
             # need special label
             dim = f"{self.hue}, {self.color}"
-            self.labels[
-                dim
-            ] = f"{self.labels[self.hue]}, {self.labels[self.color]}"
+            self.labels[dim] = (
+                f"{self.labels[self.hue]}, {self.labels[self.color]}"
+            )
             self.ticklabels[dim] = {}
 
         if (self.hue is None) and (self.color is not None):
@@ -516,6 +527,21 @@ class Infiniplotter:
             custom_values=self.markeredgecolors,
             default_values=lambda N: auto_colors(N),
         )
+
+        if self.is_scatter and (self.xlink is None):
+            if self.linewidth is not None:
+                warnings.warn(
+                    "`linewidth` is not supported for scatters, ignoring. "
+                    "Set `x` as a coordinate or use `xlink` for a line plot."
+                )
+            self.linewidth = 0
+            if self.linestyle is not None:
+                warnings.warn(
+                    "`linestyle` is not supported for scatters, ignoring."
+                    "Set `x` as a coordinate or use `xlink` for a line plot."
+                )
+            self.linestyle = ""
+
         self.init_mapped_dim(
             "linestyle",
             custom_values=self.linestyles,
@@ -536,23 +562,27 @@ class Infiniplotter:
             - {self.x, self.y, self.z, self.xlink}
         )
 
+        if self.is_scatter and (self.xlink is None):
+            # want to vectorize plotting over all unmapped dimensions
+            self.ds = self.ds.stack({"__unmapped__": self.unmapped})
+
         if self.is_histogram:
             # histogram: create y as probability density / counts
             import xarray as xr
 
             # bin over all unmapped dimensions
-            self.ds = self.ds.stack({"__hist_dim__": self.unmapped})
+            self.ds = self.ds.stack({"__unmapped__": self.unmapped})
 
             # work out the bin coordinates
             if self.bins is None or isinstance(self.bins, int):
                 if self.bins is None:
                     nbins = min(
-                        max(3, int(self.ds["__hist_dim__"].size ** 0.5)), 50
+                        max(3, int(self.ds["__unmapped__"].size ** 0.5)), 50
                     )
                 else:
                     nbins = self.bins
                 xmin, xmax = self.ds[self.x].min(), self.ds[self.x].max()
-                self.bins = np.linspace(xmin, xmax, nbins + 1)
+                self.bins = np.linspace(float(xmin), float(xmax), nbins + 1)
             elif not isinstance(self.bins, np.ndarray):
                 self.bins = np.asarray(self.bins)
 
@@ -568,13 +598,13 @@ class Infiniplotter:
             else:
                 self.labels[self.y] = self.ylabel
 
-            self.ds = (
+            ds_binned = (
                 xr.apply_ufunc(
                     lambda x: np.histogram(
                         x, bins=self.bins, density=self.bins_density
                     )[0],
                     self.ds[self.x],
-                    input_core_dims=[["__hist_dim__"]],
+                    input_core_dims=[["__unmapped__"]],
                     output_core_dims=[[self.x]],
                     vectorize=True,
                 )
@@ -584,7 +614,7 @@ class Infiniplotter:
             self.kwargs.setdefault("drawstyle", "steps-mid")
 
         if self.is_heatmap and self.unmapped:
-            if (self.aggregate is not True):
+            if self.aggregate is not True:
                 # default to aggregating over all unmapped dimensions, but warn
                 warnings.warn(
                     "Heatmap: aggregating over all unmapped dimensions: "
@@ -646,7 +676,7 @@ class Infiniplotter:
         self.remaining_dims = []
         self.remaining_sizes = []
         for dim, sz in self.ds.sizes.items():
-            if dim not in (self.x, self.y, self.z, self.xlink):
+            if dim not in (self.x, self.y, self.z, self.xlink, "__unmapped__"):
                 self.remaining_dims.append(dim)
                 self.remaining_sizes.append(sz)
         self.ranges = list(map(range, self.remaining_sizes))
@@ -724,7 +754,7 @@ class Infiniplotter:
             if self.is_heatmap and (name in _HEATMAP_INVALID_KWARGS):
                 raise ValueError(f"Heatmap: cannot map property `{name}`.")
 
-            if (order is not None):
+            if order is not None:
                 # select and order along dimension
                 self.ds = self.ds.sel({dim: list(order)})
 
@@ -842,9 +872,9 @@ class Infiniplotter:
                     specific_style[prop] = prop_out
 
                     if dim in (self.color, self.hue):
-                        self.split_handles[legend_dim][legend_in][
-                            prop
-                        ] = prop_out
+                        self.split_handles[legend_dim][legend_in][prop] = (
+                            prop_out
+                        )
                     else:
                         self.split_handles[dim][prop_in][prop] = prop_out
 
@@ -1188,7 +1218,6 @@ class Infiniplotter:
                 zdata = (
                     self.ds[self.z].isel(loc).transpose(self.y, self.x).values
                 )
-            # mask = daz.notnull().values
 
             ax.pcolormesh(
                 xdata,
