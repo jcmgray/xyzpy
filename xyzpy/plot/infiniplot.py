@@ -290,6 +290,10 @@ INFINIPLOTTER_DEFAULTS = dict(
     zscale=None,
     xbase=10,
     ybase=10,
+    xticks=None,
+    yticks=None,
+    xticklabels=None,
+    yticklabels=None,
     vspans=(),
     hspans=(),
     span_color=(0.5, 0.5, 0.5),
@@ -1279,9 +1283,21 @@ class Infiniplotter:
             if self.yscale is not None:
                 ax.set_yscale(self.yscale)
 
-            for scale, base, axis in [
-                (self.xscale, self.xbase, ax.xaxis),
-                (self.yscale, self.ybase, ax.yaxis),
+            for scale, base, ticks, ticklabels, axis in [
+                (
+                    self.xscale,
+                    self.xbase,
+                    self.xticks,
+                    self.xticklabels,
+                    ax.xaxis,
+                ),
+                (
+                    self.yscale,
+                    self.ybase,
+                    self.yticks,
+                    self.yticklabels,
+                    ax.yaxis,
+                ),
             ]:
                 if scale == "log":
                     axis.set_major_locator(LogLocator(base=base, numticks=6))
@@ -1558,6 +1574,16 @@ def infiniplot(
         If ``xscale=='log'``, the log base to use for the x-axis.
     ybase : float, optional
         If ``yscale=='log'``, the log base to use for the y-axis.
+    xticks : sequence[float], optional
+        Manual sequence of x-values to use for ticks.
+    yticks : sequence[float], optional
+        Manual sequence of y-values to use for ticks.
+    xticklabels : sequence[str], optional
+        Manual sequence of x-tick labels to use, requires and should be the
+        same length as ``xticks``.
+    yticklabels : sequence[str], optional
+        Manual sequence of y-tick labels to use, requires and should be the
+        same length as ``yticks``.
     vspans : sequence[float], optional
         Sequence of x-values to use for vertical spans.
     hspans : sequence[float], optional
