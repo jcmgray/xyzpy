@@ -67,8 +67,10 @@ from .manage import (
     trimna,
 )
 from .plot.color import (
-    cimple_bright,
+    cimluv,
     cimple,
+    cmoke,
+    cimple_bright,
     convert_colors,
 )
 from .plot.infiniplot import (
@@ -146,8 +148,10 @@ __all__ = [
     "case_runner_to_ds",
     "case_runner",
     "check_runs",
+    "cimluv",
     "cimple_bright",
     "cimple",
+    "cmoke",
     "clean_slurm_outputs",
     "combo_runner_to_df",
     "combo_runner_to_ds",
