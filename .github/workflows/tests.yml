@@ -16,16 +16,16 @@ jobs:
       matrix:
         include:
         - os: ubuntu-latest
-          env: testing-pyold
+          env: testpyold
 
         - os: ubuntu-latest
-          env: testing-pynew
+          env: testpynew
 
         - os: macos-latest
-          env: testing
+          env: testpymid
 
         - os: windows-latest
-          env: testing
+          env: testpymid
 
     steps:
     - uses: actions/checkout@v6
