@@ -22,7 +22,7 @@ from .prepare import (
     parse_attrs,
 )
 from .combo_runner import combo_runner_to_ds
-from .case_runner import case_runner_to_ds
+from .case_runner import case_runner_to_ds, parse_into_cases
 from ..manage import load_ds, save_ds, load_df, save_df
 from . import cropping
 
@@ -393,8 +393,14 @@ class Harvester(object):
         Dataset containing just the data from the last harvesting run.
     """
 
-    def __init__(self, runner, data_name=None, chunks=None,
-                 engine='h5netcdf', full_ds=None):
+    def __init__(
+        self,
+        runner: Runner,
+        data_name=None,
+        chunks=None,
+        engine="h5netcdf",
+        full_ds=None,
+    ):
         self.runner = runner
         self.data_name = data_name
         if engine is None:
@@ -620,6 +626,8 @@ class Harvester(object):
         self,
         combos,
         *,
+        cases=None,
+        missing_only=False,
         sync=True,
         overwrite=None,
         chunks=None,
@@ -634,6 +642,9 @@ class Harvester(object):
             The combos to run. The only difference here is that you can supply
             an ellipse ``...``, meaning the all values for that coordinate will
             be loaded from the current full dataset.
+        missing_only : bool, optional
+            If True, only run combos that are not already present in the
+            on-disk dataset.
         sync : bool, optional
             If True (default), load and save the disk dataset before
             and after merging in the new data.
@@ -641,8 +652,8 @@ class Harvester(object):
 
             - ``None`` (default): attempt the merge and only raise if
               data conflicts.
-            - ``True``: overwrite conflicting current data with
-              that from the new dataset.
+            - ``True``: overwrite any conflicting current data with that from
+              the new dataset.
             - ``False``: drop any conflicting data from the new dataset.
 
         chunks : bool, optional
@@ -653,13 +664,33 @@ class Harvester(object):
         runner_settings
             Supplied to :func:`~xyzpy.combo_runner`.
         """
+        # possibly load full range of coordinate values from full dataset
         combos = tuple(
             (key, self.full_ds.coords[key].values if values is ... else values)
             for key, values in parse_combos(combos)
         )
-        ds = self.runner.run_combos(combos, **runner_settings)
-        self.add_ds(ds, sync=sync, overwrite=overwrite,
-                    chunks=chunks, engine=engine)
+
+        if missing_only:
+            # convert into missing cases only
+            cases = parse_into_cases(combos, cases, ds=self.full_ds)
+
+            if len(cases) == 0:
+                return
+
+            # all information about combos is now in cases
+            combos = {}
+
+        # generate the new dataset!
+        ds = self.runner.run_combos(combos, cases=cases, **runner_settings)
+
+        # merge into full dataset
+        self.add_ds(
+            ds,
+            sync=sync,
+            overwrite=overwrite,
+            chunks=chunks,
+            engine=engine,
+        )
 
     def harvest_cases(self, cases, *,
                       sync=True,

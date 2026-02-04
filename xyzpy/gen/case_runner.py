@@ -320,6 +320,9 @@ def parse_into_cases(combos=None, cases=None, ds=None, method='isnull'):
     """
     if combos is None:
         combos = {}
+    elif not isinstance(combos, dict):
+        # assume supplied as list of tuple key value pairs
+        combos = dict(combos)
     if cases is None:
         cases = [{}]
 

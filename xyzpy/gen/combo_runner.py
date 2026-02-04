@@ -180,7 +180,7 @@ def combo_runner_core(
     else:
         combo_args, combo_values = (), ()
 
-    if cases:
+    if cases is not None:
         cases = tuple(cases)
         case_args = tuple(cases[0].keys())
         case_values = tuple(tuple(c[a] for a in case_args) for c in cases)
@@ -294,7 +294,8 @@ def combo_runner_core(
     if split:
         # put each output variable into a seperate results at the top level
         return tuple(process_results(r) for r in zip(*results_linear))
-    return process_results(results_linear)
+    else:
+        return process_results(results_linear)
 
 
 def combo_runner(
@@ -623,9 +624,9 @@ def combo_runner_to_ds(
     verbosity : {0, 1, 2}, optional
         How much information to display:
 
-            - 0: nothing,
-            - 1: just progress,
-            - 2: all information.
+        - 0: nothing,
+        - 1: just progress,
+        - 2: all information.
 
     Returns
     -------
