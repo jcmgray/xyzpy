@@ -22,6 +22,17 @@ def parse_int_or_float(string):
         return float(string)
 
 
+def parse_bool_flag(value: Optional[str] = None) -> bool:
+    if value is None:
+        return False
+    if value.lower() in ("false", "0", "no"):
+        return False
+    elif value.lower() in ("true", "1", "yes"):
+        return True
+    else:
+        raise argparse.ArgumentTypeError(f"Invalid boolean value {value}.")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Grow crops using xyzpy-gen-cropping."
@@ -36,7 +47,21 @@ def main():
         help="The parent directory of the crop.",
     )
     parser.add_argument(
-        "--debug", action="store_true", help="Enable debugging mode."
+        "--batch-ids",
+        type=str,
+        default="missing",
+        help=(
+            "Comma separated list of which batches to grow, "
+            "by default all missing results."
+        ),
+    )
+    parser.add_argument(
+        "--raise-errors",
+        nargs="?",
+        const=True,
+        default=False,
+        type=parse_bool_flag,
+        help="Raise batch errors."
     )
     parser.add_argument(
         "--num-threads",
@@ -49,6 +74,18 @@ def main():
         type=parse_num_workers,
         default=None,
         help="The number of worker processes to use.",
+    )
+    parser.add_argument(
+        "--subprocess",
+        nargs="?",
+        const=True,
+        default=False,
+        type=parse_bool_flag,
+        help=(
+            "Run each batch in its own fresh subprocess. "
+            "This is most robust in terms of memory, at the cost of the "
+            "process startup overhead. Optional value: true/false."
+        ),
     )
     parser.add_argument(
         "--ray",
@@ -69,7 +106,27 @@ def main():
         ),
     )
     parser.add_argument(
-        "--verbosity", type=int, default=1, help="The verbosity level."
+        "--affinities",
+        type=str,
+        default=None,
+        help=(
+            "If subprocess is enabled, this is an optional comma separated "
+            "list of affinities to use, one for each process. This ensures a "
+            "single cpu core is used for each batch, regardless of other "
+            "environment variables."
+        ),
+    )
+    parser.add_argument(
+        "--verbosity",
+        type=int,
+        default=1,
+        help="The verbosity level.",
+    )
+    parser.add_argument(
+        "--verbosity-grow",
+        type=int,
+        default=1,
+        help="The verbosity level.",
     )
     args = parser.parse_args()
 
@@ -86,10 +143,23 @@ def main():
 
     grow_kwargs = {
         "num_workers": args.num_workers,
+        "subprocess": args.subprocess,
+        "raise_errors": args.raise_errors,
         "verbosity": args.verbosity,
+        "verbosity_grow": args.verbosity_grow,
     }
 
+    if args.subprocess:
+        # this calls `xyzpy-grow` itself and we want to match env vars above
+        grow_kwargs["num_threads"] = args.num_threads
+        grow_kwargs["affinities"] = args.affinities
+
     if args.ray:
+        if args.subprocess:
+            raise xyzpy.utils.XYZError(
+                "Cannot use subprocess mode with ray executor."
+            )
+
         if args.gpus_per_task is None:
             grow_kwargs["executor"] = xyzpy.RayExecutor(
                 num_cpus=args.num_workers,
@@ -103,11 +173,18 @@ def main():
     crop = xyzpy.Crop(name=args.crop_name, parent_dir=args.parent_dir)
 
     if not crop.is_prepared():
-        raise xyzpy.utils.XYZPYError(f"The crop {crop} has not been sown yet.")
+        raise xyzpy.utils.XYZError(f"The crop {crop} has not been sown yet.")
+
+    if args.batch_ids == "missing":
+        batch_ids = crop.missing_results()
+    else:
+        batch_ids = tuple(
+            map(int, filter(None, args.batch_ids.replace(" ", "").split(",")))
+        )
 
     print("Growing:")
     print(crop)
-    crop.grow_missing(**grow_kwargs)
+    crop.grow(batch_ids=batch_ids, **grow_kwargs)
     print("Done!")
 
 

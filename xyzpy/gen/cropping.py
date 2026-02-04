@@ -648,17 +648,200 @@ class Crop(object):
             fn_args, cases, constants=constants, verbosity=verbosity
         )
 
-    def grow(self, batch_ids, **combo_runner_opts):
-        """Grow specific batch numbers using this process."""
-        if isinstance(batch_ids, int):
+    def grow_subprocess(
+        self,
+        batch_ids=None,
+        num_workers=None,
+        num_threads=1,
+        verbosity=1,
+        verbosity_grow=0,
+        raise_errors=False,
+        min_wait=1e-6,
+        max_wait=1e-1,
+        affinities=None,
+    ):
+        """Grow particular or missing batches using a single fresh subprocess
+        per batch. This has a higher overhead for staring each process, but is
+        more robust memory wise, and allows controlling the number of threads
+        used.
+        """
+        from subprocess import Popen, PIPE
+
+        if batch_ids is None:
+            batch_ids = self.missing_results()
+        elif isinstance(batch_ids, int):
             batch_ids = (batch_ids,)
 
-        combo_runner_core(
-            grow,
-            combos=(("batch_number", batch_ids),),
-            constants={"verbosity": 0, "crop": self},
-            **combo_runner_opts,
-        )
+        # queue is reversed so that we can pop from right
+        queue = list(reversed(batch_ids))
+        # map each batch id to the process
+        processing = {}
+
+        if verbosity:
+            pbar = progbar(total=len(queue))
+        else:
+            pbar = None
+
+        pargs = [
+            sys.executable,
+            "-m",
+            "xyzpy.gen.xyzpy_grow_cli",
+            self.name,
+            "--parent-dir",
+            self.parent_dir,
+            "--num-threads",
+            str(num_threads),
+            "--verbosity-grow",
+            str(verbosity_grow),
+        ]
+        if raise_errors:
+            pargs.append("--raise-errors")
+
+        if affinities is not None:
+            # launch each batch with a specific CPU affinity
+            if isinstance(affinities, int):
+                affinities = [affinities]
+            elif isinstance(affinities, (list, tuple, range)):
+                affinities = list(map(int, affinities))
+            else:
+                affinities = list(map(int, affinities.split(",")))
+
+            free_affinities = affinities
+            used_affinities = {}
+        else:
+            free_affinities = used_affinities = None
+
+        try:
+            while queue or processing:
+                # still work to do!
+                while (
+                    # there are batches still
+                    bool(queue) and
+                    # and there are free workers
+                    (len(processing) < num_workers) and
+                    # and there are free affinities if using them
+                    (affinities is None or bool(free_affinities))
+                ):
+                    # can submit more work!
+                    batch_id = queue.pop()
+                    these_pargs = []
+
+                    if affinities is not None:
+                        # pop an affinity to use
+                        affinity = free_affinities.pop()
+                        these_pargs.append("taskset")
+                        these_pargs.append("-c")
+                        these_pargs.append(str(affinity))
+                        used_affinities[batch_id] = affinity
+
+                    these_pargs.extend(pargs)
+                    these_pargs.append("--batch-id")
+                    these_pargs.append(str(batch_id))
+
+                    processing[batch_id] = Popen(
+                        these_pargs,
+                        stdout=PIPE,
+                        stderr=PIPE,
+                        text=True,
+                    )
+
+                all_running = True
+                # reset wait time
+                dt = min_wait
+
+                while processing and all_running:
+                    # check for finished work
+                    for batch_id in tuple(processing):
+                        p = processing[batch_id]
+                        retcode = p.poll()
+                        if retcode is not None:
+                            # batch finished!
+                            del processing[batch_id]
+                            all_running = False
+
+                            if affinities is not None:
+                                # free the affinity
+                                free_affinities.append(
+                                    used_affinities.pop(batch_id)
+                                )
+
+                            if retcode != 0:
+                                stdout, stderr = p.communicate()
+                                print(retcode, stderr)
+
+                            if pbar is not None:
+                                pbar.update()
+
+                    if all_running:
+                        # exponential backoff
+                        time.sleep(dt)
+                        dt = min(1.2 * dt, max_wait)
+
+        except KeyboardInterrupt:
+            # kill all processes
+            for p in processing.values():
+                p.kill()
+            raise
+        finally:
+            if pbar is not None:
+                pbar.close()
+
+    def grow(
+        self,
+        batch_ids=None,
+        raise_errors=False,
+        subprocess=False,
+        debugging=False,
+        verbosity=1,
+        verbosity_grow=0,
+        **combo_runner_opts
+    ):
+        """Grow specific batch numbers using this process.
+
+        Parameters
+        ----------
+        batch_ids : int or sequence of ints, optional
+            Which batch numbers to grow, by default all missing results.
+        raise_errors : bool, optional
+            Whether to raise errors if they occur during growing.
+        subprocess : bool, optional
+            Whether to grow each batch in a fresh subprocess.
+        debugging : bool, optional
+            Whether to set the logging level to debug.
+        verbosity : int, optional
+            How much overall information to show when growing.
+        verbosity_grow : int, optional
+            How much information to show when growing each batch.
+        **combo_runner_opts
+            Additional options to pass to the `combo_runner_core` function.
+            Only if `subprocess` is False.
+        """
+        if batch_ids is None:
+            batch_ids = self.missing_results()
+        elif isinstance(batch_ids, int):
+            batch_ids = (batch_ids,)
+
+        if subprocess:
+            self.grow_subprocess(
+                batch_ids=batch_ids,
+                raise_errors=raise_errors,
+                verbosity=verbosity,
+                verbosity_grow=verbosity_grow,
+                **combo_runner_opts
+            )
+        else:
+            combo_runner_core(
+                grow,
+                combos=(("batch_number", batch_ids),),
+                constants={
+                    "verbosity": verbosity_grow,
+                    "crop": (self.name, self.location),
+                    "raise_errors": raise_errors,
+                    "debugging": debugging,
+                },
+                verbosity=verbosity,
+                **combo_runner_opts,
+            )
 
     def grow_missing(self, **combo_runner_opts):
         """Grow any missing results using this process."""
@@ -1128,9 +1311,10 @@ def grow(
     check_mpi=True,
     verbosity=2,
     debugging=False,
+    raise_errors=True,
 ):
     """Automatically process a batch of cases into results. Should be run in an
-    ".xyz-{fn_name}" folder.
+    ".xyz-{fn_name}" folder, or `crop` should be specified.
 
     Parameters
     ----------
@@ -1153,6 +1337,10 @@ def grow(
         How much information to show.
     debugging : bool, optional
         Set logging level to DEBUG.
+    raise_errors : bool, optional
+        Whether to raise errors that occur during the computation. If growing
+        many batches in parallel, it can be useful to set this to False so
+        a single error doesn't crash the whole process.
     """
     if debugging:
         import logging
@@ -1166,13 +1354,15 @@ def grow(
         current_folder = os.path.relpath(".", "..")
         if current_folder[:5] != ".xyz-":
             raise XYZError(
-                "`grow` should be run in a "
-                '"{crop_parent}/.xyz-{crop_name}" folder, else '
-                "`crop_parent` and `crop_name` (or `fn`) should be "
-                "specified."
+                "`grow` should be run in a '{crop_parent}/.xyz-{crop_name}' "
+                "folder, else `crop_parent` and `crop_name` (or `fn`) should "
+                "be specified."
             )
         crop_name = current_folder[5:]
         crop_location = os.getcwd()
+    elif isinstance(crop, tuple):
+        # only need location, helpful to avoid pickling issues
+        crop_name, crop_location = crop
     else:
         crop_name = crop.name
         crop_location = crop.location
@@ -1194,11 +1384,12 @@ def grow(
 
     if len(cases) == 0:
         raise ValueError(
-            "Something has gone wrong with the loading of "
-            "batch {} ".format(BTCH_NM.format(batch_number))
+            "Something has gone wrong with the loading of batch {} ".format(
+                BTCH_NM.format(batch_number)
+            )
             + "for the crop at {}.".format(crop.location)
         )
-    if (verbosity >= 1):
+    if verbosity >= 1:
         print(f"xyzpy: loaded batch {batch_number} of {crop_name}.")
 
     # maybe want to run grow as mpiexec (i.e. `fn` itself in parallel),
@@ -1228,19 +1419,36 @@ def grow(
     if verbosity >= 1:
         results_it = progbar(results_it, total=len(cases))
 
-    # get the actual results!
-    results = []
-    for i, r in enumerate(results_it):
-        if (verbosity >= 2):
-            results_it.set_description(f"{cases[i]}")
-        results.append(r)
+    try:
+        # get the actual results!
+        results = []
+        for i, r in enumerate(results_it):
+            if verbosity >= 2:
+                results_it.set_description(f"{cases[i]}")
+            results.append(r)
 
-    if rank == 0:
-        # only save to results file if the main worker
-        write_to_disk(tuple(results), results_file)
+        if rank == 0:
+            # only save to results file if the main worker
+            write_to_disk(tuple(results), results_file)
 
-    if (verbosity >= 1):
-        print(f"xyzpy: success - batch {batch_number} completed.")
+        if verbosity >= 1:
+            print(f"xyzpy: success - batch {batch_number} completed.")
+
+    except Exception as e:
+        # possibly catch errors, so they don't crash the whole process
+        print(f"xyzpy: error - batch {batch_number} failed with error: {e}")
+        if raise_errors:
+            raise e
+
+        # allow ctrl-c to stop the process
+        if isinstance(e, KeyboardInterrupt):
+            raise e
+
+        print(f"xyzpy: ... continuing since raise_errors={raise_errors}.")
+
+    finally:
+        if verbosity:
+            results_it.close()
 
 
 # --------------------------------------------------------------------------- #
@@ -1330,9 +1538,7 @@ _SGE_HEADER = (
     "#$ -pe {pe} {num_procs}\n"
     "{header_options}\n"
 )
-_SGE_ARRAY_HEADER = (
-    "#$ -t {run_start}-{run_stop}\n"
-)
+_SGE_ARRAY_HEADER = "#$ -t {run_start}-{run_stop}\n"
 
 _PBS_HEADER = (
     "#!/bin/bash -l\n"
@@ -1341,9 +1547,7 @@ _PBS_HEADER = (
     "#PBS -lwalltime={hours:02}:{minutes:02}:{seconds:02}\n"
     "{header_options}\n"
 )
-_PBS_ARRAY_HEADER = (
-    "#PBS -J {run_start}-{run_stop}\n"
-)
+_PBS_ARRAY_HEADER = "#PBS -J {run_start}-{run_stop}\n"
 
 _SLURM_HEADER = (
     "#!/bin/bash -l\n"
@@ -1351,9 +1555,20 @@ _SLURM_HEADER = (
     "#SBATCH --time={hours:02}:{minutes:02}:{seconds:02}\n"
     "{header_options}\n"
 )
-_SLURM_ARRAY_HEADER = (
-    "#SBATCH --array={run_start}-{run_stop}\n"
-)
+_SLURM_ARRAY_HEADER = "#SBATCH --array={run_start}-{run_stop}\n"
+
+# _BASE = (
+#     "echo 'XYZPY script starting...'\n"
+#     "cd {working_directory}\n"
+#     "{shell_setup}\n"
+#     "xyzpy-grow {name}"
+#     " --parent-dir {parent_dir}"
+#     " --batch-ids $SLURM_ARRAY_TASK_ID"
+#     " --num-threads {num_threads}"
+#     " --num_workers {num_workers}"
+#     " --subprocess {subprocess}"
+#     "\n"
+# )
 
 _BASE = (
     "echo 'XYZPY script starting...'\n"
@@ -1369,54 +1584,50 @@ _BASE = (
     "if __name__ == '__main__':\n"
     "    crop = Crop(name='{name}', parent_dir='{parent_dir}')\n"
     "    print('Growing:', repr(crop))\n"
-)
-_ARRAY_GROW_KWARGS = (
-    "    grow_kwargs = dict(crop=crop, debugging={debugging}, "
-    "num_workers={num_workers})\n"
+    "    grow_kwargs = dict(\n"
+    "        num_workers={num_workers},\n"
+    "        subprocess={subprocess},\n"
+    "        debugging={debugging},\n"
+    "        verbosity_grow=2,\n"
+    "    )\n"
 )
 
 _CLUSTER_SGE_GROW_ALL_SCRIPT = (
-    _ARRAY_GROW_KWARGS +
-    "    grow($SGE_TASK_ID, **grow_kwargs)\n"
+    "    crop.grow($SGE_TASK_ID, **grow_kwargs)\n"
 )
 
 _CLUSTER_PBS_GROW_ALL_SCRIPT = (
-    _ARRAY_GROW_KWARGS +
-    "    grow($PBS_ARRAY_INDEX, **grow_kwargs)\n"
+    "    crop.grow($PBS_ARRAY_INDEX, **grow_kwargs)\n"
 )
 
 _CLUSTER_SLURM_GROW_ALL_SCRIPT = (
-    _ARRAY_GROW_KWARGS +
-    "    grow($SLURM_ARRAY_TASK_ID, **grow_kwargs)\n"
+    "    crop.grow($SLURM_ARRAY_TASK_ID, **grow_kwargs)\n"
 )
 
 _CLUSTER_SGE_GROW_PARTIAL_SCRIPT = (
-    _ARRAY_GROW_KWARGS +
     "    batch_ids = {batch_ids}]\n"
-    "    grow(batch_ids[$SGE_TASK_ID - 1], **grow_kwargs)\n"
+    "    crop.grow(batch_ids[$SGE_TASK_ID - 1], **grow_kwargs)\n"
 )
 
 _CLUSTER_PBS_GROW_PARTIAL_SCRIPT = (
-    _ARRAY_GROW_KWARGS +
     "    batch_ids = {batch_ids}\n"
-    "    grow(batch_ids[$PBS_ARRAY_INDEX - 1], **grow_kwargs)\n"
+    "    crop.grow(batch_ids[$PBS_ARRAY_INDEX - 1], **grow_kwargs)\n"
 )
 
 _CLUSTER_SLURM_GROW_PARTIAL_SCRIPT = (
-    _ARRAY_GROW_KWARGS +
     "    batch_ids = {batch_ids}\n"
-    "    grow(batch_ids[$SLURM_ARRAY_TASK_ID - 1], **grow_kwargs)\n"
+    "    crop.grow(batch_ids[$SLURM_ARRAY_TASK_ID - 1], **grow_kwargs)\n"
 )
 
 _BASE_CLUSTER_GROW_SINGLE = (
+    "    grow_kwargs['verbosity_grow'] = 0\n"
     "    batch_ids = {batch_ids}\n"
-    "    crop.grow(batch_ids, num_workers={num_workers})\n"
+    "    crop.grow(batch_ids, **grow_kwargs)\n"
 )
 
 _BASE_CLUSTER_SCRIPT_END = (
     "EOM\n"
-    '{launcher} -c "$SCRIPT"\n'
-    "echo 'XYZPY script finished'\n"
+    "{launcher} -c \"$SCRIPT\"\necho 'XYZPY script finished'\n"
 )
 
 
@@ -1430,6 +1641,7 @@ def gen_cluster_script(
     num_threads=None,
     num_nodes=None,
     num_workers=None,
+    subprocess=False,
     mem=None,
     mem_per_cpu=None,
     gigabytes=None,
@@ -1438,7 +1650,7 @@ def gen_cluster_script(
     minutes=None,
     seconds=None,
     conda_env=True,
-    launcher="python",
+    launcher=None,
     setup="#",
     shell_setup="",
     mpi=False,
@@ -1476,6 +1688,8 @@ def gen_cluster_script(
     num_workers : int, optional
         How many workers to use for parallel growing, default is sequential. If
         specified, then generally ``num_workers * num_threads == num_procs``.
+    subprocess : bool, optional
+        Whether to use a fresh subprocess for each batch, default: False.
     num_nodes : int, optional
         How many nodes to request, default: 1.
     conda_env : bool or str, optional
@@ -1484,8 +1698,8 @@ def gen_cluster_script(
         launch the script. If a string, the environment will be the one
         specified by the string.
     launcher : str, optional
-        How to launch the script, default: ``'python'``. But could for example
-        be ``'mpiexec python'`` for a MPI program.
+        How to launch the script, default: the current Python interpreter. But
+        could for example be ``'mpiexec python'`` for a MPI program.
     setup : str, optional
         Python script to run before growing, for things that shouldnt't be put
         in the crop function itself, e.g. one-time imports with side-effects
@@ -1589,14 +1803,19 @@ def gen_cluster_script(
         home = expanduser("~")
         output_directory = os.path.join(home, "Scratch", "output")
 
+    if launcher is None:
+        launcher = sys.executable
+
     if conda_env is True:
         # automatically set conda environment to be the
         # same as the one that's running this function
         conda_env = os.environ.get("CONDA_DEFAULT_ENV", False)
         if conda_env:
             # but only if we are in a conda environment
-            if ("conda activate" in shell_setup) or (
-                "mamba activate" in shell_setup
+            if (
+                ("conda activate" in shell_setup)
+                or ("mamba activate" in shell_setup)
+                or ("micromamba activate" in shell_setup)
             ):
                 # and user is not already explicitly activating
                 conda_env = False
@@ -1614,26 +1833,32 @@ def gen_cluster_script(
 
     if kwargs:
         if scheduler == "slurm":
-            header_options = "\n".join([
-                f"#SBATCH --{k}"
-                if (v is None or v is True) else
-                f"#SBATCH --{k}={v}"
-                for k, v in kwargs.items()
-            ])
+            header_options = "\n".join(
+                [
+                    f"#SBATCH --{k}"
+                    if (v is None or v is True)
+                    else f"#SBATCH --{k}={v}"
+                    for k, v in kwargs.items()
+                ]
+            )
         elif scheduler == "pbs":
-            header_options = "\n".join([
-                f"#PBS -l {k}"
-                if (v is None or v is True) else
-                f"#PBS -l {k}={v}"
-                for k, v in kwargs.items()
-            ])
+            header_options = "\n".join(
+                [
+                    f"#PBS -l {k}"
+                    if (v is None or v is True)
+                    else f"#PBS -l {k}={v}"
+                    for k, v in kwargs.items()
+                ]
+            )
         elif scheduler == "sge":
-            header_options = "\n".join([
-                f"#$ -l {k}"
-                if (v is None or v is True) else
-                f"#$ -l {k}={v}"
-                for k, v in kwargs.items()
-            ])
+            header_options = "\n".join(
+                [
+                    f"#$ -l {k}"
+                    if (v is None or v is True)
+                    else f"#$ -l {k}={v}"
+                    for k, v in kwargs.items()
+                ]
+            )
     else:
         header_options = ""
 
@@ -1671,6 +1896,7 @@ def gen_cluster_script(
         "num_threads": num_threads,
         "num_nodes": num_nodes,
         "num_workers": num_workers,
+        "subprocess": subprocess,
         "launcher": launcher,
         "setup": setup,
         "shell_setup": shell_setup,
@@ -1737,7 +1963,7 @@ def gen_cluster_script(
         if batch_ids is None:
             # grow all missing, but compute the list dynamically
             # this allows the job to be restarted
-            opts["batch_ids"] = "crop.missing_results()"
+            opts["batch_ids"] = "None"
         script += _BASE_CLUSTER_GROW_SINGLE
 
     script += _BASE_CLUSTER_SCRIPT_END
@@ -1765,8 +1991,9 @@ def grow_cluster(
     num_procs=1,
     num_threads=None,
     num_workers=None,
+    subprocess=False,
     conda_env=True,
-    launcher="python",
+    launcher=None,
     setup="#",
     shell_setup="",
     mpi=False,
@@ -1794,11 +2021,26 @@ def grow_cluster(
         How many seconds to request, default=0.
     gigabytes : int, optional
         How much memory to request, default: 2.
+    num_nodes : int, optional
+        How many nodes to request, default: 1.
     num_procs : int, optional
         How many processes to request (threaded cores or MPI), default: 1.
+    num_threads : int, optional
+        How many threads to use per process. Will be computed automatically
+        based on ``num_procs`` and ``num_workers`` if not specified.
+    num_workers : int, optional
+        How many workers to use for parallel growing, default is sequential. If
+        specified, then generally ``num_workers * num_threads == num_procs``.
+    subprocess : bool, optional
+        Whether to use a fresh subprocess for each batch, default: False.
+    conda_env : bool or str, optional
+        Whether to activate a conda environment before running the script.
+        If ``True``, the environment will be the same as the one used to
+        launch the script. If a string, the environment will be the one
+        specified by the string.
     launcher : str, optional
-        How to launch the script, default: ``'python'``. But could for example
-        be ``'mpiexec python'`` for a MPI program.
+        How to launch the script, default: the current Python interpreter. But
+        could for example be ``'mpiexec python'`` for a MPI program.
     setup : str, optional
         Python script to run before growing, for things that shouldnt't be put
         in the crop function itself, e.g. one-time imports with side-effects
@@ -1815,11 +2057,11 @@ def grow_cluster(
     debugging : bool, optional
         Set the python log level to debugging.
     """
+    from subprocess import run
+
     if crop.is_ready_to_reap():
         print("Crop ready to reap: nothing to submit.")
         return
-
-    import subprocess
 
     script = gen_cluster_script(
         crop,
@@ -1835,6 +2077,7 @@ def grow_cluster(
         num_threads=num_threads,
         num_nodes=num_nodes,
         num_workers=num_workers,
+        subprocess=subprocess,
         conda_env=conda_env,
         launcher=launcher,
         setup=setup,
@@ -1850,9 +2093,9 @@ def grow_cluster(
         f.write(script)
 
     if scheduler in {"sge", "pbs"}:
-        result = subprocess.run(["qsub", script_file], capture_output=True)
+        result = run(["qsub", script_file], capture_output=True)
     elif scheduler == "slurm":
-        result = subprocess.run(["sbatch", script_file], capture_output=True)
+        result = run(["sbatch", script_file], capture_output=True)
 
     print(result.stderr.decode())
     print(result.stdout.decode())
