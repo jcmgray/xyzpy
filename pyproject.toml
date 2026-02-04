@@ -84,8 +84,7 @@ source = ["xyzpy"]
 [tool.ruff]
 line-length = 79
 target-version = "py310"
-[tool.ruff.lint]
-ignore = ["E741"]
+lint.ignore = ["E741"]
 
 
 # ---------------------------------- pixi ----------------------------------- #
@@ -151,7 +150,7 @@ docs = { features = ["pynew", "docs"] }
 cmd = """
 pytest \
     tests/ \
-    --cov=autoray \
+    --cov=xyzpy \
     --cov-report=xml \
     --verbose \
     --durations=10
