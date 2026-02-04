@@ -1,36 +1,36 @@
-import os
-import re
 import copy
-import math
-import time
-import glob
-import shutil
-import pickle
-import pathlib
-import warnings
 import functools
+import glob
 import importlib
 import itertools
+import math
+import os
+import pathlib
+import pickle
+import re
+import shutil
+import sys
+import time
+import warnings
 
 from ..utils import _get_fn_name, prod, progbar
-from .combo_runner import (
-    nan_like_result,
-    combo_runner_core,
-    combo_runner_to_ds,
-    get_reusable_executor,
-)
 from .case_runner import (
     case_runner,
 )
+from .combo_runner import (
+    combo_runner_core,
+    combo_runner_to_ds,
+    get_reusable_executor,
+    nan_like_result,
+)
+from .farming import Harvester, Runner, Sampler, XYZError
 from .prepare import (
+    parse_attrs,
+    parse_cases,
     parse_combos,
     parse_constants,
-    parse_attrs,
     parse_fn_args,
-    parse_cases,
 )
-from .farming import Runner, Harvester, Sampler, XYZError
-
 
 BTCH_NM = "xyz-batch-{}.jbdmp"
 RSLT_NM = "xyz-result-{}.jbdmp"
@@ -324,6 +324,31 @@ class Crop(object):
         else:
             return read_from_disk(sfile)
 
+    def load_batch(self, batch_number):
+        """Load a specific batch from disk."""
+        return read_from_disk(
+            os.path.join(
+                self.location, "batches", BTCH_NM.format(batch_number)
+            )
+        )
+
+    def load_result(self, batch_number):
+        """Load a specific result from disk."""
+        return read_from_disk(
+            os.path.join(
+                self.location, "results", RSLT_NM.format(batch_number)
+            )
+        )
+
+    def save_result(self, batch_number, result):
+        """Save a specific result to disk."""
+        write_to_disk(
+            result,
+            os.path.join(
+                self.location, "results", RSLT_NM.format(batch_number)
+            ),
+        )
+
     def _sync_info_from_disk(self, only_missing=True):
         """Load information about the saved cases."""
         settings = self.load_info()
@@ -407,7 +432,18 @@ class Crop(object):
             self._num_results == self.num_sown_batches
         )
 
-    def missing_results(self):
+    def completed_results(self) -> tuple[int, ...]:
+        """Return tuple of batches which have been grown already."""
+        self.calc_progress()
+
+        def result_exists(x):
+            return os.path.isfile(
+                os.path.join(self.location, "results", RSLT_NM.format(x))
+            )
+
+        return tuple(filter(result_exists, range(1, self.num_batches + 1)))
+
+    def missing_results(self) -> tuple[int, ...]:
         """Return tuple of batches which haven't been grown yet."""
         self.calc_progress()
 
@@ -626,7 +662,7 @@ class Crop(object):
 
     def grow_missing(self, **combo_runner_opts):
         """Grow any missing results using this process."""
-        self.grow(batch_ids=self.missing_results(), **combo_runner_opts)
+        self.grow(batch_ids=None, **combo_runner_opts)
 
     def reap_combos(self, wait=False, clean_up=None, allow_incomplete=False):
         """Reap already sown and grown results from this crop.
@@ -945,11 +981,7 @@ class Crop(object):
                 .strip("xyz-result-")
                 .strip(".jbdmp")
             )
-            batch_file = os.path.join(
-                self.location, "batches", BTCH_NM.format(result_num)
-            )
-
-            batch = read_from_disk(batch_file)
+            batch = self.load_batch(result_num)
 
             try:
                 result = read_from_disk(result_file)
@@ -1901,8 +1933,8 @@ Crop.grow_slurm = functools.partialmethod(Crop.grow_cluster, scheduler="slurm")
 
 def clean_slurm_outputs(job, directory=".", cancel_if_finished=True):
     """ """
-    import re
     import pathlib
+    import re
     import subprocess
 
     job = str(job)
@@ -1910,7 +1942,7 @@ def clean_slurm_outputs(job, directory=".", cancel_if_finished=True):
     files = list(pathlib.Path(directory).glob(f"slurm-{job}_*.out"))
 
     for file in files:
-        jobid = int(re.match("slurm-\d+_(\d+).out", str(file)).groups()[0])
+        jobid = int(re.match(r"slurm-\d+_(\d+).out", str(file)).groups()[0])
 
         with open(file, "r") as f:
             contents = f.read()
@@ -1950,6 +1982,7 @@ def clean_slurm_outputs(job, directory=".", cancel_if_finished=True):
 
 def manage_slurm_outputs(crop, job, wait_time=60):
     import time
+
     from IPython.display import clear_output
 
     try:
