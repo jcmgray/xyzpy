@@ -311,6 +311,7 @@ INFINIPLOTTER_DEFAULTS = dict(
     legend_labels=None,
     legend_extras=None,
     legend_opts=None,
+    label=None,
     title=None,
     ax=None,
     axs=None,
@@ -962,11 +963,17 @@ class Infiniplotter:
 
             plot_opts = {**self.base_style, **specific_style}
 
+            if self.label:
+                # override with manual label
+                label = self.label
+            else:
+                label = ", ".join(map(str, sub_key.values()))
+
             # do the plotting!
             (handle,) = ax.plot(
                 xmdata,
                 ymdata,
-                label=", ".join(map(str, sub_key.values())),
+                label=label,
                 **plot_opts,
                 **self.kwargs,
             )
@@ -993,7 +1000,8 @@ class Infiniplotter:
 
             # only want one legend entry per unique style
             key = frozenset(sub_key.items())
-            self.handles.setdefault(key, handle)
+            if key or self.label:
+                self.handles.setdefault(key, handle)
 
         self.do_axes_formatting()
 
