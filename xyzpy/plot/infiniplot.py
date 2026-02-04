@@ -317,6 +317,7 @@ INFINIPLOTTER_DEFAULTS = dict(
     axs=None,
     format_axs=None,
     figsize=None,
+    background_color=None,
     height=3,
     width=None,
     hspace=0.12,
@@ -342,7 +343,6 @@ _HEATMAP_INVALID_KWARGS = {
 
 
 class Infiniplotter:
-
     def __init__(
         self,
         ds,
@@ -708,7 +708,10 @@ class Infiniplotter:
                 gridspec_kw={"hspace": self.hspace, "wspace": self.wspace},
                 figsize=self.figsize,
             )
-            self.fig.patch.set_alpha(0.0)
+            if self.background_color is not None:
+                self.fig.patch.set_facecolor(self.background_color)
+            else:
+                self.fig.patch.set_alpha(0.0)
         else:
             self.fig = None
 
