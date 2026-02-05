@@ -240,7 +240,7 @@ class Crop(object):
         else:
             n_combos = 1
 
-        if cases:
+        if cases is not None:
             n_cases = len(cases)
         else:
             n_cases = 1

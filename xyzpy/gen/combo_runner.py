@@ -187,7 +187,6 @@ def combo_runner_core(
         case_coords = {arg: set() for arg in case_args}
     else:
         # single empty case and everything is in the combos
-        cases = ()
         case_args = ()
         case_values = ((),)
         case_coords = {}
@@ -273,7 +272,7 @@ def combo_runner_core(
 
         results_mapped = dict(zip(locs, r))
 
-        if not cases:
+        if cases is None:
             # we ran all combinations -> no missing data
             return _unflatten(results_mapped, combo_values)
 
@@ -657,7 +656,7 @@ def combo_runner_to_ds(
         var_dims = parse_var_dims(var_dims, var_names=var_names)
         var_coords = parse_var_coords(var_coords)
 
-    if cases or to_df:
+    if (cases is not None) or to_df:
         info = {}
     else:
         info = None
@@ -688,7 +687,7 @@ def combo_runner_to_ds(
             var_names=var_names,
         )
 
-    if cases:
+    if cases is not None:
         # if we have cases, then need to find the effective full combos
         # -> results contains nan placeholders for non-run cases
         combos = tuple(zip(info["fn_args"], info["all_combo_values"]))

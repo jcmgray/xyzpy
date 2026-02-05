@@ -35,13 +35,7 @@ jobs:
         environments: ${{ matrix.env }}
 
     - name: Test with pytest
-      run: |
-        pixi run -e ${{ matrix.env }} \
-        pytest tests/ \
-        --cov=${{ github.repository }} \
-        --cov-report=xml \
-        --verbose \
-        --durations=10
+      run: pixi run -e ${{ matrix.env }} test
 
     - name: Report to codecov
       uses: codecov/codecov-action@v5

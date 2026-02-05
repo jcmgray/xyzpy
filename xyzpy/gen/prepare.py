@@ -73,8 +73,8 @@ def parse_combo_results(results, var_names):
 
 def parse_cases(cases, fn_args=None):
     """ """
-    if not cases:
-        return ()
+    if cases is None:
+        return None
 
     # cases = {'a': 1, 'b': 2, 'c': 3} --> ({'a': 1, 'b': 2, 'c': 3},)
     if isinstance(cases, dict):
