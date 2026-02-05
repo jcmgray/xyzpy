@@ -2,10 +2,10 @@
 
 [![tests](https://github.com/jcmgray/xyzpy/actions/workflows/tests.yml/badge.svg)](https://github.com/jcmgray/xyzpy/actions/workflows/tests.yml)
 [![codecov](https://codecov.io/gh/jcmgray/xyzpy/branch/main/graph/badge.svg?token=Q5evNiuT9S)](https://codecov.io/gh/jcmgray/xyzpy)
-[![Codacy Badge](https://app.codacy.com/project/badge/Grade/ba896d74c4954dd58da01df30c7bf326)](https://app.codacy.com/gh/jcmgray/xyzpy/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
 [![Docs](https://readthedocs.org/projects/xyzpy/badge/?version=latest)](https://xyzpy.readthedocs.io)
 [![PyPI](https://img.shields.io/pypi/v/xyzpy?color=teal)](https://pypi.org/project/xyzpy/)
 [![Anaconda-Server Badge](https://anaconda.org/conda-forge/xyzpy/badges/version.svg)](https://anaconda.org/conda-forge/xyzpy)
+[![Pixi Badge](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/prefix-dev/pixi/main/assets/badge/v0.json)](https://pixi.sh)
 
 -------------------------------------------------------------------------------
 
