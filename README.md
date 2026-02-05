@@ -1,4 +1,4 @@
-![xyzpy logo](https://github.com/jcmgray/xyzpy/blob/main/docs/_static/xyzpy-logo-title.png)
+<img src="https://github.com/jcmgray/xyzpy/blob/main/docs/_static/xyzpy-logo-title.png?raw=true" alt="symmray logo" width="640"/>
 
 [![tests](https://github.com/jcmgray/xyzpy/actions/workflows/tests.yml/badge.svg)](https://github.com/jcmgray/xyzpy/actions/workflows/tests.yml)
 [![codecov](https://codecov.io/gh/jcmgray/xyzpy/branch/main/graph/badge.svg?token=Q5evNiuT9S)](https://codecov.io/gh/jcmgray/xyzpy)
