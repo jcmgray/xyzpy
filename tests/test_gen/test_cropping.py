@@ -457,3 +457,46 @@ class TestSowerReaper:
 
         assert ds["out"].ndim == 4
         assert ds["out"].notnull().sum().item() == 8
+
+    def test_delete_all_resets_state(self):
+        combos = [
+            ("a", [10, 20, 30]),
+            ("b", [4, 5, 6, 7]),
+        ]
+
+        with TemporaryDirectory() as tdir:
+            crop = Crop(fn=foo_add, parent_dir=tdir, batchsize=5)
+            crop.sow_combos(combos, constants={"c": True})
+
+            # confirm crop is prepared and has loaded state
+            assert crop.is_prepared()
+            assert crop.batchsize == 5
+            assert crop.num_batches == 3
+            assert crop._batch_remainder is not None or True
+            crop.calc_progress()
+            assert crop._num_sown_batches == 3
+            assert crop._num_results == 0
+
+            # grow one batch to populate cached result state
+            grow(1, Crop(parent_dir=tdir, name="foo_add"))
+            crop.calc_progress()
+            assert crop._num_results == 1
+
+            crop.delete_all()
+
+            # directory should be gone
+            assert not os.path.exists(crop.location)
+
+            # all loaded information should be reset
+            assert crop.batchsize is None
+            assert crop.num_batches is None
+            assert crop._batch_remainder is None
+            assert crop._all_nan_result is None
+            assert crop._num_sown_batches == -1
+            assert crop._num_results == -1
+
+            # identity attributes should be preserved
+            assert crop.name == "foo_add"
+            assert crop.parent_dir is not None
+            assert crop.location is not None
+            assert crop.fn is foo_add

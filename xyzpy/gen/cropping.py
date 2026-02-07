@@ -205,6 +205,8 @@ class Crop(object):
         self.shuffle = shuffle
         self._batch_remainder = None
         self._all_nan_result = None
+        self._num_sown_batches = -1
+        self._num_results = -1
 
         # Work out the full directory for the crop
         self.location, self.name, self.parent_dir = parse_crop_details(
@@ -455,9 +457,17 @@ class Crop(object):
         return tuple(filter(no_result_exists, range(1, self.num_batches + 1)))
 
     def delete_all(self):
-        """Delete the crop directory and all its contents."""
-        # delete everything
+        """Delete the crop directory and all its contents, and reset
+        any loaded information on this Crop object.
+        """
         shutil.rmtree(self.location)
+        # reset in-memory state so the object reflects a fresh crop
+        self.batchsize = None
+        self.num_batches = None
+        self._batch_remainder = None
+        self._all_nan_result = None
+        self._num_sown_batches = -1
+        self._num_results = -1
 
     @property
     def all_nan_result(self):
