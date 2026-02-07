@@ -112,9 +112,18 @@ def progbar(it=None, nb=False, **kwargs):
 
 
 def getsizeof(obj):
-    """Compute the real size of a python object. Taken from
+    """Compute the real size of a Python object in bytes, taken from
+    https://stackoverflow.com/a/30316760/5640201.
 
-    https://stackoverflow.com/a/30316760/5640201
+    Parameters
+    ----------
+    obj : object
+        Object to measure.
+
+    Returns
+    -------
+    int
+        Total size in bytes.
     """
     import sys
     from gc import get_referents
@@ -532,7 +541,16 @@ class RunningCovariance:  # pragma: no cover
 
 
 class RunningCovarianceMatrix:
+    """Running covariance matrix for ``n`` variables.
+
+    Parameters
+    ----------
+    n : int, optional
+        Number of variables to track.
+    """
+
     def __init__(self, n=2):
+        """Initialize the running covariance matrix."""
         self.n = n
         self.rcs = {}
         for i in range(self.n):
@@ -540,21 +558,25 @@ class RunningCovarianceMatrix:
                 self.rcs[i, j] = RunningCovariance()
 
     def update(self, *x):
+        """Update the covariance matrix with a single observation."""
         for i in range(self.n):
             for j in range(i, self.n):
                 self.rcs[i, j].update(x[i], x[j])
 
     def update_from_it(self, *xs):
+        """Update from iterables of observations for each variable."""
         for i in range(self.n):
             for j in range(i, self.n):
                 self.rcs[i, j].update_from_it(xs[i], xs[j])
 
     @property
     def count(self):
+        """Return the number of samples accumulated."""
         return self.rcs[0, 0].count
 
     @property
     def covar_matrix(self):
+        """Return the population covariance matrix."""
         covar_matrix = np.empty((self.n, self.n))
         for i in range(self.n):
             for j in range(self.n):
@@ -566,6 +588,7 @@ class RunningCovarianceMatrix:
 
     @property
     def sample_covar_matrix(self):
+        """Return the sample covariance matrix."""
         covar_matrix = np.empty((self.n, self.n))
         for i in range(self.n):
             for j in range(self.n):
@@ -833,6 +856,7 @@ def get_peak_memory_usage():
 
 
 def report_memory():
+    """Return a formatted memory usage summary for the current process."""
     try:
         import psutil
 
@@ -856,6 +880,7 @@ def report_memory():
 
 
 def report_memory_gpu():
+    """Return a formatted GPU memory usage summary for the process."""
     try:
         import subprocess
 

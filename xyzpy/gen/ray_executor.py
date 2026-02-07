@@ -7,7 +7,7 @@ import warnings
 
 @functools.lru_cache(None)
 def get_ray():
-    """ """
+    """Import and return the ``ray`` module (cached)."""
     import ray
 
     return ray
@@ -83,6 +83,7 @@ def get_remote_fn(fn, **remote_opts):
 
 @functools.lru_cache(2**14)
 def get_fn_as_remote_object(fn):
+    """Store ``fn`` in the Ray object store and return an ``ObjectRef``."""
     ray = get_ray()
     return ray.put(fn)
 

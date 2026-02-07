@@ -38,8 +38,19 @@ _engine_extensions = {
 
 
 def auto_add_extension(file_name, engine):
-    """Make sure a file name has an extension that reflects its
-    file type.
+    """Ensure ``file_name`` has an extension matching ``engine``.
+
+    Parameters
+    ----------
+    file_name : str
+        File name to normalize.
+    engine : {'h5netcdf', 'netcdf4', 'joblib', 'zarr'}
+        Engine determining the extension.
+
+    Returns
+    -------
+    str
+        File name with an appropriate extension appended.
     """
     if not any(ext in file_name for ext in _engine_extensions.values()):
         extension = _engine_extensions[engine]
@@ -198,7 +209,18 @@ def save_merge_ds(ds, fname, overwrite=None, **kwargs):
 
 
 def trimna(obj):
-    """Drop values across all dimensions for which all values are NaN."""
+    """Drop values across dims where all values are NaN.
+
+    Parameters
+    ----------
+    obj : xarray.Dataset or xarray.DataArray
+        Object to trim.
+
+    Returns
+    -------
+    same type as obj
+        Trimmed object.
+    """
     trimmed_obj = obj.copy()
     for d in obj.dims:
         trimmed_obj = trimmed_obj.dropna(d, how="all")
@@ -206,8 +228,17 @@ def trimna(obj):
 
 
 def sort_dims(ds):
-    """Make sure all the dimensions on all the variables appear in the
-    same order.
+    """Reorder variable dimensions to match ``ds.dims``. This is an inplace
+    operation.
+
+    Parameters
+    ----------
+    ds : xarray.Dataset
+        Dataset to reorder in place.
+
+    Returns
+    -------
+    None
     """
     dim_list = tuple(ds.dims)
 
@@ -217,7 +248,20 @@ def sort_dims(ds):
 
 
 def post_fix(ds, postfix):
-    """Add ``postfix`` to the name of every data variable in ``ds``."""
+    """Append ``"_{postfix}"`` to each data variable name.
+
+    Parameters
+    ----------
+    ds : xarray.Dataset
+        Dataset to rename.
+    postfix : str
+        Suffix to append.
+
+    Returns
+    -------
+    xarray.Dataset
+        Renamed dataset.
+    """
     return ds.rename({old: old + "_" + postfix for old in ds.data_vars})
 
 
@@ -314,6 +358,11 @@ def merge_sync_conflict_datasets(
             Base file name to glob on - should include '*'.
         engine : str , optional
             Load and save engine used by xarray.
+        combine_first : bool, optional
+            If True, combine datasets sequentially using ``combine_first``,
+            preferring the first dataset in the list, which is assumed to be
+            the original. If False, merge all datasets together using
+            ``xr.merge``, which will raise an error if there are any conflicts.
     """
     fnames = glob(base_name)
     if len(fnames) < 2:
@@ -354,7 +403,21 @@ def merge_sync_conflict_datasets(
 
 
 def save_df(df, name, engine="pickle", key="df", **kwargs):
-    """Save a dataframe to disk."""
+    """Save a dataframe to disk.
+
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        DataFrame to save.
+    name : str
+        File name to save to.
+    engine : {'pickle', 'csv', 'hdf'}, optional
+        Storage backend.
+    key : str, optional
+        HDF key when ``engine='hdf'``.
+    **kwargs
+        Passed through to the pandas writer.
+    """
     meth = "to_{}".format(engine)
     if engine == "hdf":
         kwargs["key"] = key
@@ -364,7 +427,24 @@ def save_df(df, name, engine="pickle", key="df", **kwargs):
 
 
 def load_df(name, engine="pickle", key="df", **kwargs):
-    """Load a dataframe from disk."""
+    """Load a dataframe from disk.
+
+    Parameters
+    ----------
+    name : str
+        File name to read from.
+    engine : {'pickle', 'csv', 'hdf'}, optional
+        Storage backend.
+    key : str, optional
+        HDF key when ``engine='hdf'``.
+    **kwargs
+        Passed through to the pandas reader.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Loaded dataframe.
+    """
     import pandas as pd
 
     func = "read_{}".format(engine)

@@ -21,6 +21,7 @@ def dictify(x):
 
 
 def parse_fn_args(fn, fn_args):
+    """Parse function arguments into a tuple of argument names."""
     if fn_args is None:
         return tuple(inspect.signature(fn).parameters)
 
@@ -31,6 +32,7 @@ def parse_fn_args(fn, fn_args):
 
 
 def check_for_duplicates(arg, values):
+    """Raise if duplicate values are provided for combo argument ``arg``."""
     if values is Ellipsis:
         return
     seen = set()
@@ -60,7 +62,7 @@ def parse_combos(combos):
 
 
 def parse_combo_results(results, var_names):
-    """ """
+    """Normalize combo results to a tuple when a single output is used."""
     if var_names is not None and (
         isinstance(var_names, str) or len(var_names) == 1
     ):
@@ -72,7 +74,7 @@ def parse_combo_results(results, var_names):
 
 
 def parse_cases(cases, fn_args=None):
-    """ """
+    """Normalize cases into a tuple of dicts keyed by ``fn_args``."""
     if cases is None:
         return None
 
@@ -101,7 +103,7 @@ def parse_cases(cases, fn_args=None):
 
 
 def parse_case_results(results, var_names):
-    """ """
+    """Normalize case results to tuples for single-output functions."""
     if isinstance(var_names, str) or len(var_names) == 1:
         results = tuple((r,) for r in results)
     return results
@@ -111,7 +113,7 @@ def parse_case_results(results, var_names):
 
 
 def parse_var_names(var_names):
-    """ """
+    """Normalize variable names to a tuple (or ``(None,)``)."""
     return (
         (None,)
         if var_names is None
