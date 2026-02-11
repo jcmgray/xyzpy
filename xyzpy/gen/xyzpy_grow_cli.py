@@ -117,6 +117,19 @@ def main():
         ),
     )
     parser.add_argument(
+        "--gpus",
+        type=str,
+        default=None,
+        help=(
+            "If subprocess is enabled, this is an optional comma separated "
+            "list of GPU device IDs to assign to subprocesses via "
+            "CUDA_VISIBLE_DEVICES. Each subprocess gets a single GPU "
+            "from this pool; the pool also limits concurrency."
+            "You can oversubscribe GPUs by repeating device IDs, e.g. "
+            "`0,0,1,1` to allow 2 subprocesses to share each GPU."
+        ),
+    )
+    parser.add_argument(
         "--verbosity",
         type=int,
         default=1,
@@ -153,6 +166,7 @@ def main():
         # this calls `xyzpy-grow` itself and we want to match env vars above
         grow_kwargs["num_threads"] = args.num_threads
         grow_kwargs["affinities"] = args.affinities
+        grow_kwargs["gpus"] = args.gpus
 
     if args.ray:
         if args.subprocess:

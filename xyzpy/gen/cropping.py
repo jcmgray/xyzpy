@@ -139,6 +139,71 @@ def check_ready_to_reap(crop, allow_incomplete, wait):
         )
 
 
+# ----------- subprocess resource pooling ----------- #
+
+
+def _parse_resource_ids(raw):
+    """Normalize an int, list, tuple, range, or comma-separated string
+    into a list of integer resource IDs.
+    """
+    if isinstance(raw, int):
+        return [raw]
+    elif isinstance(raw, (list, tuple, range)):
+        return list(map(int, raw))
+    else:
+        return list(map(int, raw.split(",")))
+
+
+def _acquire_affinity(rid, pargs, env):
+    """Prepend ``taskset -c <cpu>`` to pin to a CPU core."""
+    pargs[0:0] = ["taskset", "-c", str(rid)]
+
+
+def _acquire_gpu(rid, pargs, env):
+    """Set ``CUDA_VISIBLE_DEVICES`` to pin to a GPU."""
+    env["CUDA_VISIBLE_DEVICES"] = str(rid)
+
+
+class _ResourcePool:
+    """A pool of reusable resource IDs (CPUs, GPUs, etc.) that can be
+    acquired and released once per batch subprocess.
+
+    Parameters
+    ----------
+    ids : list of int
+        The resource IDs available to hand out.
+    acquire_fn : callable
+        ``fn(rid, pargs, env)`` — mutate *pargs* (the command prefix
+        list) and/or *env* (the environment dict) to apply *rid*.
+    """
+
+    def __init__(self, ids, acquire_fn):
+        self.free = list(ids)
+        self.used = {}
+        self.acquire_fn = acquire_fn
+
+    @classmethod
+    def from_raw(cls, raw, acquire_fn):
+        """Create a pool from a raw user value, or return ``None``."""
+        if raw is None:
+            return None
+        return cls(_parse_resource_ids(raw), acquire_fn)
+
+    def available(self):
+        """Whether there is at least one free resource."""
+        return bool(self.free)
+
+    def acquire(self, batch_id, pargs, env):
+        """Pop a resource, apply it, and track it against *batch_id*."""
+        rid = self.free.pop()
+        self.used[batch_id] = rid
+        self.acquire_fn(rid, pargs, env)
+
+    def release(self, batch_id):
+        """Return the resource used by *batch_id* to the free pool."""
+        self.free.append(self.used.pop(batch_id))
+
+
 class Crop(object):
     """Encapsulates all the details describing a single 'crop', that is,
     its location, name, and batch size/number. Also allows tracking of
@@ -669,11 +734,40 @@ class Crop(object):
         min_wait=1e-6,
         max_wait=1e-1,
         affinities=None,
+        gpus=None,
     ):
         """Grow particular or missing batches using a single fresh subprocess
-        per batch. This has a higher overhead for staring each process, but is
+        per batch. This has a higher overhead for starting each process, but is
         more robust memory wise, and allows controlling the number of threads
-        used.
+        used, CPU affinity and GPU assignment.
+
+        Parameters
+        ----------
+        batch_ids : int or sequence of int, optional
+            Which batch numbers to grow, defaults to all missing.
+        num_workers : int, optional
+            The maximum number of concurrent subprocesses.
+        num_threads : int, optional
+            The number of threads per subprocess.
+        verbosity : int, optional
+            Overall progress verbosity.
+        verbosity_grow : int, optional
+            Verbosity within each batch grow.
+        raise_errors : bool, optional
+            Whether to raise errors encountered during growing.
+        min_wait : float, optional
+            Minimum polling interval in seconds.
+        max_wait : float, optional
+            Maximum polling interval in seconds.
+        affinities : int, str, or sequence of int, optional
+            CPU core IDs to pin subprocesses to via ``taskset``.
+            Also limits concurrency to the number of affinities.
+        gpus : int, str, or sequence of int, optional
+            GPU device IDs to assign to subprocesses via
+            ``CUDA_VISIBLE_DEVICES``. Each subprocess gets a single GPU from
+            this pool; the pool also limits concurrency to the number of GPUs
+            provided. You can oversubscribe GPUs by repeating device IDs, e.g.
+            ``0,0,1,1`` to allow 2 subprocesses to share each GPU.
         """
         from subprocess import PIPE, Popen
 
@@ -707,19 +801,14 @@ class Crop(object):
         if raise_errors:
             pargs.append("--raise-errors")
 
-        if affinities is not None:
-            # launch each batch with a specific CPU affinity
-            if isinstance(affinities, int):
-                affinities = [affinities]
-            elif isinstance(affinities, (list, tuple, range)):
-                affinities = list(map(int, affinities))
-            else:
-                affinities = list(map(int, affinities.split(",")))
-
-            free_affinities = affinities
-            used_affinities = {}
-        else:
-            free_affinities = used_affinities = None
+        pools = []
+        for raw, acquire_fn in (
+            (affinities, _acquire_affinity),
+            (gpus, _acquire_gpu),
+        ):
+            pool = _ResourcePool.from_raw(raw, acquire_fn)
+            if pool is not None:
+                pools.append(pool)
 
         try:
             while queue or processing:
@@ -731,20 +820,16 @@ class Crop(object):
                     # and there are free workers
                     (len(processing) < num_workers)
                     and
-                    # and there are free affinities if using them
-                    (affinities is None or bool(free_affinities))
+                    # and all resource pools have availability
+                    all(pool.available() for pool in pools)
                 ):
                     # can submit more work!
                     batch_id = queue.pop()
                     these_pargs = []
+                    env = os.environ.copy() if pools else None
 
-                    if affinities is not None:
-                        # pop an affinity to use
-                        affinity = free_affinities.pop()
-                        these_pargs.append("taskset")
-                        these_pargs.append("-c")
-                        these_pargs.append(str(affinity))
-                        used_affinities[batch_id] = affinity
+                    for pool in pools:
+                        pool.acquire(batch_id, these_pargs, env)
 
                     these_pargs.extend(pargs)
                     these_pargs.append("--batch-id")
@@ -755,6 +840,7 @@ class Crop(object):
                         stdout=PIPE,
                         stderr=PIPE,
                         text=True,
+                        env=env,
                     )
 
                 all_running = True
@@ -771,11 +857,8 @@ class Crop(object):
                             del processing[batch_id]
                             all_running = False
 
-                            if affinities is not None:
-                                # free the affinity
-                                free_affinities.append(
-                                    used_affinities.pop(batch_id)
-                                )
+                            for pool in pools:
+                                pool.release(batch_id)
 
                             if retcode != 0:
                                 stdout, stderr = p.communicate()
