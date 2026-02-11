@@ -1,4 +1,5 @@
 import os
+import sys
 from tempfile import TemporaryDirectory
 
 import numpy as np
@@ -639,6 +640,10 @@ class TestGrowSubprocessResources:
 
         assert results == expected
 
+    @pytest.mark.skipif(
+        sys.platform != "linux",
+        reason="taskset is only available on Linux",
+    )
     def test_grow_subprocess_with_affinities_and_gpus(self):
         """Both affinities= and gpus= can be used together."""
         combos = [("a", [1, 2]), ("b", [10, 20])]
