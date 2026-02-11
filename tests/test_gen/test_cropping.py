@@ -10,6 +10,10 @@ from xyzpy import Harvester, Runner, combo_runner, combo_runner_to_ds, label
 from xyzpy.gen.cropping import (
     Crop,
     XYZError,
+    _acquire_affinity,
+    _acquire_gpu,
+    _parse_resource_ids,
+    _ResourcePool,
     grow,
     load_crops,
     parse_crop_details,
@@ -500,3 +504,155 @@ class TestSowerReaper:
             assert crop.parent_dir is not None
             assert crop.location is not None
             assert crop.fn is foo_add
+
+
+class TestParseResourceIds:
+    def test_from_int(self):
+        assert _parse_resource_ids(3) == [3]
+
+    def test_from_list(self):
+        assert _parse_resource_ids([0, 1, 2]) == [0, 1, 2]
+
+    def test_from_tuple(self):
+        assert _parse_resource_ids((4, 5)) == [4, 5]
+
+    def test_from_range(self):
+        assert _parse_resource_ids(range(3)) == [0, 1, 2]
+
+    def test_from_str(self):
+        assert _parse_resource_ids("0,1,2") == [0, 1, 2]
+
+    def test_from_str_single(self):
+        assert _parse_resource_ids("7") == [7]
+
+
+class TestAcquireFunctions:
+    def test_acquire_affinity(self):
+        pargs = []
+        env = {}
+        _acquire_affinity(5, pargs, env)
+        assert pargs == ["taskset", "-c", "5"]
+        assert env == {}
+
+    def test_acquire_gpu(self):
+        pargs = []
+        env = {}
+        _acquire_gpu(2, pargs, env)
+        assert pargs == []
+        assert env == {"CUDA_VISIBLE_DEVICES": "2"}
+
+
+class TestResourcePool:
+    def test_from_raw_none(self):
+        assert _ResourcePool.from_raw(None, _acquire_gpu) is None
+
+    def test_from_raw_int(self):
+        pool = _ResourcePool.from_raw(3, _acquire_gpu)
+        assert pool.free == [3]
+
+    def test_from_raw_str(self):
+        pool = _ResourcePool.from_raw("0,1,2", _acquire_gpu)
+        assert pool.free == [0, 1, 2]
+
+    def test_from_raw_list(self):
+        pool = _ResourcePool.from_raw([4, 5], _acquire_affinity)
+        assert pool.free == [4, 5]
+
+    def test_available_when_free(self):
+        pool = _ResourcePool.from_raw([0, 1], _acquire_gpu)
+        assert pool.available()
+
+    def test_lifecycle(self):
+        pool = _ResourcePool.from_raw("0,1,2", _acquire_gpu)
+        assert pool.available()
+
+        # acquire all three
+        envs = {}
+        for batch_id in range(3):
+            pargs, env = [], {}
+            pool.acquire(batch_id, pargs, env)
+            envs[batch_id] = env
+
+        assert not pool.available()
+        assert len(pool.used) == 3
+        # each got a different GPU (popped from end)
+        assert envs[0] == {"CUDA_VISIBLE_DEVICES": "2"}
+        assert envs[1] == {"CUDA_VISIBLE_DEVICES": "1"}
+        assert envs[2] == {"CUDA_VISIBLE_DEVICES": "0"}
+
+        # release middle one
+        pool.release(1)
+        assert pool.available()
+        assert pool.free == [1]
+        assert 1 not in pool.used
+
+        # re-acquire
+        pargs, env = [], {}
+        pool.acquire(99, pargs, env)
+        assert env == {"CUDA_VISIBLE_DEVICES": "1"}
+        assert not pool.available()
+
+    def test_affinity_acquire_prepends(self):
+        pool = _ResourcePool.from_raw([7], _acquire_affinity)
+        pargs = ["python", "-m", "my_module"]
+        env = {}
+        pool.acquire(0, pargs, env)
+        assert pargs == ["taskset", "-c", "7", "python", "-m", "my_module"]
+        assert env == {}
+
+
+class TestGrowSubprocessResources:
+    def test_grow_subprocess_with_gpus(self):
+        """grow_subprocess with gpus= completes and produces results,
+        even without real GPU hardware. CUDA_VISIBLE_DEVICES set on a
+        pure-Python subprocess is harmless.
+        """
+        combos = [("a", [10, 20, 30]), ("b", [4, 5, 6, 7])]
+        expected = combo_runner(foo_add, combos, constants={"c": True})
+
+        with TemporaryDirectory() as tdir:
+            crop = Crop(fn=foo_add, parent_dir=tdir, batchsize=5)
+            crop.sow_combos(combos, constants={"c": True})
+            crop.grow_subprocess(
+                num_workers=2,
+                gpus="0,1",
+            )
+            assert crop.is_ready_to_reap()
+            results = crop.reap()
+
+        assert results == expected
+
+    def test_grow_subprocess_with_gpus_single(self):
+        """gpus= as a single int limits concurrency to 1."""
+        combos = [("a", [1, 2]), ("b", [10, 20])]
+        expected = combo_runner(foo_add, combos, constants={"c": True})
+
+        with TemporaryDirectory() as tdir:
+            crop = Crop(fn=foo_add, parent_dir=tdir, batchsize=2)
+            crop.sow_combos(combos, constants={"c": True})
+            crop.grow_subprocess(
+                num_workers=4,
+                gpus=0,
+            )
+            assert crop.is_ready_to_reap()
+            results = crop.reap()
+
+        assert results == expected
+
+    def test_grow_subprocess_with_affinities_and_gpus(self):
+        """Both affinities= and gpus= can be used together."""
+        combos = [("a", [1, 2]), ("b", [10, 20])]
+        expected = combo_runner(foo_add, combos, constants={"c": True})
+
+        with TemporaryDirectory() as tdir:
+            crop = Crop(fn=foo_add, parent_dir=tdir, batchsize=2)
+            crop.sow_combos(combos, constants={"c": True})
+            crop.grow_subprocess(
+                num_workers=4,
+                affinities="0,1",
+                gpus="0,1",
+            )
+            assert crop.is_ready_to_reap()
+            results = crop.reap()
+
+        assert results == expected
