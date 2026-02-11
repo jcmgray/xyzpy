@@ -2,8 +2,8 @@
 
 # TODO: add singlet dimensions (for all or given vars) ---------------------- #
 
-import os
 from glob import glob
+from pathlib import Path
 
 import joblib
 import numpy as np
@@ -132,12 +132,13 @@ def load_ds(
         Loaded Dataset.
     """
     file_name = auto_add_extension(file_name, engine)
+    file_path = Path(file_name)
 
-    if not os.path.exists(file_name) and create_new:
+    if not file_path.exists() and create_new:
         return xr.Dataset()
 
     if engine == "joblib":
-        return joblib.load(file_name, **kwargs)
+        return joblib.load(file_path, **kwargs)
 
     if (load_to_mem is None) and (chunks is None):
         load_to_mem = True
@@ -148,17 +149,17 @@ def load_ds(
             load_to_mem = False
 
     if engine == "zarr":
-        ds = xr.open_zarr(file_name, chunks=chunks, **kwargs)
+        ds = xr.open_zarr(file_path, chunks=chunks, **kwargs)
 
     else:
         opts = dict(engine=engine, chunks=chunks, **kwargs)
 
         try:
-            ds = xr.open_dataset(file_name, **opts)
+            ds = xr.open_dataset(file_path, **opts)
         except AttributeError as e1:
             if "object has no attribute" in str(e1) and engine == "h5netcdf":
                 opts["engine"] = "netcdf4"
-                ds = xr.open_dataset(file_name, **opts)
+                ds = xr.open_dataset(file_path, **opts)
             else:
                 raise e1
 
@@ -188,7 +189,7 @@ def save_merge_ds(ds, fname, overwrite=None, **kwargs):
     """
 
     # check for the existing file
-    if os.path.exists(fname):
+    if Path(fname).exists():
         old_ds = load_ds(fname)
     else:
         old_ds = xr.Dataset()
@@ -399,7 +400,7 @@ def merge_sync_conflict_datasets(
 
     # clean up conflicts
     for fname in fnames[1:]:
-        os.remove(fname)
+        Path(fname).unlink()
 
 
 def save_df(df, name, engine="pickle", key="df", **kwargs):

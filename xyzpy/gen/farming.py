@@ -3,6 +3,7 @@
 import functools
 import os
 import shutil
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -499,7 +500,7 @@ class Harvester(object):
             )
 
         # Do nothing if file does not exist at all
-        elif not os.path.isfile(self.data_name):  # pragma: no cover
+        elif not Path(self.data_name).is_file():  # pragma: no cover
             pass
 
         # Catch read-only errors etc.
@@ -546,58 +547,58 @@ class Harvester(object):
 
             self._full_ds = new_full_ds
 
-        file_name = auto_add_extension(self.data_name, engine)
-        backup_name = file_name + ".bak"
+        file_path = Path(auto_add_extension(self.data_name, engine))
+        backup_path = Path(str(file_path) + ".bak")
 
         # first move existing file to backup
-        if os.path.exists(file_name):
-            if os.path.exists(backup_name):
+        if file_path.exists():
+            if backup_path.exists():
                 # delete any old backups
                 if engine == "zarr":
-                    shutil.rmtree(backup_name)
+                    shutil.rmtree(backup_path)
                 else:
-                    os.remove(backup_name)
-            os.rename(file_name, backup_name)
+                    backup_path.unlink()
+            file_path.rename(backup_path)
 
         try:
             save_ds(self._full_ds, self.data_name, engine=engine)
         except Exception:
             # restore backup on error
-            if os.path.exists(backup_name):
-                if os.path.exists(file_name):
+            if backup_path.exists():
+                if file_path.exists():
                     if engine == "zarr":
-                        shutil.rmtree(file_name)
+                        shutil.rmtree(file_path)
                     else:
-                        os.remove(file_name)
-                os.rename(backup_name, file_name)
+                        file_path.unlink()
+                backup_path.rename(file_path)
             raise
         else:
             # successful save, delete backup
-            if os.path.exists(backup_name):
+            if backup_path.exists():
                 if engine == "zarr":
-                    shutil.rmtree(backup_name)
+                    shutil.rmtree(backup_path)
                 else:
-                    os.remove(backup_name)
+                    backup_path.unlink()
 
     def delete_ds(self, backup=False):
         """Delete the on-disk dataset, optionally backing it up first."""
         from ..manage import auto_add_extension
 
-        file_name = auto_add_extension(self.data_name, self.engine)
+        file_path = Path(auto_add_extension(self.data_name, self.engine))
 
         if backup:
             import datetime
 
             ts = "{:%Y%m%d-%H%M%S}".format(datetime.datetime.now())
-            shutil.copy(file_name, file_name + ".BAK-{}".format(ts))
+            shutil.copy(file_path, str(file_path) + f".BAK-{ts}")
 
         if self._full_ds is not None:
             self._full_ds.close()
 
         if self.engine == "zarr":
-            shutil.rmtree(file_name)
+            shutil.rmtree(file_path)
         else:
-            os.remove(file_name)
+            file_path.unlink()
 
     def add_ds(
         self, new_ds, sync=True, overwrite=None, chunks=None, engine=None
@@ -918,7 +919,7 @@ class Sampler:
             self._full_df = load_df(self.data_name, engine=engine)
 
         # Do nothing if file does not exist at all
-        elif not os.path.isfile(self.data_name):  # pragma: no cover
+        elif not Path(self.data_name).is_file():  # pragma: no cover
             pass
 
         # Catch read-only errors etc.
@@ -956,8 +957,9 @@ class Sampler:
             engine = self.engine
 
         if new_full_df is not None:
-            if os.path.exists(self.data_name):
-                os.remove(self.data_name)
+            data_path = Path(self.data_name)
+            if data_path.exists():
+                data_path.unlink()
             self._full_df = new_full_df
 
         save_df(self._full_df, self.data_name, engine=engine)
@@ -970,7 +972,7 @@ class Sampler:
             ts = "{:%Y%m%d-%H%M%S}".format(datetime.datetime.now())
             shutil.copy(self.data_name, self.data_name + ".BAK-{}".format(ts))
 
-        os.remove(self.data_name)
+        Path(self.data_name).unlink()
 
     def add_df(self, new_df, sync=True, engine=None):
         """Merge a new dataset into the in-memory full dataset.

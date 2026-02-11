@@ -5,13 +5,13 @@ import importlib
 import itertools
 import math
 import os
-import pathlib
 import pickle
 import re
 import shutil
 import sys
 import time
 import warnings
+from pathlib import Path
 
 from ..utils import _get_fn_name, prod, progbar
 from .case_runner import (
@@ -95,10 +95,10 @@ def parse_crop_details(fn, crop_name, crop_parent):
             raise ValueError("Either `fn` or `crop_name` must be give.")
         crop_name = _get_fn_name(fn)
 
-    crop_parent = crop_parent if crop_parent is not None else os.getcwd()
-    crop_location = os.path.join(crop_parent, ".xyz-{}".format(crop_name))
+    crop_parent_path = Path.cwd() if crop_parent is None else Path(crop_parent)
+    crop_location = crop_parent_path / f".xyz-{crop_name}"
 
-    return crop_location, crop_name, crop_parent
+    return str(crop_location), crop_name, str(crop_parent_path)
 
 
 def parse_fn_farmer(fn, farmer):
@@ -354,8 +354,9 @@ class Crop(object):
 
     def ensure_dirs_exists(self):
         """Make sure the directory structure for this crop exists."""
-        os.makedirs(os.path.join(self.location, "batches"), exist_ok=True)
-        os.makedirs(os.path.join(self.location, "results"), exist_ok=True)
+        root = Path(self.location)
+        (root / "batches").mkdir(parents=True, exist_ok=True)
+        (root / "results").mkdir(parents=True, exist_ok=True)
 
     def save_info(self, combos=None, cases=None, fn_args=None):
         """Save information about the sowed cases."""
@@ -379,41 +380,35 @@ class Crop(object):
                 "shuffle": self.shuffle,
                 "farmer": farmer_pkl,
             },
-            os.path.join(self.location, INFO_NM),
+            Path(self.location) / INFO_NM,
         )
 
     def load_info(self):
         """Load the full settings from disk."""
-        sfile = os.path.join(self.location, INFO_NM)
+        sfile = Path(self.location) / INFO_NM
 
-        if not os.path.isfile(sfile):
-            raise XYZError("Settings can't be found at {}.".format(sfile))
+        if not sfile.is_file():
+            raise XYZError(f"Settings can't be found at {sfile}.")
         else:
             return read_from_disk(sfile)
 
     def load_batch(self, batch_number):
         """Load a specific batch from disk."""
         return read_from_disk(
-            os.path.join(
-                self.location, "batches", BTCH_NM.format(batch_number)
-            )
+            Path(self.location) / "batches" / BTCH_NM.format(batch_number)
         )
 
     def load_result(self, batch_number):
         """Load a specific result from disk."""
         return read_from_disk(
-            os.path.join(
-                self.location, "results", RSLT_NM.format(batch_number)
-            )
+            Path(self.location) / "results" / RSLT_NM.format(batch_number)
         )
 
     def save_result(self, batch_number, result):
         """Save a specific result to disk."""
         write_to_disk(
             result,
-            os.path.join(
-                self.location, "results", RSLT_NM.format(batch_number)
-            ),
+            Path(self.location) / "results" / RSLT_NM.format(batch_number),
         )
 
     def _sync_info_from_disk(self, only_missing=True):
@@ -438,17 +433,13 @@ class Crop(object):
 
     def save_function_to_disk(self):
         """Save the base function to disk using cloudpickle"""
-        write_to_disk(
-            to_pickle(self._fn), os.path.join(self.location, FNCT_NM)
-        )
+        write_to_disk(to_pickle(self._fn), Path(self.location) / FNCT_NM)
 
     def load_function(self):
         """Load the saved function from disk, and try to re-insert it back into
         Harvester or Runner if present.
         """
-        self._fn = from_pickle(
-            read_from_disk(os.path.join(self.location, FNCT_NM))
-        )
+        self._fn = from_pickle(read_from_disk(Path(self.location) / FNCT_NM))
 
         if self.farmer is not None:
             if self.farmer.fn is None:
@@ -472,20 +463,20 @@ class Crop(object):
 
     def is_prepared(self):
         """Check whether this crop has been written to disk."""
-        return os.path.exists(os.path.join(self.location, INFO_NM))
+        return (Path(self.location) / INFO_NM).exists()
 
     def calc_progress(self):
         """Calculate how much progressed has been made in growing the batches."""
         if self.is_prepared():
             self._sync_info_from_disk()
             self._num_sown_batches = len(
-                glob.glob(
-                    os.path.join(self.location, "batches", BTCH_NM.format("*"))
+                list(
+                    (Path(self.location) / "batches").glob(BTCH_NM.format("*"))
                 )
             )
             self._num_results = len(
-                glob.glob(
-                    os.path.join(self.location, "results", RSLT_NM.format("*"))
+                list(
+                    (Path(self.location) / "results").glob(RSLT_NM.format("*"))
                 )
             )
         else:
@@ -504,9 +495,9 @@ class Crop(object):
         self.calc_progress()
 
         def result_exists(x):
-            return os.path.isfile(
-                os.path.join(self.location, "results", RSLT_NM.format(x))
-            )
+            return (
+                Path(self.location) / "results" / RSLT_NM.format(x)
+            ).is_file()
 
         return tuple(filter(result_exists, range(1, self.num_batches + 1)))
 
@@ -515,9 +506,9 @@ class Crop(object):
         self.calc_progress()
 
         def no_result_exists(x):
-            return not os.path.isfile(
-                os.path.join(self.location, "results", RSLT_NM.format(x))
-            )
+            return not (
+                Path(self.location) / "results" / RSLT_NM.format(x)
+            ).is_file()
 
         return tuple(filter(no_result_exists, range(1, self.num_batches + 1)))
 
@@ -525,7 +516,10 @@ class Crop(object):
         """Delete the crop directory and all its contents, and reset
         any loaded information on this Crop object.
         """
-        shutil.rmtree(self.location)
+        crop_path = Path(self.location)
+        if crop_path.exists():
+            shutil.rmtree(crop_path)
+
         # reset in-memory state so the object reflects a fresh crop
         self.batchsize = None
         self.num_batches = None
@@ -538,8 +532,8 @@ class Crop(object):
     def all_nan_result(self):
         """Get a stand-in result for cases which are missing still."""
         if self._all_nan_result is None:
-            result_files = glob.glob(
-                os.path.join(self.location, "results", RSLT_NM.format("*"))
+            result_files = list(
+                (Path(self.location) / "results").glob(RSLT_NM.format("*"))
             )
             if not result_files:
                 raise XYZError(
@@ -553,7 +547,7 @@ class Crop(object):
 
     def __str__(self):
         # Location and name, underlined
-        if not os.path.exists(self.location):
+        if not Path(self.location).exists():
             return self.location + "\n * Not yet sown, or already reaped * \n"
 
         loc_len = len(self.location)
@@ -1247,18 +1241,15 @@ class Crop(object):
         """
         # XXX: work out why this is needed sometimes on network filesystems.
         result_files = glob.glob(
-            os.path.join(self.location, "results", RSLT_NM.format("*"))
+            str(Path(self.location) / "results" / RSLT_NM.format("*"))
         )
 
         bad_ids = []
 
         for result_file in result_files:
             # load corresponding batch file to check length.
-            result_num = (
-                os.path.split(result_file)[-1]
-                .strip("xyz-result-")
-                .strip(".jbdmp")
-            )
+            result_name = Path(result_file).name
+            result_num = result_name.strip("xyz-result-").strip(".jbdmp")
             batch = self.load_batch(result_num)
 
             try:
@@ -1275,7 +1266,7 @@ class Crop(object):
                 print(msg)
 
                 if delete_bad:
-                    os.remove(result_file)
+                    Path(result_file).unlink()
 
                 bad_ids.append(result_num)
 
@@ -1329,10 +1320,11 @@ def load_crops(directory="."):
     dict[str, Crop]
         Mapping of the crop name to the Crop.
     """
-    import os
     import re
 
-    folders = next(os.walk(directory))[1]
+    folders = [
+        path.name for path in Path(directory).iterdir() if path.is_dir()
+    ]
     crop_rgx = re.compile(r"^\.xyz-(.+)")
 
     names = []
@@ -1367,11 +1359,9 @@ class Sower(object):
         self._batch_counter += 1
         write_to_disk(
             self._batch_cases,
-            os.path.join(
-                self.crop.location,
-                "batches",
-                BTCH_NM.format(self._batch_counter),
-            ),
+            Path(self.crop.location)
+            / "batches"
+            / BTCH_NM.format(self._batch_counter),
         )
         self._batch_cases = []
         self._counter = 0
@@ -1446,7 +1436,7 @@ def grow(
     # first we load the function and batch of cases to run
 
     if crop is None:
-        current_folder = os.path.relpath(".", "..")
+        current_folder = Path.cwd().name
         if current_folder[:5] != ".xyz-":
             raise XYZError(
                 "`grow` should be run in a '{crop_parent}/.xyz-{crop_name}' "
@@ -1454,7 +1444,7 @@ def grow(
                 "be specified."
             )
         crop_name = current_folder[5:]
-        crop_location = os.getcwd()
+        crop_location = str(Path.cwd())
     elif isinstance(crop, tuple):
         # only need location, helpful to avoid pickling issues
         crop_name, crop_location = crop
@@ -1462,13 +1452,10 @@ def grow(
         crop_name = crop.name
         crop_location = crop.location
 
-    fn_file = os.path.join(crop_location, FNCT_NM)
-    cases_file = os.path.join(
-        crop_location, "batches", BTCH_NM.format(batch_number)
-    )
-    results_file = os.path.join(
-        crop_location, "results", RSLT_NM.format(batch_number)
-    )
+    crop_root = Path(crop_location)
+    fn_file = crop_root / FNCT_NM
+    cases_file = crop_root / "batches" / BTCH_NM.format(batch_number)
+    results_file = crop_root / "results" / RSLT_NM.format(batch_number)
 
     # load function
     if fn is None:
@@ -1567,20 +1554,21 @@ class Reaper(object):
         self.crop = crop
 
         files = (
-            os.path.join(self.crop.location, "results", RSLT_NM.format(i + 1))
+            Path(self.crop.location) / "results" / RSLT_NM.format(i + 1)
             for i in range(num_batches)
         )
 
         def _load(x):
+            x = Path(x)
             use_default = (
                 (default_result is not None)
                 and (not wait)
-                and (not os.path.isfile(x))
+                and (not x.is_file())
             )
 
             # actual result doesn't exist yet - use the default if specified
             if use_default:
-                i = int(re.findall(RSLT_NM.format(r"(\d+)"), x)[0])
+                i = int(re.findall(RSLT_NM.format(r"(\d+)"), str(x))[0])
                 size = crop.batchsize + int(i < crop._batch_remainder)
                 res = (default_result,) * size
             else:
@@ -1594,13 +1582,14 @@ class Reaper(object):
             return res
 
         def wait_to_load(x):
-            while not os.path.exists(x):
+            x = Path(x)
+            while not x.exists():
                 time.sleep(0.2)
 
-            if os.path.isfile(x):
+            if x.is_file():
                 return _load(x)
             else:
-                raise ValueError("{} is not a file.".format(x))
+                raise ValueError(f"{x} is not a file.")
 
         self.results = itertools.chain.from_iterable(
             map(wait_to_load if wait else _load, files)
@@ -1890,10 +1879,7 @@ def gen_cluster_script(
             gigabytes = int(mem)
 
     if output_directory is None:
-        from os.path import expanduser
-
-        home = expanduser("~")
-        output_directory = os.path.join(home, "Scratch", "output")
+        output_directory = str(Path.home() / "Scratch" / "output")
 
     if launcher is None:
         launcher = sys.executable
@@ -1975,7 +1961,7 @@ def gen_cluster_script(
             )
 
     # get absolute path
-    full_parent_dir = str(pathlib.Path(crop.parent_dir).expanduser().resolve())
+    full_parent_dir = str(Path(crop.parent_dir).expanduser().resolve())
 
     opts = {
         "hours": hours,
@@ -2179,20 +2165,20 @@ def grow_cluster(
         **kwargs,
     )
 
-    script_file = os.path.join(crop.location, "__qsub_script__.sh")
+    script_file = Path(crop.location) / "__qsub_script__.sh"
 
     with open(script_file, mode="w") as f:
         f.write(script)
 
     if scheduler in {"sge", "pbs"}:
-        result = run(["qsub", script_file], capture_output=True)
+        result = run(["qsub", str(script_file)], capture_output=True)
     elif scheduler == "slurm":
-        result = run(["sbatch", script_file], capture_output=True)
+        result = run(["sbatch", str(script_file)], capture_output=True)
 
     print(result.stderr.decode())
     print(result.stdout.decode())
 
-    os.remove(script_file)
+    script_file.unlink()
 
 
 def gen_qsub_script(
@@ -2268,13 +2254,12 @@ Crop.grow_slurm = functools.partialmethod(Crop.grow_cluster, scheduler="slurm")
 
 def clean_slurm_outputs(job, directory=".", cancel_if_finished=True):
     """ """
-    import pathlib
     import re
     import subprocess
 
     job = str(job)
 
-    files = list(pathlib.Path(directory).glob(f"slurm-{job}_*.out"))
+    files = list(Path(directory).glob(f"slurm-{job}_*.out"))
 
     for file in files:
         jobid = int(re.match(r"slurm-\d+_(\d+).out", str(file)).groups()[0])

@@ -1,6 +1,7 @@
 import argparse
 import os
 import sys
+from pathlib import Path
 from typing import Optional
 
 
@@ -143,6 +144,8 @@ def main():
     )
     args = parser.parse_args()
 
+    parent_dir = Path(args.parent_dir).expanduser().resolve()
+
     # common thread control environment variables
     os.environ["OMP_NUM_THREADS"] = str(args.num_threads)
     os.environ["MKL_NUM_THREADS"] = str(args.num_threads)
@@ -151,7 +154,7 @@ def main():
     os.environ["NUMEXPR_NUM_THREADS"] = str(args.num_threads)
     os.environ["NUMBA_NUM_THREADS"] = str(args.num_threads)
 
-    sys.path.append(args.parent_dir)
+    sys.path.append(str(parent_dir))
     import xyzpy
 
     grow_kwargs = {
@@ -184,7 +187,7 @@ def main():
                 gpus_per_task=args.gpus_per_task,
             )
 
-    crop = xyzpy.Crop(name=args.crop_name, parent_dir=args.parent_dir)
+    crop = xyzpy.Crop(name=args.crop_name, parent_dir=str(parent_dir))
 
     if not crop.is_prepared():
         raise xyzpy.utils.XYZError(f"The crop {crop} has not been sown yet.")
