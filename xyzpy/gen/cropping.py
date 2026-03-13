@@ -316,16 +316,25 @@ class Crop(object):
         n = n_cases * n_combos
 
         if (self.batchsize is not None) and (self.num_batches is not None):
-            # Check that they are set correctly
+            if not isinstance(self.batchsize, int):
+                raise TypeError("`batchsize` must be an integer.")
+            if self.batchsize < 1:
+                raise ValueError("`batchsize` must be >= 1.")
+            if not isinstance(self.num_batches, int):
+                raise TypeError("`num_batches` must be an integer.")
+            if self.num_batches < 1:
+                raise ValueError("`num_batches` must be >= 1.")
+
+            # check that the supplied settings cover all cases directly,
+            # independent of any stale remainder from a previous layout.
             pos_tot = self.batchsize * self.num_batches
-            if self._batch_remainder is not None:
-                pos_tot += self._batch_remainder
             if not (n <= pos_tot < n + self.batchsize):
                 raise ValueError(
                     "`batchsize` and `num_batches` cannot both"
                     "be specified if they do not not multiply"
                     "to the correct number of total cases."
                 )
+            self._batch_remainder = 0
 
         # Decide based on batchsize
         elif self.num_batches is None:
@@ -527,6 +536,68 @@ class Crop(object):
         self._all_nan_result = None
         self._num_sown_batches = -1
         self._num_results = -1
+
+    def handle_existing(self, action="ask", msg=None, e=None, overwrite=False):
+        """Handle an already prepared crop.
+
+        Parameters
+        ----------
+        action : {'ask', 'reap', 'delete', 'skip', 'raise'}
+            What to do with the existing crop. If ``'ask'`` (default),
+            interactively prompt the user. Otherwise execute the
+            specified action directly.
+        msg : str, optional
+            Message to display when prompting.
+        e : Exception, optional
+            Exception to re-raise if action is ``'raise'``.
+        overwrite : bool, optional
+            Whether to overwrite existing data when reaping.
+        """
+        valid = {"ask", "reap", "delete", "skip", "raise"}
+        if action not in valid:
+            raise ValueError(
+                f"Invalid action {action!r}, expected one of {valid}."
+            )
+
+        if msg is None:
+            msg = f"Crop {self} has already been prepared."
+
+        if action == "ask":
+            question = (
+                f"{msg}\n"
+                f"Try and reap existing {self.num_results}?\n"
+                "y (yes)/ n (no) / d (delete) / r (raise)."
+            )
+            while True:
+                answer = input(question).lower()
+                if answer in {"y", "yes"}:
+                    action = "reap"
+                    break
+                elif answer in {"n", "no"}:
+                    action = "skip"
+                    break
+                elif answer in {"d", "delete"}:
+                    action = "delete"
+                    break
+                elif answer in {"r", "raise"}:
+                    action = "raise"
+                    break
+                else:
+                    print(f"Didn't understand answer {answer}")
+
+        if action == "reap":
+            self.reap(
+                allow_incomplete=True,
+                overwrite=overwrite,
+                clean_up=True,
+            )
+        elif action == "delete":
+            self.delete_all()
+        elif action == "raise":
+            if e is None:
+                e = XYZError(f"Existing crop {self}, aborting.")
+            raise e
+        # action == "skip": do nothing
 
     @property
     def all_nan_result(self):
@@ -1569,7 +1640,7 @@ class Reaper(object):
             # actual result doesn't exist yet - use the default if specified
             if use_default:
                 i = int(re.findall(RSLT_NM.format(r"(\d+)"), str(x))[0])
-                size = crop.batchsize + int(i < crop._batch_remainder)
+                size = len(crop.load_batch(i))
                 res = (default_result,) * size
             else:
                 res = read_from_disk(x)
@@ -1603,7 +1674,8 @@ class Reaper(object):
 
     def __exit__(self, exception_type, exception_value, traceback):
         # Check everything gone acccording to plan
-        if tuple(self.results):
+        remaining_results = tuple(self.results)
+        if remaining_results:
             raise XYZError("Not all results reaped!")
 
 

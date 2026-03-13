@@ -288,13 +288,10 @@ def parse_into_cases(combos=None, cases=None, ds=None, method="isnull"):
     new_cases : iterable[dict]
         The combined and possibly filtered list of cases.
     """
-    if combos is None:
-        combos = {}
-    elif not isinstance(combos, dict):
-        combos = dict(combos)
+    combos = parse_combos(combos)
 
     if combos:
-        combo_keys, combo_values = zip(*combos.items())
+        combo_keys, combo_values = zip(*combos)
     else:
         combo_keys, combo_values = [], []
 

@@ -3,6 +3,7 @@
 import functools
 import os
 import shutil
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -708,6 +709,14 @@ class Harvester(object):
         else:
             self._full_ds = new_ds
 
+    def _maybe_expand_combos(self, combos):
+        """Expand combos with ellipses into full coordinate values from the
+        current full dataset."""
+        return tuple(
+            (key, self.full_ds.coords[key].values if values is ... else values)
+            for key, values in parse_combos(combos)
+        )
+
     def harvest_combos(
         self,
         combos,
@@ -751,10 +760,7 @@ class Harvester(object):
             Supplied to :func:`~xyzpy.combo_runner`.
         """
         # possibly load full range of coordinate values from full dataset
-        combos = tuple(
-            (key, self.full_ds.coords[key].values if values is ... else values)
-            for key, values in parse_combos(combos)
-        )
+        combos = self._maybe_expand_combos(combos)
 
         if missing_only:
             # convert into missing cases only

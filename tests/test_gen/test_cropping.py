@@ -91,6 +91,10 @@ class TestSowerReaper:
             c = Crop(fn=foo_add, save_fn=False, batchsize=2, num_batches=3)
             c.choose_batch_settings(combos=[("a", [1, 2, 3])])
 
+        with pytest.raises(TypeError):
+            c = Crop(fn=foo_add, save_fn=False, batchsize=1, num_batches="3")
+            c.choose_batch_settings(combos=[("a", [1, 2, 3])])
+
         c = Crop(fn=foo_add, save_fn=False, batchsize=1, num_batches=3)
         c.choose_batch_settings(combos=[("a", [1, 2, 3])])
 
@@ -105,6 +109,14 @@ class TestSowerReaper:
 
         print(c)
         repr(c)
+
+    def test_choose_batch_settings_ignores_stale_batch_remainder(self):
+        c = Crop(fn=foo_add, save_fn=False, batchsize=1, num_batches=3)
+        c._batch_remainder = 1
+
+        c.choose_batch_settings(combos=[("a", [1, 2, 3])])
+
+        assert c._batch_remainder == 0
 
     @pytest.mark.parametrize("shuffle", [False, True, 2])
     def test_batch(self, shuffle):
@@ -284,6 +296,29 @@ class TestSowerReaper:
                 crop.grow(i)
             res = np.array(crop.reap(allow_incomplete=True))
             assert np.isnan(res).sum() == 60
+
+    def test_reap_allow_incomplete_with_short_final_batch(self):
+        combos = (
+            ("a", [1, 2]),
+            ("b", [10, 20]),
+            ("c", [100, 200]),
+        )
+
+        with TemporaryDirectory() as tdir:
+            crop = Crop(fn=foo_add, parent_dir=tdir, batchsize=3)
+            crop.sow_combos(combos)
+
+            assert crop.batchsize == 3
+            assert crop.num_batches == 3
+            assert crop._batch_remainder == 0
+
+            crop.grow(1)
+            crop.grow(2)
+
+            res = np.array(crop.reap(allow_incomplete=True))
+
+        assert res.shape == (2, 2, 2)
+        assert np.isnan(res).sum() == 2
 
     @pytest.mark.parametrize(
         "fn,var_names,var_dims",

@@ -42,7 +42,7 @@ def check_for_duplicates(arg, values):
         seen.add(val)
 
 
-def parse_combos(combos):
+def parse_combos(combos) -> tuple[tuple[str, list], ...]:
     """Turn dicts and single tuples into proper form for combo runners."""
     if not combos:
         return ()
