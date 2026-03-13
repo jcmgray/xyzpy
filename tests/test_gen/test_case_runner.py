@@ -2,12 +2,7 @@ import numpy as np
 import xarray as xr
 from numpy.testing import assert_allclose
 
-from xyzpy.gen.case_runner import (
-    case_runner,
-    case_runner_to_df,
-    case_runner_to_ds,
-    find_missing_cases,
-)
+import xyzpy as xyz
 
 from . import (
     foo2_array,
@@ -25,35 +20,39 @@ from . import (
 class TestCaseRunner:
     def test_seq(self):
         cases = ((1, 10, 100), (2, 20, 200), (3, 30, 300))
-        xs = case_runner(foo3_scalar, ("a", "b", "c"), cases, verbosity=0)
+        xs = xyz.case_runner(foo3_scalar, ("a", "b", "c"), cases, verbosity=0)
         assert xs == (111, 222, 333)
 
     def test_progbar(self):
         cases = ((1, 10, 100), (2, 20, 200), (3, 30, 300))
-        xs = case_runner(foo3_scalar, ("a", "b", "c"), cases, verbosity=2)
+        xs = xyz.case_runner(foo3_scalar, ("a", "b", "c"), cases, verbosity=2)
         assert xs == (111, 222, 333)
 
     def test_constants(self):
         cases = ((1,), (2,), (3,))
-        xs = case_runner(
+        xs = xyz.case_runner(
             foo3_scalar, ("a", "b", "c"), cases, constants={"b": 10, "c": 100}
         )
         assert xs == (111, 112, 113)
 
     def test_parallel(self):
         cases = ((1, 10, 100), (2, 20, 200), (3, 30, 300))
-        xs = case_runner(foo3_scalar, ("a", "b", "c"), cases, num_workers=1)
+        xs = xyz.case_runner(
+            foo3_scalar, ("a", "b", "c"), cases, num_workers=1
+        )
         assert xs == (111, 222, 333)
 
     def test_split(self):
         cases = ((1, 10, 100), (2, 20, 200), (3, 30, 300))
-        a, b = case_runner(foo3_float_bool, ("a", "b", "c"), cases, split=True)
+        a, b = xyz.case_runner(
+            foo3_float_bool, ("a", "b", "c"), cases, split=True
+        )
         assert a == (111, 222, 333)
         assert b == (False, True, False)
 
     def test_single_args(self):
         cases = (1, 2, 3)
-        xs = case_runner(
+        xs = xyz.case_runner(
             foo3_scalar, "a", cases, constants={"b": 10, "c": 100}
         )
         assert xs == (111, 112, 113)
@@ -62,7 +61,7 @@ class TestCaseRunner:
 class TestCaseRunnerToDS:
     def test_single(self):
         cases = [(1, 20, 300), (3, 20, 100)]
-        ds = case_runner_to_ds(
+        ds = xyz.case_runner_to_ds(
             foo3_scalar, ["a", "b", "c"], cases=cases, var_names="sum"
         )
         assert_allclose(ds["a"].data, [1, 3])
@@ -75,7 +74,9 @@ class TestCaseRunnerToDS:
 
     def test_single_dict_cases(self):
         cases = [{"a": 1, "b": 20, "c": 300}, {"a": 3, "b": 20, "c": 100}]
-        ds = case_runner_to_ds(foo3_scalar, None, cases=cases, var_names="sum")
+        ds = xyz.case_runner_to_ds(
+            foo3_scalar, None, cases=cases, var_names="sum"
+        )
         assert_allclose(ds["a"].data, [1, 3])
         assert_allclose(ds["b"].data, [20])
         assert_allclose(ds["c"].data, [100, 300])
@@ -86,7 +87,7 @@ class TestCaseRunnerToDS:
 
     def test_multires(self):
         cases = [(1, 20, 300), (3, 20, 100)]
-        ds = case_runner_to_ds(
+        ds = xyz.case_runner_to_ds(
             foo3_float_bool,
             fn_args=["a", "b", "c"],
             cases=cases,
@@ -106,7 +107,7 @@ class TestCaseRunnerToDS:
         assert ds["a_even"].loc[{"a": 3, "b": 20, "c": 300}].isnull()
 
     def test_array_return(self):
-        ds = case_runner_to_ds(
+        ds = xyz.case_runner_to_ds(
             fn=foo2_array,
             fn_args=["a", "b"],
             cases=[(2, 30), (4, 50)],
@@ -119,7 +120,7 @@ class TestCaseRunnerToDS:
         assert ds.x.sel(a=4, b=50, time=0.3).data == 54.3
 
     def test_multi_array_return(self):
-        ds = case_runner_to_ds(
+        ds = xyz.case_runner_to_ds(
             fn=foo2_array_array,
             fn_args=["a", "b"],
             cases=[(2, 30), (4, 50)],
@@ -132,7 +133,7 @@ class TestCaseRunnerToDS:
         assert_allclose(ds["y"].sel(a=4, b=50).data, [50, 46, 42, 38, 34])
 
     def test_align_and_fillna_int(self):
-        ds1 = case_runner_to_ds(
+        ds1 = xyz.case_runner_to_ds(
             foo2_array_array,
             fn_args=["a", "b"],
             cases=[(1, 10), (2, 20)],
@@ -140,7 +141,7 @@ class TestCaseRunnerToDS:
             var_dims={("x", "y"): "time"},
             var_coords={"time": ["a", "b", "c", "d", "e"]},
         )
-        ds2 = case_runner_to_ds(
+        ds2 = xyz.case_runner_to_ds(
             foo2_array_array,
             fn_args=["a", "b"],
             cases=[(2, 10), (1, 20)],
@@ -158,7 +159,7 @@ class TestCaseRunnerToDS:
         assert np.logical_not(fds["y"].isnull()).all()
 
     def test_align_and_fillna_complex(self):
-        ds1 = case_runner_to_ds(
+        ds1 = xyz.case_runner_to_ds(
             foo2_zarray1_zarray2,
             fn_args=["a", "b"],
             cases=[(1j, 10), (2j, 20)],
@@ -166,7 +167,7 @@ class TestCaseRunnerToDS:
             var_dims={("x", "y"): "time"},
             var_coords={"time": ["a", "b", "c", "d", "e"]},
         )
-        ds2 = case_runner_to_ds(
+        ds2 = xyz.case_runner_to_ds(
             foo2_zarray1_zarray2,
             fn_args=["a", "b"],
             cases=[(2j, 10), (1j, 20)],
@@ -179,7 +180,7 @@ class TestCaseRunnerToDS:
         assert not np.logical_not(np.isnan(ds2["x"].data)).all()
         assert not np.logical_not(np.isnan(ds2["y"].data)).all()
         assert all(
-            t == complex
+            t == "complex"
             for t in (ds1.x.dtype, ds2.x.dtype, ds1.y.dtype, ds2.y.dtype)
         )
         assert ds1.y.dtype == complex
@@ -193,7 +194,7 @@ class TestCaseRunnerToDS:
 class TestCaseRunnerToDF:
     def test_single_arg(self):
 
-        df = case_runner_to_df(
+        df = xyz.case_runner_to_df(
             fn=foo3_scalar,
             fn_args=["a", "b", "c"],
             cases=[(1, 10, 100), (2, 20, 200)],
@@ -210,6 +211,56 @@ class TestCaseRunnerToDF:
 
 
 class TestFindMissingCases:
+    def test_parse_into_cases(self):
+        import random
+
+        @xyz.label(None, harvester=True)
+        def func(x, y, opt1, opt2, seed):
+            return {
+                "sum": x + y,
+                "long": (("i",), np.linspace(x, y, 4)),
+                "diff": int(x - y),
+                "label": f"{opt1}-{opt2}-{seed}",
+            }
+
+        # generate initial dataset
+        cases = [
+            {"opt1": "hello", "opt2": "world"},
+            {"opt1": "goodbye", "opt2": "everyone"},
+        ]
+        combos = dict(
+            x=[1, 2, 3],
+            y=np.linspace(10, 100, 20),
+            seed=range(5),
+        )
+
+        cases = xyz.parse_into_cases(combos=combos, cases=cases)
+        # randomly drop half
+        random.shuffle(cases)
+        cases = cases[: len(cases) // 2]
+        func.harvest_combos(combos=None, cases=cases)
+
+        # now test both filling in and adding new coordinates
+        cases = [
+            {"opt1": "hello", "opt2": "world"},
+            {"opt1": "goodbye", "opt2": "world"},
+        ]
+        combos = dict(
+            x=[2, 3, 4],
+            y=np.linspace(10, 100, 20),
+            seed=range(6),
+        )
+
+        cases_expected = xyz.parse_into_cases(
+            combos=combos,
+            cases=cases,
+            ds=func.full_ds,
+        )
+        len(cases_expected)
+
+        for case in cases_expected:
+            assert xyz.is_case_missing(func.full_ds, case)
+
     def test_simple(self):
         ds = xr.Dataset(coords={"a": [1, 2, 3], "b": [40, 50]})
         ds["x"] = (
@@ -220,8 +271,7 @@ class TestFindMissingCases:
         t_cases = ((1, 50), (2, 40), (3, 40), (3, 50))
         t_configs = tuple(dict(zip(["a", "b"], t_case)) for t_case in t_cases)
         # Missing cases and settings
-        m_args, m_cases = find_missing_cases(ds)
-        m_configs = tuple(dict(zip(m_args, m_case)) for m_case in m_cases)
+        m_configs = xyz.find_missing_cases(ds)
         # Assert same set of coordinates
         assert all(t_config in m_configs for t_config in t_configs)
         assert all(m_config in t_configs for m_config in m_configs)
@@ -240,9 +290,9 @@ class TestFindMissingCases:
         t_cases = ((1, 50), (2, 40), (3, 40), (3, 50))
         t_configs = tuple(dict(zip(["a", "b"], t_case)) for t_case in t_cases)
         # Missing cases and settings
-        m_args, m_cases = find_missing_cases(ds)
-        m_configs = tuple(dict(zip(m_args, m_case)) for m_case in m_cases)
+        m_configs = xyz.find_missing_cases(ds)
         # Assert same set of coordinates
+        m_args = {arg for m_config in m_configs for arg in m_config}
         assert set(m_args) == {"a", "b"}
         assert all(t_config in m_configs for t_config in t_configs)
         assert all(m_config in t_configs for m_config in m_configs)
@@ -269,8 +319,8 @@ class TestFindMissingCases:
         t_cases = ((1, 50), (2, 40), (3, 40), (3, 50))
         t_configs = tuple(dict(zip(["a", "b"], t_case)) for t_case in t_cases)
         # Missing cases and settings
-        m_args, m_cases = find_missing_cases(ds, ignore_dims="t")
-        m_configs = tuple(dict(zip(m_args, m_case)) for m_case in m_cases)
+        m_configs = xyz.find_missing_cases(ds, ignore_dims="t")
+        m_args = {arg for m_config in m_configs for arg in m_config}
         # Assert same set of coordinates
         assert set(m_args) == {"a", "b"}
         assert all(t_config in m_configs for t_config in t_configs)

@@ -3,7 +3,9 @@
 import functools
 import itertools
 
-from ..utils import progbar
+import numpy as np
+import xarray as xr
+
 from .combo_runner import (
     combo_runner_core,
     combo_runner_to_ds,
@@ -216,7 +218,7 @@ case_runner_to_df = functools.partial(case_runner_to_ds, to_df=True)
 
 def is_case_missing(ds, setting, method="isnull"):
     """Does the dataset or dataarray ``ds`` not contain any non-null data for
-    location ``setting``?
+    single location ``setting``?
 
     Note that this only returns true if *all* data across *all* variables is
     completely missing at the location.
@@ -259,52 +261,14 @@ def is_case_missing(ds, setting, method="isnull"):
     return nds.item()
 
 
-def find_missing_cases(
-    ds, ignore_dims=None, method="isnull", show_progbar=False
-):
-    """Find all cases in a dataset with missing data.
-
-    Parameters
-    ----------
-    ds : xarray.Dataset
-        Dataset in which to find missing data
-    ignore_dims : set (optional)
-        internal variable dimensions (i.e. to ignore)
-    show_progbar : bool (optional)
-        Show the current progress
-
-    Returns
-    -------
-    missing_fn_args, missing_cases :
-        Function arguments and missing cases.
-    """
-    # Parse ignore_dims
-    ignore_dims = (
-        {ignore_dims}
-        if isinstance(ignore_dims, str)
-        else set(ignore_dims)
-        if ignore_dims
-        else set()
-    )
-
-    # Find all configurations
-    fn_args = tuple(coo for coo in ds.dims if coo not in ignore_dims)
-    all_cases = itertools.product(*(ds[arg].data for arg in fn_args))
-
-    # Only return those corresponding to all missing data
-    def gen_missing_list():
-        for case in progbar(all_cases, disable=not show_progbar):
-            setting = dict(zip(fn_args, case))
-            if is_case_missing(ds, setting, method=method):
-                yield case
-
-    return fn_args, tuple(gen_missing_list())
-
-
 def parse_into_cases(combos=None, cases=None, ds=None, method="isnull"):
     """Convert maybe ``combos`` and maybe ``cases`` to a single list of
     ``cases`` only, also optionally filtering based on whether any data at each
     location is already present in Dataset or DataArray ``ds``.
+
+    Note that this only checks whether *all* data across *all* variables is
+    completely missing at the location. To check against a single variable only
+    simply supply a DataArray instead of a Dataset, e.g. ``ds=ds["var_name"]``.
 
     Parameters
     ----------
@@ -314,6 +278,10 @@ def parse_into_cases(combos=None, cases=None, ds=None, method="isnull"):
         Parameter configurations.
     ds : xarray.Dataset or xarray.DataArray, optional
         Dataset or DataArray in which to check for existing data.
+    method : {"isnull", "isfinite"}, optional
+        How to determine whether data is missing when ``ds`` is supplied.
+        "isnull" checks for null/nan values, while "isfinite" checks for all
+        non-finite values (i.e. inf or nan).
 
     Returns
     -------
@@ -323,22 +291,121 @@ def parse_into_cases(combos=None, cases=None, ds=None, method="isnull"):
     if combos is None:
         combos = {}
     elif not isinstance(combos, dict):
-        # assume supplied as list of tuple key value pairs
         combos = dict(combos)
+
+    if combos:
+        combo_keys, combo_values = zip(*combos.items())
+    else:
+        combo_keys, combo_values = [], []
+
     if cases is None:
         cases = [{}]
 
-    combo_keys = tuple(combos)
-    combo_vals = tuple(combos.values())
-
     new_cases = []
+
+    if ds is None:
+        # we can just flatten all cases and combos
+        for case in cases:
+            for combo in itertools.product(*combo_values):
+                setting = case | dict(zip(combo_keys, combo))
+                new_cases.append(setting)
+        return new_cases
+
+    # else we need to check against existing data
+    existing_coords = {
+        dim: {v: i for i, v in enumerate(ds.coords[dim].values)}
+        for dim in ds.dims
+    }
+
+    # first we sort into cases which are outside of the existing coordinates
+    cases_inside = []
+    ilocs = []
     for case in cases:
-        for setting in itertools.product(*combo_vals):
-            new_case = {
-                **case,
-                **dict(zip(combo_keys, setting)),
-            }
-            if (ds is None) or is_case_missing(ds, new_case, method=method):
-                new_cases.append(new_case)
+        for combo in itertools.product(*combo_values):
+            setting = case | dict(zip(combo_keys, combo))
+            # build its index, or break if outside
+            iloc = []
+            for dim, val in setting.items():
+                idx = existing_coords[dim].get(val, None)
+                if idx is None:
+                    # missing value, don't need to check actual data
+                    new_cases.append(setting)
+                    break
+                iloc.append(idx)
+            else:
+                # no break - location is in bounds
+                cases_inside.append(setting)
+                ilocs.append(iloc)
+
+    # now we check if the actual data for the cases inside is finite
+    # this fancy index extracts the values at the inside case locations
+    indices = tuple(np.array(col) for col in zip(*ilocs))
+
+    if isinstance(ds, xr.DataArray):
+        ds = ds.to_dataset()
+
+    if method == "isnull":
+        ds = ds.isnull()
+    elif method == "isfinite":
+        ds = ~np.isfinite(ds)
+    else:
+        raise ValueError("Unknown method: {}".format(method))
+
+    missing = None
+    for v in ds.data_vars:
+        missing_v = ds[v].values[indices]
+        if missing_v.ndim > 1:
+            # sub-coordinates, we need to reduce over
+            missing_v = missing_v.reshape(missing_v.shape[0], -1).any(axis=1)
+
+        # reduce across variables, requiring *all* to be missing
+        if missing is None:
+            missing = missing_v
+        else:
+            missing = missing & missing_v
+
+    # turn into indices of missing cases, and add to missing list
+    new_cases.extend(cases_inside[i] for i in np.nonzero(missing)[0])
 
     return new_cases
+
+
+def find_missing_cases(ds, ignore_dims=None, method="isnull"):
+    """Find all cases in a dataset or DataArray with missing data.
+
+    Parameters
+    ----------
+    ds : xarray.Dataset or xarray.DataArray
+        Dataset or DataArray in which to find missing data
+    ignore_dims : set, optional
+        Internal variable dimensions (i.e. to ignore). By default (None) this
+        is set to any dimensions that don't appear on all variables.
+
+    Returns
+    -------
+    cases_missing : iterable[dict]
+        List of cases with missing data, where each case is a dict mapping from
+        dimension name to coordinate value.
+    """
+    if isinstance(ds, xr.DataArray):
+        ds = ds.to_dataset()
+
+    if ignore_dims is None:
+        # default to ignoring any dimensions that don't appear on all variables
+        ignore_dims = set(
+            dim
+            for dim in ds.dims
+            if not all(dim in ds[v].dims for v in ds.data_vars)
+        )
+    elif isinstance(ignore_dims, str):
+        ignore_dims = {ignore_dims}
+    elif ignore_dims:
+        ignore_dims = set(ignore_dims)
+    else:
+        ignore_dims = set()
+
+    combos = {
+        dim: ds.coords[dim].values for dim in ds.dims if dim not in ignore_dims
+    }
+
+    return parse_into_cases(combos=combos, ds=ds, method=method)
