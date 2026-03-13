@@ -19557,8 +19557,8 @@ packages:
   timestamp: 1769434732453
 - pypi: ./
   name: xyzpy
-  version: 1.2.2.dev62+g308781849.d20260205
-  sha256: 747d9ebb54e8e495bc94b79dced32240ea221a71f8a7f81e923173453237a514
+  version: 1.2.2.dev71+g563e5782b.d20260313
+  sha256: 3b48273b170c38e73b8b45d3867f1db8ad4a75b025510640e44dea36d58279ed
   requires_dist:
   - dask
   - h5netcdf
