@@ -83,9 +83,45 @@ def main():
         default=False,
         type=parse_bool_flag,
         help=(
-            "Run each batch in its own fresh subprocess. "
-            "This is most robust in terms of memory, at the cost of the "
-            "process startup overhead. Optional value: true/false."
+            "Run each batch in its own fresh subprocess. This is most robust "
+            "in terms of memory, at the cost of the process startup overhead. "
+            "Optional value: true/false."
+        ),
+    )
+    parser.add_argument(
+        "--log",
+        nargs="?",
+        const=True,
+        default=False,
+        type=parse_bool_flag,
+        help=(
+            "Save subprocess stdout and stderr to log files in the crop "
+            "directory under logs/batch-{batch_id}.log. Only used when "
+            "--subprocess is enabled."
+        ),
+    )
+    parser.add_argument(
+        "--gpus",
+        type=str,
+        default=None,
+        help=(
+            "If subprocess is enabled, this is an optional comma separated "
+            "list of GPU device IDs to assign to subprocesses via "
+            "CUDA_VISIBLE_DEVICES. Each subprocess gets a single GPU from this"
+            " pool; the pool also limits concurrency. You can oversubscribe "
+            "GPUs by repeating device IDs, e.g. `0,0,1,1` to allow 2 "
+            "subprocesses to share each GPU."
+        ),
+    )
+    parser.add_argument(
+        "--affinities",
+        type=str,
+        default=None,
+        help=(
+            "If subprocess is enabled, this is an optional comma separated "
+            "list of affinities to use, one for each process. This ensures a "
+            "single cpu core is used for each batch, regardless of other "
+            "environment variables."
         ),
     )
     parser.add_argument(
@@ -104,30 +140,6 @@ def main():
             "The number of gpus to request per task, if using a ray executor. "
             "The overall GPUs available is set by CUDA_VISIBLE_DEVICES, which "
             "ray follows."
-        ),
-    )
-    parser.add_argument(
-        "--affinities",
-        type=str,
-        default=None,
-        help=(
-            "If subprocess is enabled, this is an optional comma separated "
-            "list of affinities to use, one for each process. This ensures a "
-            "single cpu core is used for each batch, regardless of other "
-            "environment variables."
-        ),
-    )
-    parser.add_argument(
-        "--gpus",
-        type=str,
-        default=None,
-        help=(
-            "If subprocess is enabled, this is an optional comma separated "
-            "list of GPU device IDs to assign to subprocesses via "
-            "CUDA_VISIBLE_DEVICES. Each subprocess gets a single GPU "
-            "from this pool; the pool also limits concurrency."
-            "You can oversubscribe GPUs by repeating device IDs, e.g. "
-            "`0,0,1,1` to allow 2 subprocesses to share each GPU."
         ),
     )
     parser.add_argument(
@@ -170,6 +182,7 @@ def main():
         grow_kwargs["num_threads"] = args.num_threads
         grow_kwargs["affinities"] = args.affinities
         grow_kwargs["gpus"] = args.gpus
+        grow_kwargs["log"] = args.log
 
     if args.ray:
         if args.subprocess:

@@ -637,6 +637,66 @@ class TestResourcePool:
         assert env == {}
 
 
+def foo_verbose(a, b, c):
+    """Function that prints a lot of output to stdout."""
+    for _ in range(1000):
+        print("-" * 100)
+    return a + b
+
+
+class TestGrowSubprocessOutput:
+    def test_grow_subprocess_heavy_stdout_no_hang(self):
+        """Subprocess that prints >64KB to stdout should not deadlock."""
+        combos = [("a", [1, 2]), ("b", [10, 20])]
+        expected = combo_runner(foo_verbose, combos, constants={"c": True})
+
+        with TemporaryDirectory() as tdir:
+            crop = Crop(fn=foo_verbose, parent_dir=tdir, batchsize=2)
+            crop.sow_combos(combos, constants={"c": True})
+            crop.grow_subprocess(num_workers=1)
+            assert crop.is_ready_to_reap()
+            results = crop.reap()
+
+        assert results == expected
+
+    def test_grow_subprocess_save_logs(self):
+        """log=True creates log files in the crop directory."""
+        combos = [("a", [1, 2]), ("b", [10, 20])]
+        expected = combo_runner(foo_verbose, combos, constants={"c": True})
+
+        with TemporaryDirectory() as tdir:
+            crop = Crop(fn=foo_verbose, parent_dir=tdir, batchsize=2)
+            crop.sow_combos(combos, constants={"c": True})
+            num_batches = crop.num_batches
+            crop.grow_subprocess(num_workers=1, log=True)
+            assert crop.is_ready_to_reap()
+
+            # check log files before reap (reap cleans up the crop dir)
+            log_dir = os.path.join(crop.location, "logs")
+            assert os.path.isdir(log_dir)
+            log_fnames = sorted(os.listdir(log_dir))
+            assert len(log_fnames) == num_batches
+            for fname in log_fnames:
+                fpath = os.path.join(log_dir, fname)
+                assert os.path.getsize(fpath) > 0
+
+            results = crop.reap()
+
+        assert results == expected
+
+    def test_grow_subprocess_no_save_logs_no_log_dir(self):
+        """log=False (default) should not create a logs directory."""
+        combos = [("a", [1, 2]), ("b", [10])]
+
+        with TemporaryDirectory() as tdir:
+            crop = Crop(fn=foo_add, parent_dir=tdir, batchsize=2)
+            crop.sow_combos(combos, constants={"c": True})
+            crop.grow_subprocess(num_workers=1)
+
+            log_dir = os.path.join(crop.location, "logs")
+            assert not os.path.exists(log_dir)
+
+
 class TestGrowSubprocessResources:
     def test_grow_subprocess_with_gpus(self):
         """grow_subprocess with gpus= completes and produces results,

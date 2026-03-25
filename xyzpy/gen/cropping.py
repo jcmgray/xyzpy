@@ -800,6 +800,7 @@ class Crop(object):
         max_wait=1e-1,
         affinities=None,
         gpus=None,
+        log=False,
     ):
         """Grow particular or missing batches using a single fresh subprocess
         per batch. This has a higher overhead for starting each process, but is
@@ -833,18 +834,30 @@ class Crop(object):
             this pool; the pool also limits concurrency to the number of GPUs
             provided. You can oversubscribe GPUs by repeating device IDs, e.g.
             ``0,0,1,1`` to allow 2 subprocesses to share each GPU.
+        log : bool, optional
+            Whether to save subprocess stdout and stderr to log files in the
+            crop directory under ``logs/batch-{batch_id}.log``. Default is
+            False, which discards stdout and only prints stderr on error.
         """
-        from subprocess import PIPE, Popen
+        from subprocess import DEVNULL, PIPE, Popen
 
         if batch_ids is None:
             batch_ids = self.missing_results()
         elif isinstance(batch_ids, int):
             batch_ids = (batch_ids,)
 
+        if log:
+            from pathlib import Path
+
+            log_dir = Path(self.location) / "logs"
+            log_dir.mkdir(exist_ok=True)
+
         # queue is reversed so that we can pop from right
         queue = list(reversed(batch_ids))
         # map each batch id to the process
         processing = {}
+        # track open log file handles
+        log_files = {}
 
         if verbosity:
             pbar = progbar(total=len(queue))
@@ -900,10 +913,19 @@ class Crop(object):
                     these_pargs.append("--batch-id")
                     these_pargs.append(str(batch_id))
 
+                    if log:
+                        log_f = open(log_dir / f"batch-{batch_id}.log", "w")
+                        log_files[batch_id] = log_f
+                        stdout = log_f
+                        stderr = log_f
+                    else:
+                        stdout = DEVNULL
+                        stderr = PIPE
+
                     processing[batch_id] = Popen(
                         these_pargs,
-                        stdout=PIPE,
-                        stderr=PIPE,
+                        stdout=stdout,
+                        stderr=stderr,
                         text=True,
                         env=env,
                     )
@@ -925,9 +947,22 @@ class Crop(object):
                             for pool in pools:
                                 pool.release(batch_id)
 
-                            if retcode != 0:
-                                stdout, stderr = p.communicate()
-                                print(retcode, stderr)
+                            if log:
+                                log_files.pop(batch_id).close()
+                                if retcode != 0:
+                                    # flag to user the batch log location
+                                    log_path = (
+                                        log_dir / f"batch-{batch_id}.log"
+                                    )
+                                    print(
+                                        f"batch {batch_id} failed "
+                                        f"(retcode={retcode}), see {log_path}"
+                                    )
+                            else:
+                                # drain stderr to avoid resource leaks
+                                _, stderr = p.communicate()
+                                if retcode != 0:
+                                    print(retcode, stderr)
 
                             if pbar is not None:
                                 pbar.update()
@@ -941,6 +976,8 @@ class Crop(object):
             # kill all processes
             for p in processing.values():
                 p.kill()
+            for f in log_files.values():
+                f.close()
             raise
         finally:
             if pbar is not None:
@@ -954,6 +991,7 @@ class Crop(object):
         debugging=False,
         verbosity=1,
         verbosity_grow=0,
+        log=False,
         **combo_runner_opts,
     ):
         """Grow specific batch numbers using this process.
@@ -972,9 +1010,12 @@ class Crop(object):
             How much overall information to show when growing.
         verbosity_grow : int, optional
             How much information to show when growing each batch.
+        log : bool, optional
+            Whether to save subprocess output to log files. Only used
+            when ``subprocess=True``.
         **combo_runner_opts
             Additional options to pass to the `combo_runner_core` function.
-            Only if `subprocess` is False.
+            Only if `subprocess`` is False.
         """
         if batch_ids is None:
             batch_ids = self.missing_results()
@@ -987,6 +1028,7 @@ class Crop(object):
                 raise_errors=raise_errors,
                 verbosity=verbosity,
                 verbosity_grow=verbosity_grow,
+                log=log,
                 **combo_runner_opts,
             )
         else:
