@@ -172,6 +172,7 @@ __all__ = [
     "Histogram",
     "iheatmap",
     "ilineplot",
+    "infiniplot",
     "is_case_missing",
     "iscatter",
     "label",
