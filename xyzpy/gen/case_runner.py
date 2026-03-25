@@ -334,6 +334,10 @@ def parse_into_cases(combos=None, cases=None, ds=None, method="isnull"):
                 cases_inside.append(setting)
                 ilocs.append(iloc)
 
+    if not cases_inside:
+        # no cases inside, we're done
+        return new_cases
+
     # now we check if the actual data for the cases inside is finite
     # this fancy index extracts the values at the inside case locations
     indices = tuple(np.array(col) for col in zip(*ilocs))
