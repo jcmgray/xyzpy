@@ -426,8 +426,8 @@ class Infiniplotter:
         self.sizes = {}
         # the domain (i.e. input) of each mapped dimension
         self.domains = {}
-        # the range (i.e. output) of each mappend dimension
-        self.values = {}
+        # the range (i.e. output) of each mapped dimension
+        self.output_values = {}
         # how to label each mapped dimension
         self.labels = {
             self.x: self.x if self.xlabel is None else self.xlabel,
@@ -514,7 +514,7 @@ class Infiniplotter:
                     else auto_colors(self.sizes["color"])
                 )
             else:
-                self.cmap_or_colors = self.values["color"]
+                self.cmap_or_colors = self.output_values["color"]
 
         self.init_mapped_dim(
             "marker",
@@ -793,14 +793,14 @@ class Infiniplotter:
                         # allow default values to depend on number of values
                         default_values = default_values(self.sizes[name])
 
-                    self.values[name] = tuple(
+                    self.output_values[name] = tuple(
                         x
                         for x, _ in zip(
                             default_values, range(self.sizes[name])
                         )
                     )
             else:
-                self.values[name] = custom_values
+                self.output_values[name] = custom_values
         else:
             self.sizes[name] = 1
 
@@ -846,7 +846,7 @@ class Infiniplotter:
                     ihue = loc[self.hue]
                     hue_in = self.domains["hue"][ihue]
                     sub_key[self.hue] = hue_in
-                    self.cmap_or_colors = self.values["hue"][ihue]
+                    self.cmap_or_colors = self.output_values["hue"][ihue]
 
                 icolor = loc[self.color]
                 color_in = self.domains["color"][icolor]
@@ -854,7 +854,7 @@ class Infiniplotter:
                     color_out = self.cmap_or_colors[icolor]
                 else:
                     color_out = self.cmap_or_colors(
-                        self.values["color"][icolor]
+                        self.output_values["color"][icolor]
                     )
 
                 sub_key[self.color] = color_in
@@ -881,7 +881,7 @@ class Infiniplotter:
                 if dim is not None:
                     idx = loc[dim]
                     prop_in = self.domains[prop][idx]
-                    prop_out = self.values[prop][idx]
+                    prop_out = self.output_values[prop][idx]
                     sub_key[dim] = prop_in
                     specific_style[prop] = prop_out
 
