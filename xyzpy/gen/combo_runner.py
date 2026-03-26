@@ -375,9 +375,12 @@ def combo_runner(
     verbosity : {0, 1, 2}, optional
         How much information to display:
 
-            - 0: nothing,
-            - 1: just progress,
-            - 2: all information.
+        - 0: nothing,
+        - 1: just progress,
+        - 2: postfix the current settings to the progress bar.
+
+    desc : str, optional
+        Description to show in the progress bar, if ``verbosity > 0``.
 
     Returns
     -------
@@ -654,7 +657,10 @@ def combo_runner_to_ds(
 
         - 0: nothing,
         - 1: just progress,
-        - 2: all information.
+        - 2: postfix the current settings to the progress bar.
+
+    desc : str, optional
+        Description to show in the progress bar, if ``verbosity > 0``.
 
     Returns
     -------

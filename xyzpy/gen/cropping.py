@@ -670,6 +670,7 @@ class Crop(object):
         constants=None,
         shuffle=False,
         verbosity=1,
+        desc="Sow",
         batchsize=None,
         num_batches=None,
     ):
@@ -693,7 +694,10 @@ class Crop(object):
             and ``random.shuffle``), which can be helpful for distributing
             resources when not all cases are computationally equal.
         verbosity : int, optional
-            How much information to show when sowing.
+            How much information to show when sowing. 0: no output, 1:
+            progress bar, 2: progress bar with each setting being sown.
+        desc : str, optional
+            Description to show in the progress bar when sowing.
         batchsize : int, optional
             If specified, set a new batchsize for the crop.
         num_batches : int, optional
@@ -725,7 +729,7 @@ class Crop(object):
                 constants=constants,
                 shuffle=shuffle,
                 verbosity=verbosity,
-                desc="Sow",
+                desc=desc,
             )
 
     def sow_cases(
@@ -753,7 +757,8 @@ class Crop(object):
         constants : mapping, optional
             Provide additional constant function values to use when sowing.
         verbosity : int, optional
-            How much information to show when sowing.
+            How much information to show when sowing. 0: no output, 1:
+            progress bar, 2: progress bar with each setting being sown.
         batchsize : int, optional
             If specified, set a new batchsize for the crop.
         num_batches : int, optional
@@ -794,15 +799,15 @@ class Crop(object):
         batch_ids=None,
         num_workers=1,
         num_threads=1,
+        gpus=None,
+        affinities=None,
+        raise_errors=False,
+        log=False,
+        min_wait=1e-6,
+        max_wait=1e-1,
         verbosity=1,
         verbosity_grow=0,
         desc="Grow",
-        raise_errors=False,
-        min_wait=1e-6,
-        max_wait=1e-1,
-        affinities=None,
-        gpus=None,
-        log=False,
     ):
         """Grow particular or missing batches using a single fresh subprocess
         per batch. This has a higher overhead for starting each process, but is
@@ -817,29 +822,32 @@ class Crop(object):
             The maximum number of concurrent subprocesses.
         num_threads : int, optional
             The number of threads per subprocess.
-        verbosity : int, optional
-            Overall progress verbosity.
-        verbosity_grow : int, optional
-            Verbosity within each batch grow.
-        raise_errors : bool, optional
-            Whether to raise errors encountered during growing.
-        min_wait : float, optional
-            Minimum polling interval in seconds.
-        max_wait : float, optional
-            Maximum polling interval in seconds.
-        affinities : int, str, or sequence of int, optional
-            CPU core IDs to pin subprocesses to via ``taskset``.
-            Also limits concurrency to the number of affinities.
         gpus : int, str, or sequence of int, optional
             GPU device IDs to assign to subprocesses via
             ``CUDA_VISIBLE_DEVICES``. Each subprocess gets a single GPU from
             this pool; the pool also limits concurrency to the number of GPUs
             provided. You can oversubscribe GPUs by repeating device IDs, e.g.
             ``0,0,1,1`` to allow 2 subprocesses to share each GPU.
+        affinities : int, str, or sequence of int, optional
+            CPU core IDs to pin subprocesses to via ``taskset``.
+            Also limits concurrency to the number of affinities.
+        raise_errors : bool, optional
+            Whether to raise errors encountered during growing.
         log : bool, optional
             Whether to save subprocess stdout and stderr to log files in the
             crop directory under ``logs/batch-{batch_id}.log``. Default is
             False, which discards stdout and only prints stderr on error.
+        min_wait : float, optional
+            Minimum polling interval in seconds.
+        max_wait : float, optional
+            Maximum polling interval in seconds.
+        verbosity : int, optional
+            How much information to show when growing. 0: no output, 1:
+            progress bar, 2: progress bar with each setting being grown.
+        verbosity_grow : int, optional
+            Verbosity within each batch grow.
+        desc : str, optional
+            Description to show in the progress bar when sowing.
         """
         from subprocess import DEVNULL, PIPE, Popen
 
@@ -1013,12 +1021,15 @@ class Crop(object):
         debugging : bool, optional
             Whether to set the logging level to debug.
         verbosity : int, optional
-            How much overall information to show when growing.
+            How much information to show when growing. 0: no output, 1:
+            progress bar, 2: progress bar with each setting being grown.
         verbosity_grow : int, optional
             How much information to show when growing each batch.
         log : bool, optional
             Whether to save subprocess output to log files. Only used
             when ``subprocess=True``.
+        desc : str, optional
+            Description to show in the progress bar when growing.
         **combo_runner_opts
             Additional options to pass to the `combo_runner_core` function.
             Only if `subprocess`` is False.
@@ -1078,6 +1089,11 @@ class Crop(object):
         allow_incomplete : bool, optional
             Allow only partially completed crop results to be reaped,
             incomplete results will all be filled-in as nan.
+        verbosity : int, optional
+            How much information to show when reaping. 0: no output, 1:
+            progress bar, 2: progress bar with each setting being reaped.
+        desc : str, optional
+            Description to show in the progress bar when reaping.
 
         Returns
         -------
@@ -1165,6 +1181,11 @@ class Crop(object):
             incomplete results will all be filled-in as nan.
         to_df : bool, optional
             Whether to reap to a ``xarray.Dataset`` or a ``pandas.DataFrame``.
+        verbosity : int, optional
+            How much information to show when reaping. 0: no output, 1:
+            progress bar, 2: progress bar with each setting being reaped.
+        desc : str, optional
+            Description to show in the progress bar when reaping.
 
         Returns
         -------
@@ -1364,6 +1385,11 @@ class Crop(object):
         allow_incomplete : bool, optional
             Allow only partially completed crop results to be reaped,
             incomplete results will all be filled-in as nan.
+        verbosity : int, optional
+            How much information to show when reaping. 0: no output, 1:
+            progress bar, 2: progress bar with each setting being reaped.
+        desc : str, optional
+            Description to show in the progress bar when reaping.
 
         Returns
         -------
