@@ -329,8 +329,8 @@ def label(
     ----------
     var_names : str, sequence of str, or None
         The ordered name(s) of the ouput variable(s) of `fn`. Set this
-        explicitly to None if `fn` outputs already labelled data as a
-        :class:`~xarray.Dataset` or :class:`~xarray.DataArray`.
+        explicitly to None if `fn` outputs already labelled data as a dict,
+        :class:`~xarray.Dataset`, or :class:`~xarray.DataArray`.
     fn_args : str, or sequence of str, optional
         The ordered name(s) of the input arguments(s) of `fn`. This is only
         needed if the cases or combos supplied are not dict-like.

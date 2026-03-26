@@ -725,6 +725,7 @@ class Crop(object):
                 constants=constants,
                 shuffle=shuffle,
                 verbosity=verbosity,
+                desc="Sow",
             )
 
     def sow_cases(
@@ -791,10 +792,11 @@ class Crop(object):
     def grow_subprocess(
         self,
         batch_ids=None,
-        num_workers=None,
+        num_workers=1,
         num_threads=1,
         verbosity=1,
         verbosity_grow=0,
+        desc="Grow",
         raise_errors=False,
         min_wait=1e-6,
         max_wait=1e-1,
@@ -860,7 +862,7 @@ class Crop(object):
         log_files = {}
 
         if verbosity:
-            pbar = progbar(total=len(queue))
+            pbar = progbar(total=len(queue), desc=desc)
         else:
             pbar = None
 
@@ -992,6 +994,7 @@ class Crop(object):
         verbosity=1,
         verbosity_grow=0,
         log=False,
+        desc="Grow",
         **combo_runner_opts,
     ):
         """Grow specific batch numbers using this process.
@@ -1003,7 +1006,10 @@ class Crop(object):
         raise_errors : bool, optional
             Whether to raise errors if they occur during growing.
         subprocess : bool, optional
-            Whether to grow each batch in a fresh subprocess.
+            Whether to grow each batch in a fresh subprocess. This adds about
+            1 second of overhead per batch, but allows the number of threads,
+            cpu affinity and gpu assignment to be controlled. See
+            `grow_subprocess` for more details.
         debugging : bool, optional
             Whether to set the logging level to debug.
         verbosity : int, optional
@@ -1042,6 +1048,7 @@ class Crop(object):
                     "debugging": debugging,
                 },
                 verbosity=verbosity,
+                desc=desc,
                 **combo_runner_opts,
             )
 
@@ -1049,7 +1056,14 @@ class Crop(object):
         """Grow any missing results using this process."""
         self.grow(batch_ids=None, **combo_runner_opts)
 
-    def reap_combos(self, wait=False, clean_up=None, allow_incomplete=False):
+    def reap_combos(
+        self,
+        wait=False,
+        clean_up=None,
+        allow_incomplete=False,
+        verbosity=1,
+        desc="Reap",
+    ):
         """Reap already sown and grown results from this crop.
 
         Parameters
@@ -1079,19 +1093,24 @@ class Crop(object):
         # load same combinations as cases saved with
         settings = self.load_info()
 
-        with Reaper(
+        reaper = Reaper(
             self,
             num_batches=settings["num_batches"],
             wait=wait,
             default_result=default_result,
-        ) as reap_fn:
-            results = combo_runner_core(
-                fn=reap_fn,
-                combos=settings["combos"],
-                cases=settings["cases"],
-                constants={},
-                shuffle=settings.get("shuffle", False),
-            )
+        )
+
+        results = combo_runner_core(
+            fn=reaper,
+            combos=settings["combos"],
+            cases=settings["cases"],
+            constants={},
+            shuffle=settings.get("shuffle", False),
+            verbosity=verbosity,
+            desc=desc,
+        )
+
+        reaper.check_finished()
 
         if clean_up:
             self.delete_all()
@@ -1110,6 +1129,8 @@ class Crop(object):
         clean_up=None,
         allow_incomplete=False,
         to_df=False,
+        verbosity=1,
+        desc="Reap",
     ):
         """Reap a function over sowed combinations and output to a Dataset.
 
@@ -1163,28 +1184,33 @@ class Crop(object):
             constants = parse_constants(constants)
             attrs = parse_attrs(attrs)
 
-        with Reaper(
+        reaper = Reaper(
             self,
             num_batches=settings["num_batches"],
             wait=wait,
             default_result=default_result,
-        ) as reap_fn:
-            # move constants into attrs, so as not to pass them to the Reaper
-            #   when if fact they were meant for the original function.
-            data = combo_runner_to_ds(
-                fn=reap_fn,
-                combos=settings["combos"],
-                cases=settings["cases"],
-                var_names=var_names,
-                var_dims=var_dims,
-                var_coords=var_coords,
-                constants={},
-                resources={},
-                attrs={**constants, **attrs},
-                shuffle=settings.get("shuffle", False),
-                parse=parse,
-                to_df=to_df,
-            )
+        )
+
+        # move constants into attrs, so as not to pass them to the Reaper
+        #   when if fact they were meant for the original function.
+        data = combo_runner_to_ds(
+            fn=reaper,
+            combos=settings["combos"],
+            cases=settings["cases"],
+            var_names=var_names,
+            var_dims=var_dims,
+            var_coords=var_coords,
+            constants={},
+            resources={},
+            attrs={**constants, **attrs},
+            shuffle=settings.get("shuffle", False),
+            parse=parse,
+            to_df=to_df,
+            verbosity=verbosity,
+            desc=desc,
+        )
+
+        reaper.check_finished()
 
         if clean_up:
             self.delete_all()
@@ -1198,6 +1224,9 @@ class Crop(object):
         clean_up=None,
         allow_incomplete=False,
         to_df=False,
+        verbosity=1,
+        desc="Reap",
+        **kwargs,
     ):
         """Reap a Crop over sowed combos and save to a dataset defined by a
         :class:`~xyzpy.Runner`.
@@ -1215,6 +1244,9 @@ class Crop(object):
             clean_up=clean_up,
             allow_incomplete=allow_incomplete,
             to_df=to_df,
+            verbosity=verbosity,
+            desc=desc,
+            **kwargs,
         )
 
         if to_df:
@@ -1232,6 +1264,9 @@ class Crop(object):
         overwrite=None,
         clean_up=None,
         allow_incomplete=False,
+        verbosity=1,
+        desc="Reap",
+        **kwargs,
     ):
         """Reap a Crop over sowed combos and merge with the dataset defined by
         a :class:`~xyzpy.Harvester`.
@@ -1245,6 +1280,9 @@ class Crop(object):
             clean_up=False,
             allow_incomplete=allow_incomplete,
             to_df=False,
+            verbosity=verbosity,
+            desc=desc,
+            **kwargs,
         )
 
         if sync:
@@ -1253,6 +1291,7 @@ class Crop(object):
         # defer cleaning up until we have sucessfully synced new dataset
         if clean_up is None:
             clean_up = not allow_incomplete
+
         if clean_up:
             self.delete_all()
 
@@ -1265,6 +1304,9 @@ class Crop(object):
         sync=True,
         clean_up=None,
         allow_incomplete=False,
+        verbosity=1,
+        desc="Reap",
+        **kwargs,
     ):
         """Reap a Crop over sowed combos and merge with the dataframe defined
         by a :class:`~xyzpy.Sampler`.
@@ -1278,6 +1320,9 @@ class Crop(object):
             clean_up=clean_up,
             allow_incomplete=allow_incomplete,
             to_df=True,
+            verbosity=verbosity,
+            desc=desc,
+            **kwargs,
         )
 
         if sync:
@@ -1293,6 +1338,8 @@ class Crop(object):
         overwrite=None,
         clean_up=None,
         allow_incomplete=False,
+        verbosity=1,
+        desc="Reap",
     ):
         """Reap sown and grown combos from disk. Return a dataset if a runner
         or harvester is set, otherwise, the raw nested tuple.
@@ -1323,7 +1370,11 @@ class Crop(object):
         nested tuple or xarray.Dataset
         """
         opts = dict(
-            clean_up=clean_up, wait=wait, allow_incomplete=allow_incomplete
+            clean_up=clean_up,
+            wait=wait,
+            allow_incomplete=allow_incomplete,
+            verbosity=verbosity,
+            desc=desc,
         )
 
         if isinstance(self.farmer, Runner):
@@ -1708,13 +1759,10 @@ class Reaper(object):
             map(wait_to_load if wait else _load, files)
         )
 
-    def __enter__(self):
-        return self
-
     def __call__(self, **kwargs):
         return next(self.results)
 
-    def __exit__(self, exception_type, exception_value, traceback):
+    def check_finished(self):
         # Check everything gone acccording to plan
         remaining_results = tuple(self.results)
         if remaining_results:

@@ -125,26 +125,41 @@ def _run_linear_executor(
     fn,
     settings,
     verbosity=1,
+    desc=None,
 ):
-    with progbar(total=len(settings), disable=verbosity <= 0) as pbar:
+
+    progbar_opts = {
+        "total": len(settings),
+        "disable": verbosity <= 0,
+        "desc": desc,
+    }
+
+    with progbar(**progbar_opts) as pbar:
         if verbosity >= 2:
-            pbar.set_description("Submitting to executor...")
+            pbar.set_postfix_str("Submitting to executor...", refresh=True)
         futures = [_submit(executor, fn, **kws) for kws in settings]
         results_linear = []
         for kws, future in zip(settings, futures):
             if verbosity >= 2:
-                pbar.set_description(str(kws))
+                pbar.set_postfix_str(str(kws), refresh=True)
             results_linear.append(_get_result(future))
             pbar.update()
         return results_linear
 
 
-def _run_linear_sequential(fn, settings, verbosity=1):
+def _run_linear_sequential(fn, settings, verbosity=1, desc=None):
     results_linear = []
-    with progbar(total=len(settings), disable=verbosity <= 0) as pbar:
+
+    progbar_opts = {
+        "total": len(settings),
+        "disable": verbosity <= 0,
+        "desc": desc,
+    }
+
+    with progbar(**progbar_opts) as pbar:
         for kws in settings:
             if verbosity >= 2:
-                pbar.set_description(str(kws))
+                pbar.set_postfix_str(str(kws), refresh=True)
             results_linear.append(fn(**kws))
             pbar.update()
         return results_linear
@@ -173,6 +188,7 @@ def combo_runner_core(
     num_workers=None,
     executor=None,
     verbosity=1,
+    desc=None,
     info=None,
 ):
     if combos:
@@ -223,7 +239,12 @@ def combo_runner_core(
         random.shuffle(enum_settings)
         enum, settings = zip(*enum_settings)
 
-    run_linear_opts = {"fn": fn, "settings": settings, "verbosity": verbosity}
+    run_linear_opts = {
+        "fn": fn,
+        "settings": settings,
+        "verbosity": verbosity,
+        "desc": desc,
+    }
 
     if executor == "ray":
         from .ray_executor import RayExecutor
@@ -310,6 +331,7 @@ def combo_runner(
     executor=None,
     num_workers=None,
     verbosity=1,
+    desc=None,
 ):
     """Take a function ``fn`` and compute it over all combinations of named
     variables values, optionally showing progress and in parallel.
@@ -441,6 +463,7 @@ def combo_runner(
         executor=executor,
         num_workers=num_workers,
         verbosity=verbosity,
+        desc=desc,
     )
 
 
@@ -587,6 +610,7 @@ def combo_runner_to_ds(
     num_workers=None,
     executor=None,
     verbosity=1,
+    desc=None,
 ):
     """Evaluate a function over all cases and combinations and output to a
     :class:`xarray.Dataset`.
@@ -671,6 +695,7 @@ def combo_runner_to_ds(
         num_workers=num_workers,
         executor=executor,
         verbosity=verbosity,
+        desc=desc,
         info=info,
         split=(not to_df) and (len(var_names) > 1),
         flat=to_df,
