@@ -4,7 +4,7 @@ Release notes for `xyzpy`.
 
 
 (whats-new-1-3-0)=
-## v1.3.0 (unreleased)
+## v1.3.0 (2026-03-26)
 
 **New features:**
 
