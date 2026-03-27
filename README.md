@@ -28,16 +28,17 @@ with a high number of possible parameters. This means:
 - you don't have to fiddle with `CUDA_VISIBLE_DEVICES` or `taskset` to assign GPU devices or CPU cores to different runs
 
 To this data generation functionality, ``xyzpy`` adds a simple plotting
-interface accessed via ``ds.xyz.plot()`` that automatically maps dataset
-dimensions to visual elements including color, marker, marker size, line style,
-line width, subplot rows and columns, and text annotations. It also adds
-various other utilities for timing and tracking memory usage, and for
-visualizing high dimensional tensors.
+interface accessed via [`ds.xyz.plot()`](https://xyzpy.readthedocs.io/en/latest/autoapi/xyzpy/plot/infiniplot/index.html#xyzpy.plot.infiniplot.infiniplot)
+that automatically maps dataset dimensions to visual elements including color,
+marker, marker size, line style, line width, subplot rows and columns, and text
+annotations. It also adds various other utilities for timing and tracking
+memory usage, and for visualizing matrices and high dimensional tensors.
 
 ## Quick-start
 
 Here's a simple example of generating and plotting a 5D function that uses the
-high level driver ``xyz.cultivate()`` to handle a full cycle of data generation:
+high level driver [`xyz.cultivate()`](https://xyzpy.readthedocs.io/en/latest/autoapi/xyzpy/index.html#xyzpy.cultivate)
+to handle a full cycle of data generation:
 
 ```python
 import xyzpy as xyz

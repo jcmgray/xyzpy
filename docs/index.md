@@ -32,7 +32,7 @@ interface accessed via [`ds.xyz.plot()`](xyzpy.plot.infiniplot.infiniplot)
 that automatically maps dataset dimensions to visual elements including color,
 marker, marker size, line style, line width, subplot rows and columns, and text
 annotations. It also adds various other utilities for timing and tracking
-memory usage, and for visualizing high dimensional tensors.
+memory usage, and for visualizing matrices and high dimensional tensors.
 
 
 ## Overview
