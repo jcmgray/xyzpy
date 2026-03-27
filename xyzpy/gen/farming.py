@@ -860,6 +860,283 @@ class Harvester(object):
 
         return string.format(self=self)
 
+    def cultivate(
+        self,
+        combos=None,
+        cases=None,
+        constants=None,
+        name=None,
+        batchsize=None,
+        num_batches=None,
+        missing_only=True,
+        shuffle=True,
+        subprocess="auto",
+        raise_errors=True,
+        verbosity=1,
+        on_existing="ask",
+        on_error="ask",
+        clean_up=None,
+        **grow_kwargs,
+    ):
+        """Convenience method to run a full cycle of parsing combos into
+        missing cases only, then persistently growing those cases, and finally
+        merging the results into the full dataset.
+
+        Parameters
+        ----------
+        combos : dict_like[str, iterable]
+            The combos to run. The only difference here is that you can supply
+            an ellipse ``...``, meaning the all values for that coordinate will
+            be loaded from the current full dataset.
+        cases : sequence of mappings or tuples, optional
+            A sequence of (partial) individual settings to run. For each case,
+            all settings given by combos will be generated.
+        constants : dict, optional
+            Extra constant arguments for this run.
+        name : str, optional
+            Name for the crop to be used for on-disk storage of batches,
+            results and logs. You can use different names to grow results for
+            the same dataset concurrently.
+        batchsize : int, optional
+            If given, the target number of cases to sow in each batch. This is
+            computed from ``num_batches`` if not given and 1 if neither given.
+        num_batches : int, optional
+            If given, the target number of batches to sow. This is computed
+            from ``batchsize`` if not given and 1 if neither given.
+        missing_only : bool, optional
+            If True (default), only run cases that are not already present in
+            the on-disk dataset
+        shuffle : bool, optional
+            If True (default), shuffle the order of cases before sowing and
+            growing. This can be a useful basic form of load balancing.
+        subprocess : "auto" or bool, optional
+            Whether to grow each batch in a fresh subprocess. This adds about
+            1 second of overhead per batch, but allows the number of threads,
+            cpu affinity and gpu assignment to be controlled. If "auto"
+            (default) then subprocesses will be used if `num_threads`, `gpus`
+            or `affinities` are specified. See `grow_subprocess` for details.
+        raise_errors : bool, optional
+            If True (default), raise any errors that occur during growing,
+            otherwise just log them and continue with the next batch.
+        verbosity : int, optional
+            The level of logging to print during the sow/grow/reap process.
+            0: no output, 1: progress bars, 2: progress bars with current
+            setting postfixed.
+        on_existing : {'ask', 'reap', 'delete', 'skip', 'raise'}, optional
+            What to do if a crop with the same name already exists on
+            disk. Default is ``'ask'`` (interactive prompt).
+        on_error : {'ask', 'reap', 'delete', 'skip', 'raise'}, optional
+            What to do if an error occurs during grow/reap. Default is
+            ``'ask'`` (interactive prompt).
+        clean_up : bool or None, optional
+            Whether to delete the on-disk batch, result and log files after
+            successfully reaping.
+        grow_kwargs
+            Keyword arguments to be supplied to the grow method of the Crop
+            instances, e.g. for controlling subprocess behaviour. See
+            :meth:`xyzpy.Crop.grow` for details.
+
+        See Also
+        --------
+        Harvester.harvest_combos
+        """
+        crop = self.Crop(name)
+
+        if crop.is_prepared():
+            crop.handle_existing(action=on_existing)
+            if crop.is_prepared():
+                warnings.warn(
+                    f"Crop {crop} is still prepared, skipping cultivate."
+                )
+                return self.full_ds
+
+        # first map to cases, possibly parsing out existing data
+        if missing_only:
+            ds = self.full_ds
+        else:
+            ds = None
+        combos = self._maybe_expand_combos(combos)
+        cases = parse_into_cases(combos, ds=ds)
+
+        if cases:
+            # now write the cases to disk
+            crop.sow_combos(
+                combos=None,
+                cases=cases,
+                constants=constants,
+                batchsize=batchsize,
+                num_batches=num_batches,
+                shuffle=shuffle,
+                verbosity=verbosity,
+            )
+            try:
+                if subprocess == "auto":
+                    # XXX: detect num_threads, affinites, gpus
+                    subprocess = False
+
+                # start growing!
+                crop.grow(
+                    subprocess=subprocess,
+                    raise_errors=raise_errors,
+                    verbosity=verbosity,
+                    **grow_kwargs,
+                )
+
+                # accumulate the grown results into the full dataset
+                crop.reap(
+                    overwrite=not missing_only,
+                    clean_up=clean_up,
+                    verbosity=verbosity,
+                )
+
+            except (Exception, KeyboardInterrupt) as e:
+                msg = f"Grow/reap errored with {str(e)}"
+                crop.handle_existing(
+                    action=on_error,
+                    msg=msg,
+                    e=e,
+                    overwrite=not missing_only,
+                )
+
+        return self.full_ds
+
+
+def cultivate(
+    fn,
+    *,
+    var_names=None,
+    data_name=None,
+    runner_opts=None,
+    harvester_opts=None,
+    combos=None,
+    cases=None,
+    constants=None,
+    name=None,
+    batchsize=None,
+    num_batches=None,
+    missing_only=True,
+    shuffle=True,
+    subprocess="auto",
+    raise_errors=True,
+    verbosity=1,
+    on_existing="ask",
+    on_error="ask",
+    clean_up=None,
+    **grow_kwargs,
+):
+    """Convenience function to run a full cycle of annotating a function,
+    parsing combos into missing cases only, then persistently growing those
+    cases, and finally merging the results into the full dataset.
+
+    Parameters
+    ----------
+    fn : callable
+        The function to run over combos and cases. This will be wrapped in
+        a :class:`~xyzpy.Runner` and :class:`~xyzpy.Harvester` to perform the
+        cultivation process. If `var_names` is None, it should return a dict,
+        :class:`~xarray.Dataset` or :class:`~xarray.DataArray`.
+    var_names : str, sequence of str, or None
+        The ordered name(s) of the ouput variable(s) of `fn`. Set this
+        explicitly to None if `fn` outputs already labelled data as a dict,
+        :class:`~xarray.Dataset`, or :class:`~xarray.DataArray`.
+    data_name : str, optional
+        If given, the on-disk file to sync results with. If not set there will
+        be no persistent results, since the harvester created in this
+        functional interface is ephemeral.
+    runner_opts : dict, optional
+        Keyword arguments to be supplied to :class:`~xyzpy.Runner`.
+    harvester_opts : dict, optional
+        Keyword arguments to be supplied to :class:`~xyzpy.Harvester`.
+    combos : dict_like[str, iterable]
+        The combos to run. The only difference here is that you can supply
+        an ellipse ``...``, meaning the all values for that coordinate will
+        be loaded from the current full dataset.
+    cases : sequence of mappings or tuples, optional
+        A sequence of (partial) individual settings to run. For each case,
+        all settings given by combos will be generated.
+    constants : dict, optional
+        Extra constant arguments for this run.
+    name : str, optional
+        Name for the crop to be used for on-disk storage of batches,
+        results and logs. You can use different names to grow results for
+        the same dataset concurrently.
+    batchsize : int, optional
+        If given, the target number of cases to sow in each batch. This is
+        computed from ``num_batches`` if not given and 1 if neither given.
+    num_batches : int, optional
+        If given, the target number of batches to sow. This is computed
+        from ``batchsize`` if not given and 1 if neither given.
+    missing_only : bool, optional
+        If True (default), only run cases that are not already present in
+        the on-disk dataset
+    shuffle : bool, optional
+        If True (default), shuffle the order of cases before sowing and
+        growing. This can be a useful basic form of load balancing.
+    subprocess : "auto" or bool, optional
+        Whether to grow each batch in a fresh subprocess. This adds about
+        1 second of overhead per batch, but allows the number of threads,
+        cpu affinity and gpu assignment to be controlled. If "auto"
+        (default) then subprocesses will be used if `num_threads`, `gpus`
+        or `affinities` are specified. See `grow_subprocess` for details.
+    raise_errors : bool, optional
+        If True (default), raise any errors that occur during growing,
+        otherwise just log them and continue with the next batch.
+    verbosity : int, optional
+        The level of logging to print during the sow/grow/reap process.
+        0: no output, 1: progress bars, 2: progress bars with current
+        setting postfixed.
+    on_existing : {'ask', 'reap', 'delete', 'skip', 'raise'}, optional
+        What to do if a crop with the same name already exists on
+        disk. Default is ``'ask'`` (interactive prompt).
+    on_error : {'ask', 'reap', 'delete', 'skip', 'raise'}, optional
+        What to do if an error occurs during grow/reap. Default is
+        ``'ask'`` (interactive prompt).
+    clean_up : bool or None, optional
+        Whether to delete the on-disk batch, result and log files after
+        successfully reaping.
+    grow_kwargs
+        Keyword arguments to be supplied to the grow method of the Crop
+        instances, e.g. for controlling subprocess behaviour. See
+        :meth:`xyzpy.Crop.grow` for details.
+
+    See Also
+    --------
+    Harvester.cultivate
+    """
+
+    runner_opts = {} if runner_opts is None else dict(runner_opts)
+    runner_opts.setdefault("var_names", var_names)
+
+    harvester_opts = {} if harvester_opts is None else dict(harvester_opts)
+    harvester_opts.setdefault("data_name", data_name)
+
+    if harvester_opts.get("data_name") is None:
+        warnings.warn(
+            "Functional `cultivate` without `data_name` "
+            "means no persistent storage of results. "
+        )
+
+    runner = Runner(fn, **runner_opts)
+    harvester = Harvester(runner, **harvester_opts)
+
+    return harvester.cultivate(
+        combos=combos,
+        cases=cases,
+        constants=constants,
+        name=name,
+        batchsize=batchsize,
+        num_batches=num_batches,
+        missing_only=missing_only,
+        shuffle=shuffle,
+        subprocess=subprocess,
+        raise_errors=raise_errors,
+        verbosity=verbosity,
+        on_existing=on_existing,
+        on_error=on_error,
+        clean_up=clean_up,
+        **grow_kwargs,
+    )
+
 
 class Sampler:
     """Like a Harvester, but randomly samples combos and writes the table of

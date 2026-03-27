@@ -8,6 +8,7 @@ Release notes for `xyzpy`.
 
 **New features:**
 
+- Add {func}`~xyzpy.cultivate` for handling the entire crop lifecycle (annotate, sow, grow, reap) in one function.
 - Add {meth}`~xyzpy.Crop.grow_subprocess` for running batches in isolated subprocesses with resource control — supports `gpus` (GPU device pooling via `CUDA_VISIBLE_DEVICES`), `affinities` (CPU pinning via `taskset`), `log` (save stdout/stderr per batch), `num_workers`, `num_threads`, `raise_errors`, and custom `batch_ids` ({issue}`20`)
 - Add `xyzpy-grow` CLI entry point for driving {meth}`~xyzpy.Crop.grow_subprocess` from the command line
 - Add {class}`~xyzpy.RayExecutor` and {class}`~xyzpy.RayGPUExecutor` for Ray-based parallel execution, also usable via `xyzpy-grow --ray`

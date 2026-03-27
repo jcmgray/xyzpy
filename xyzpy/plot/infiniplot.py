@@ -1159,7 +1159,7 @@ class Infiniplotter:
                     )
                 )
 
-                key_styles = list(inputs.items())
+                key_styles = sorted(inputs.items())
                 if self.legend_reverse:
                     key_styles.reverse()
 

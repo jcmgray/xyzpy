@@ -46,6 +46,7 @@ from .gen.farming import (
     Harvester,
     Runner,
     Sampler,
+    cultivate,
     label,
 )
 from .gen.ray_executor import (
@@ -151,13 +152,14 @@ __all__ = [
     "cimluv",
     "cimple_bright",
     "cimple",
-    "cmoke",
     "clean_slurm_outputs",
+    "cmoke",
     "combo_runner_to_df",
     "combo_runner_to_ds",
     "combo_runner",
     "convert_colors",
     "Crop",
+    "cultivate",
     "estimate_from_repeats",
     "find_missing_cases",
     "format_number_with_error",

@@ -996,8 +996,8 @@ class Crop(object):
     def grow(
         self,
         batch_ids=None,
+        subprocess="auto",
         raise_errors=False,
-        subprocess=False,
         debugging=False,
         verbosity=1,
         verbosity_grow=0,
@@ -1013,11 +1013,13 @@ class Crop(object):
             Which batch numbers to grow, by default all missing results.
         raise_errors : bool, optional
             Whether to raise errors if they occur during growing.
-        subprocess : bool, optional
+        subprocess : "auto" or bool, optional
             Whether to grow each batch in a fresh subprocess. This adds about
             1 second of overhead per batch, but allows the number of threads,
-            cpu affinity and gpu assignment to be controlled. See
-            `grow_subprocess` for more details.
+            cpu affinity and gpu assignment to be controlled. If "auto"
+            (default) then subprocesses will be used if `num_threads`, `gpus`
+            or `affinities` are specified.
+            See :meth:`Crop.grow_subprocess` for details.
         debugging : bool, optional
             Whether to set the logging level to debug.
         verbosity : int, optional
@@ -1038,6 +1040,16 @@ class Crop(object):
             batch_ids = self.missing_results()
         elif isinstance(batch_ids, int):
             batch_ids = (batch_ids,)
+
+        if subprocess == "auto":
+            if combo_runner_opts.get("num_threads", None) is not None:
+                subprocess = True
+            elif combo_runner_opts.get("gpus", None) is not None:
+                subprocess = True
+            elif combo_runner_opts.get("affinities", None) is not None:
+                subprocess = True
+            else:
+                subprocess = False
 
         if subprocess:
             self.grow_subprocess(
