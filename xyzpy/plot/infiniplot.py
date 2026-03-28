@@ -217,9 +217,31 @@ _MARKERS_DEFAULT = (
     "H",
 )
 
+_HEATMAP_INVALID_KWARGS = {
+    "hue",
+    "color",
+    "marker",
+    "markersize",
+    "markeredgecolor",
+    "linewidth",
+    "linestyle",
+    "text",
+}
+
+
+_STYLE_SORT_ORDER = (
+    "hue",
+    "color",
+    "markeredgecolor",
+    "marker",
+    "linestyle",
+    "markersize",
+    "linewidth",
+)
+
 INFINIPLOTTER_DEFAULTS = dict(
     bins=None,
-    bins_density=True,
+    bins_density=False,
     aggregate=None,
     aggregate_method="median",
     aggregate_err_range=0.5,
@@ -333,18 +355,6 @@ INFINIPLOTTER_DEFAULTS = dict(
 _PLOTTER_OPTS = tuple(INFINIPLOTTER_DEFAULTS.keys())
 
 
-_HEATMAP_INVALID_KWARGS = {
-    "hue",
-    "color",
-    "marker",
-    "markersize",
-    "markeredgecolor",
-    "linewidth",
-    "linestyle",
-    "text",
-}
-
-
 class Infiniplotter:
     def __init__(
         self,
@@ -369,7 +379,7 @@ class Infiniplotter:
         for opt in _PLOTTER_OPTS:
             setattr(self, opt, settings.pop(opt))
 
-        # Parse unmatched keywords and error but suggest correct versions
+        # parse unmatched keywords and error but suggest correct versions
         if len(settings) > 0:
             import difflib
 
@@ -406,13 +416,9 @@ class Infiniplotter:
 
         # if only one is specified allow it to be either
         if (self.hue is not None) and (self.color is None):
-            (self.color, self.color_order, self.colors, self.color_label) = (
-                self.hue,
-                self.hue_order,
-                self.hues,
-                self.hue_label,
-            )
-            self.hue = self.hue_order = self.hues = self.hue_label = None
+            for _a in ["", "_order", "s", "_label", "_ticklabels"]:
+                setattr(self, f"color{_a}", getattr(self, f"hue{_a}"))
+                setattr(self, f"hue{_a}", None)
 
         # default style options
         self.base_style = {
@@ -422,11 +428,11 @@ class Infiniplotter:
             "marker": ".",
             "markeredgecolor": "white",
         }
-        # the size of each mapped dimension
+        # the extent of each mapped dimension
         self.sizes = {}
-        # the domain (i.e. input) of each mapped dimension
-        self.domains = {}
-        # the range (i.e. output) of each mapped dimension
+        # the 'domain' of each mapped dimension (i.e. coordinate values)
+        self.input_values = {}
+        # the 'range' of each mapped dimension (e.g. marker or color)
         self.output_values = {}
         # how to label each mapped dimension
         self.labels = {
@@ -452,7 +458,7 @@ class Infiniplotter:
             self.autohue_opts.setdefault("hue_shift", 0.5 / N)
             return [to_colormap(h, **self.autohue_opts) for h in hs]
 
-        # drop irrelevant variables and dimensions
+        # drop irrelevant data variables
         ds = ds.drop_vars(
             [
                 k
@@ -468,7 +474,7 @@ class Infiniplotter:
                 )
             ]
         )
-
+        # then drop irrelevant dimensions
         possible_dims = set()
         if self.x in ds.data_vars:
             possible_dims.update(ds[self.x].dims)
@@ -516,22 +522,6 @@ class Infiniplotter:
             else:
                 self.cmap_or_colors = self.output_values["color"]
 
-        self.init_mapped_dim(
-            "marker",
-            custom_values=self.markers,
-            default_values=itertools.cycle(_MARKERS_DEFAULT),
-        )
-        self.init_mapped_dim(
-            "markersize",
-            custom_values=self.markersizes,
-            default_values=lambda N: np.linspace(3.0, 9.0, N),
-        )
-        self.init_mapped_dim(
-            "markeredgecolor",
-            custom_values=self.markeredgecolors,
-            default_values=lambda N: auto_colors(N),
-        )
-
         if self.is_scatter and (self.xlink is None):
             if self.linewidth is not None:
                 warnings.warn(
@@ -547,9 +537,25 @@ class Infiniplotter:
             self.linestyle = ""
 
         self.init_mapped_dim(
+            "markeredgecolor",
+            custom_values=self.markeredgecolors,
+            default_values=lambda N: auto_colors(N),
+        )
+        self.init_mapped_dim(
+            "marker",
+            custom_values=self.markers,
+            default_values=itertools.cycle(_MARKERS_DEFAULT),
+        )
+        self.init_mapped_dim(
             "linestyle",
             custom_values=self.linestyles,
             default_values=itertools.cycle(_LINESTYLES_DEFAULT),
+        )
+        # XXX: set this automatically based on number of `x` values?
+        self.init_mapped_dim(
+            "markersize",
+            custom_values=self.markersizes,
+            default_values=lambda N: np.linspace(3.0, 9.0, N),
         )
         self.init_mapped_dim(
             "linewidth",
@@ -625,7 +631,16 @@ class Infiniplotter:
             self.kwargs.setdefault("drawstyle", "steps-mid")
 
         if self.is_heatmap and self.unmapped:
-            if self.aggregate is not True:
+            if isinstance(self.aggregate, str):
+                self.aggregate = [self.aggregate]
+
+            if isinstance(self.aggregate, (list, tuple)) and set(
+                self.aggregate
+            ) == set(self.unmapped):
+                # user has explicitly supplied all remaining dimensions
+                self.aggregate = True
+
+            elif self.aggregate is not True:
                 # default to aggregating over all unmapped dimensions, but warn
                 warnings.warn(
                     "Heatmap: aggregating over all unmapped dimensions: "
@@ -684,15 +699,24 @@ class Infiniplotter:
             self.err_style = "bars"
 
         # all the coordinates we will iterate over
-        self.remaining_dims = []
-        self.remaining_sizes = []
-        for dim, sz in self.ds.sizes.items():
-            if dim not in (self.x, self.y, self.z, self.xlink, "__unmapped__"):
-                self.remaining_dims.append(dim)
-                self.remaining_sizes.append(sz)
-        self.ranges = list(map(range, self.remaining_sizes))
+        self.remaining_dims = sorted(
+            # only iterate over dimensions not forming the actual line etc
+            (
+                dim
+                for dim in self.ds.dims
+                if dim
+                not in (self.x, self.y, self.z, self.xlink, "__unmapped__")
+            ),
+            # for legend: we want to iterate over hue first, then color, etc.
+            key=lambda dim: tuple(
+                dim != getattr(self, name, None) for name in _STYLE_SORT_ORDER
+            ),
+        )
+        self.remaining_ranges = [
+            range(self.ds.sizes[dim]) for dim in self.remaining_dims
+        ]
 
-        # maybe create the figure and axes
+        # finally, maybe create the figure and axes
         if self.ax is not None:
             if self.axs is not None:
                 raise ValueError("cannot specify both `ax` and `axs`")
@@ -775,8 +799,8 @@ class Infiniplotter:
             self.mapped.add(dim)
             self.ds = self.ds.dropna(dim, how="all")
 
-            self.domains[name] = self.ds[dim].values
-            self.sizes[name] = len(self.domains[name])
+            self.input_values[name] = self.ds[dim].values
+            self.sizes[name] = len(self.input_values[name])
             self.labels[dim] = (
                 _make_bold(dim) if dim_label is None else dim_label
             )
@@ -784,7 +808,9 @@ class Infiniplotter:
             if dim_ticklabels is None:
                 dim_ticklabels = {}
             if not isinstance(dim_ticklabels, dict):
-                dim_ticklabels = dict(zip(self.domains[name], dim_ticklabels))
+                dim_ticklabels = dict(
+                    zip(self.input_values[name], dim_ticklabels)
+                )
             self.ticklabels[dim] = dim_ticklabels
 
             if custom_values is None:
@@ -810,9 +836,19 @@ class Infiniplotter:
         """Plot lines of the data."""
         import matplotlib as mpl
 
-        # iterate over and plot all data
-        self.handles = {}
-        self.split_handles = collections.defaultdict(
+        # line handles for merged legend
+        #     keys: frozenset([(mapped_dim, dim_value), ...]) ->
+        #     values: Line2D handle with respective style
+        self.handles_merged = {}
+
+        # line handles for split legend, nested dict:
+        #    keys: mapped_dim ->
+        #    values: dict with
+        #        keys: dim_value ->
+        #        values: dict with
+        #            keys: style property (e.g. color, marker, linestyle) ->
+        #            values: property value (e.g. 'red', 'o', '--')
+        self.handles_split = collections.defaultdict(
             lambda: collections.defaultdict(dict)
         )
 
@@ -821,11 +857,12 @@ class Infiniplotter:
             # is a constant coordinate
             xdata = self.ds[self.x].values
 
-        for iloc in itertools.product(*self.ranges):
+        # iterate over and plot all data
+        for iloc in itertools.product(*self.remaining_ranges):
             # current coordinates
             loc = dict(zip(self.remaining_dims, iloc))
 
-            # get the right set of axes to plot on
+            # get the correct axes to plot on
             if self.row is not None:
                 i_ax = loc[self.row]
             else:
@@ -836,20 +873,21 @@ class Infiniplotter:
                 j_ax = 0
             ax = self.axs[i_ax, j_ax]
 
-            # map coordinate into relevant styles and keep track of each uniquely
+            # map coordinate into relevant styles and track each uniquely
             sub_key = {}
+            # style options specific to this trace, to be supplied to ax.plot
             specific_style = {}
 
             # need to handle hue and color separately
             if self.color is not None:
                 if self.hue is not None:
                     ihue = loc[self.hue]
-                    hue_in = self.domains["hue"][ihue]
+                    hue_in = self.input_values["hue"][ihue]
                     sub_key[self.hue] = hue_in
                     self.cmap_or_colors = self.output_values["hue"][ihue]
 
                 icolor = loc[self.color]
-                color_in = self.domains["color"][icolor]
+                color_in = self.input_values["color"][icolor]
                 if not callable(self.cmap_or_colors):
                     color_out = self.cmap_or_colors[icolor]
                 else:
@@ -866,31 +904,29 @@ class Infiniplotter:
                     legend_dim = ", ".join((self.hue, self.color))
                     legend_in = ", ".join(map(str, (hue_in, color_in)))
 
-                self.split_handles[legend_dim][legend_in]["color"] = color_out
+                self.handles_split[legend_dim][legend_in]["color"] = color_out
             else:
                 legend_dim = None
 
-            for prop in (
-                "marker",
-                "markersize",
-                "markeredgecolor",
-                "linewidth",
-                "linestyle",
-            ):
+            for prop in _STYLE_SORT_ORDER:
+                if prop in ("color", "hue"):
+                    # already handled
+                    continue
+
                 dim = getattr(self, prop)
                 if dim is not None:
                     idx = loc[dim]
-                    prop_in = self.domains[prop][idx]
+                    prop_in = self.input_values[prop][idx]
                     prop_out = self.output_values[prop][idx]
                     sub_key[dim] = prop_in
                     specific_style[prop] = prop_out
 
                     if dim in (self.color, self.hue):
-                        self.split_handles[legend_dim][legend_in][prop] = (
+                        self.handles_split[legend_dim][legend_in][prop] = (
                             prop_out
                         )
                     else:
-                        self.split_handles[dim][prop_in][prop] = prop_out
+                        self.handles_split[dim][prop_in][prop] = prop_out
 
             # get the masked x and y data
             ds_loc = self.ds.isel(loc)
@@ -980,7 +1016,11 @@ class Infiniplotter:
                 # override with manual label
                 label = self.label
             else:
-                label = ", ".join(map(str, sub_key.values()))
+                # label = ", ".join(map(str, sub_key.values()))
+                label = ", ".join(
+                    self.ticklabels[dim].get(val, str(val))
+                    for dim, val in sub_key.items()
+                )
 
             # do the plotting!
             (handle,) = ax.plot(
@@ -1014,7 +1054,8 @@ class Infiniplotter:
             # only want one legend entry per unique style
             key = frozenset(sub_key.items())
             if key or self.label:
-                self.handles.setdefault(key, handle)
+                # has a mapped style (or a manually specified label)
+                self.handles_merged.setdefault(key, handle)
 
             # add spans that depend on location
             for _spans, ax_func in (
@@ -1067,140 +1108,12 @@ class Infiniplotter:
         if self.legend_merge == "auto":
             self.legend_merge = len(self.mapped) <= 1
 
-        if self.handles and self.legend_merge:
-            # show every unique style combination as single legend try
-
-            if self.legend_entries:
-                # only keep manually specified legend entries
-                remove = set()
-                for k in self.handles:
-                    for dim, val in k:
-                        if dim in self.legend_entries:
-                            if val not in self.legend_entries[dim]:
-                                remove.add(k)
-                for k in remove:
-                    del self.handles[k]
-
-            sorters = []
-            legend_title = []
-            for prop in [
-                "hue",
-                "color",
-                "marker",
-                "markersize",
-                "markeredgecolor",
-                "linewidth",
-                "linestyle",
-            ]:
-                dim = getattr(self, prop)
-                dim_order = getattr(self, f"{prop}_order")
-                if dim is not None and self.labels[dim] not in legend_title:
-                    # check if not in legend_title, as multiple attributes can
-                    # be mapped to the same dimension
-                    legend_title.append(self.labels[dim])
-
-                if dim is not None and dim_order is not None:
-                    sorters.append((dim, dim_order.index))
-                else:
-                    sorters.append((dim, lambda x: x))
-
-            def legend_sort(key_handle):
-                loc = dict(key_handle[0])
-                return tuple(
-                    sorter(loc.get(dim, None)) for dim, sorter in sorters
-                )
-
-            legend_handles.extend(
-                v
-                for _, v in sorted(
-                    self.handles.items(),
-                    key=legend_sort,
-                    reverse=self.legend_reverse,
-                )
-            )
-
-            if self.legend_ncol is None:
-                if self.sizes["color"] == 1 or len(self.handles) <= 10:
-                    self.legend_ncol = 1
-                else:
-                    self.legend_ncol = self.sizes["hue"]
-
-            legend_opts.setdefault("title", ", ".join(legend_title))
-            legend_opts.setdefault("ncol", self.legend_ncol)
-
-        elif self.split_handles:
-            # separate legend for each style
-
-            if self.legend_entries:
-                # only keep manually specified legend entries
-                for k, vals in self.legend_entries.items():
-                    self.split_handles[k] = {
-                        key: val
-                        for key, val in self.split_handles[k].items()
-                        if key in vals
-                    }
-
-            self.base_style["color"] = (0.5, 0.5, 0.5)
-            self.base_style["marker"] = ""
-            self.base_style["linestyle"] = ""
-
-            ncol = len(self.split_handles)
-            nrow = max(map(len, self.split_handles.values()))
-
-            for legend_dim, inputs in self.split_handles.items():
-                # add sub title in legend
-                legend_handles.append(
-                    Line2D(
-                        [0],
-                        [0],
-                        markersize=0,
-                        linewidth=0,
-                        label=self.labels[legend_dim],
-                    )
-                )
-
-                key_styles = sorted(inputs.items())
-                if self.legend_reverse:
-                    key_styles.reverse()
-
-                for key, style in key_styles:
-                    label = self.ticklabels[legend_dim].get(key, str(key))
-
-                    if any("marker" in prop for prop in style):
-                        style.setdefault("marker", "o")
-                    if any("line" in prop for prop in style):
-                        style.setdefault("linestyle", "-")
-                    if "color" in style:
-                        style.setdefault("marker", ".")
-                        style.setdefault("linestyle", "-")
-
-                    legend_handles.append(
-                        Line2D(
-                            [0],
-                            [0],
-                            **{**self.base_style, **style},
-                            label=label,
-                        )
-                    )
-
-                if self.legend_ncol is None:
-                    npad = nrow - len(inputs)
-                else:
-                    npad = 1
-                for _ in range(npad):
-                    # spacing
-                    legend_handles.append(
-                        Line2D([0], [0], markersize=0, linewidth=0, label="")
-                    )
-
-            if self.legend_ncol is None:
-                legend_opts.setdefault("ncol", ncol)
-
-            if self.legend_extras is not None:
-                for extra in self.legend_extras:
-                    if isinstance(extra, dict):
-                        extra = Line2D([0], [0], **extra)
-                    legend_handles.append(extra)
+        if self.handles_merged and self.legend_merge:
+            # entry for every unique style combination
+            self._create_legend_merged(legend_handles, legend_opts)
+        elif self.handles_split:
+            # separate legend for each style separately
+            self._create_legend_split(legend_handles, legend_opts)
         else:
             legend_handles = None
 
@@ -1211,7 +1124,7 @@ class Infiniplotter:
                 # we have explicit labels for each handle
                 for lh, label in zip(
                     # only update the handles that were added by this plot call
-                    legend_handles[-len(self.handles) :],
+                    legend_handles[-len(self.handles_merged) :],
                     self.legend_labels,
                 ):
                     lh.set_label(label)
@@ -1231,6 +1144,119 @@ class Infiniplotter:
             legend_opts.setdefault("edgecolor", "none")
             legend_opts.setdefault("framealpha", 0.0)
             lax.legend(handles=legend_handles, **legend_opts)
+
+    def _create_legend_merged(self, legend_handles, legend_opts):
+        """Entry for every unique style combination."""
+
+        if self.legend_entries:
+            # only keep manually specified legend entries
+            remove = set()
+            for k in self.handles_merged:
+                for dim, val in k:
+                    if dim in self.legend_entries:
+                        if val not in self.legend_entries[dim]:
+                            remove.add(k)
+            for k in remove:
+                del self.handles_merged[k]
+
+        # note: we explicitly iterated over the data is desired legend order
+        handles = list(self.handles_merged.values())
+        if self.legend_reverse:
+            handles.reverse()
+        legend_handles.extend(handles)
+
+        if self.legend_ncol is None:
+            if self.sizes["color"] == 1 or len(self.handles_merged) <= 10:
+                self.legend_ncol = 1
+            else:
+                self.legend_ncol = self.sizes["hue"]
+
+        legend_title = []
+        for prop in _STYLE_SORT_ORDER:
+            dim = getattr(self, prop)
+            if dim is not None and self.labels[dim] not in legend_title:
+                # check if not in legend_title, as multiple style
+                # properties can be mapped to the same dimension
+                legend_title.append(self.labels[dim])
+
+        legend_opts.setdefault("title", ", ".join(legend_title))
+        legend_opts.setdefault("ncol", self.legend_ncol)
+
+    def _create_legend_split(self, legend_handles, legend_opts):
+        """Separate legend for each style separately."""
+        from matplotlib.lines import Line2D
+
+        if self.legend_entries:
+            # only keep manually specified legend entries
+            for k, vals in self.legend_entries.items():
+                self.handles_split[k] = {
+                    key: val
+                    for key, val in self.handles_split[k].items()
+                    if key in vals
+                }
+
+        self.base_style["color"] = (0.5, 0.5, 0.5)
+        self.base_style["marker"] = ""
+        self.base_style["linestyle"] = ""
+
+        ncol = len(self.handles_split)
+        nrow = max(map(len, self.handles_split.values()))
+
+        for legend_dim, dimval_to_style in self.handles_split.items():
+            # add sub title in legend
+            legend_handles.append(
+                Line2D(
+                    [0],
+                    [0],
+                    markersize=0,
+                    linewidth=0,
+                    label=self.labels[legend_dim],
+                )
+            )
+
+            dimval_styles = list(dimval_to_style.items())
+            if self.legend_reverse:
+                dimval_styles.reverse()
+
+            for dimval, style in dimval_styles:
+                # XXX: maybe pretty print float values etc here?
+                label = self.ticklabels[legend_dim].get(dimval, str(dimval))
+
+                if any("marker" in prop for prop in style):
+                    style.setdefault("marker", "o")
+                if any("line" in prop for prop in style):
+                    style.setdefault("linestyle", "-")
+                if "color" in style:
+                    style.setdefault("marker", ".")
+                    style.setdefault("linestyle", "-")
+
+                legend_handles.append(
+                    Line2D(
+                        [0],
+                        [0],
+                        **{**self.base_style, **style},
+                        label=label,
+                    )
+                )
+
+            if self.legend_ncol is None:
+                npad = nrow - len(dimval_styles)
+            else:
+                npad = 1
+            for _ in range(npad):
+                # spacing
+                legend_handles.append(
+                    Line2D([0], [0], markersize=0, linewidth=0, label="")
+                )
+
+        if self.legend_ncol is None:
+            legend_opts.setdefault("ncol", ncol)
+
+        if self.legend_extras is not None:
+            for extra in self.legend_extras:
+                if isinstance(extra, dict):
+                    extra = Line2D([0], [0], **extra)
+                legend_handles.append(extra)
 
     def plot_heatmap(self):
         """Plot a heatmap of the data."""
@@ -1264,7 +1290,7 @@ class Infiniplotter:
         else:
             self.norm = mpl.colors.Normalize(vmin=zmin, vmax=zmax)
 
-        for iloc in itertools.product(*self.ranges):
+        for iloc in itertools.product(*self.remaining_ranges):
             # current coordinates
             loc = dict(zip(self.remaining_dims, iloc))
 
@@ -1348,11 +1374,11 @@ class Infiniplotter:
             title = []
             if self.col is not None:
                 title.append(
-                    f"{self.labels[self.col]}={self.domains['col'][j]}"
+                    f"{self.labels[self.col]}={self.input_values['col'][j]}"
                 )
             if self.row is not None:
                 title.append(
-                    f"{self.labels[self.row]}={self.domains['row'][i]}"
+                    f"{self.labels[self.row]}={self.input_values['row'][i]}"
                 )
             if title:
                 title = ", ".join(title)
