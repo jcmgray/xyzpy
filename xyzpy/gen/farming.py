@@ -488,6 +488,9 @@ class Harvester(object):
         engine : str, optional
             Engine to use to save and load datasets.
         """
+        if self.data_name is None:
+            return
+
         if engine is None:
             engine = self.engine
 
