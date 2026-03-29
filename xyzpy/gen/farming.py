@@ -42,8 +42,8 @@ class Runner(object):
         Function that produces a single instance of a result.
     var_names : str, sequence of str, or None
         The ordered name(s) of the ouput variable(s) of `fn`. Set this
-        explicitly to None if `fn` outputs already labelled data as a
-        :class:`~xarray.Dataset` or :class:`~xarray.DataArray`.
+        explicitly to None if `fn` outputs already labelled data as a dict,
+        :class:`~xarray.Dataset`, or :class:`~xarray.DataArray`.
     fn_args : str, or sequence of str, optional
         The ordered name(s) of the input arguments(s) of `fn`. This is only
         needed if the cases or combos supplied are not dict-like.
@@ -329,7 +329,7 @@ def label(
     ----------
     var_names : str, sequence of str, or None
         The ordered name(s) of the ouput variable(s) of `fn`. Set this
-        explicitly to None if `fn` outputs already labelled data as a dict,
+        explicitly to None if `fn` outputs already labelled data as a `dict`,
         :class:`~xarray.Dataset`, or :class:`~xarray.DataArray`.
     fn_args : str, or sequence of str, optional
         The ordered name(s) of the input arguments(s) of `fn`. This is only
@@ -1036,11 +1036,11 @@ def cultivate(
     fn : callable
         The function to run over combos and cases. This will be wrapped in
         a :class:`~xyzpy.Runner` and :class:`~xyzpy.Harvester` to perform the
-        cultivation process. If `var_names` is None, it should return a dict,
+        cultivation process. If `var_names` is None, it should return a `dict`,
         :class:`~xarray.Dataset` or :class:`~xarray.DataArray`.
     var_names : str, sequence of str, or None
         The ordered name(s) of the ouput variable(s) of `fn`. Set this
-        explicitly to None if `fn` outputs already labelled data as a dict,
+        explicitly to None if `fn` outputs already labelled data as a `dict`,
         :class:`~xarray.Dataset`, or :class:`~xarray.DataArray`.
     data_name : str, optional
         If given, the on-disk file to sync results with. If not set there will

@@ -46,7 +46,6 @@ installation
 generate
 gen_parallel
 plotting
-plotting-new
 visualization
 utilities
 ```
