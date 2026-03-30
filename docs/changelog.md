@@ -4,7 +4,7 @@ Release notes for `xyzpy`.
 
 
 (whats-new-1-3-0)=
-## v1.3.0 (2026-03-26)
+## v1.3.0 (2026-03-30)
 
 **New features:**
 
@@ -12,7 +12,7 @@ Release notes for `xyzpy`.
 - Add {meth}`~xyzpy.Crop.grow_subprocess` for running batches in isolated subprocesses with resource control — supports `gpus` (GPU device pooling via `CUDA_VISIBLE_DEVICES`), `affinities` (CPU pinning via `taskset`), `log` (save stdout/stderr per batch), `num_workers`, `num_threads`, `raise_errors`, and custom `batch_ids` ({issue}`20`)
 - Add `xyzpy-grow` CLI entry point for driving {meth}`~xyzpy.Crop.grow_subprocess` from the command line
 - Add {class}`~xyzpy.RayExecutor` and {class}`~xyzpy.RayGPUExecutor` for Ray-based parallel execution, also usable via `xyzpy-grow --ray`
-- Add {func}`~xyzpy.plot.infiniplot.infiniplot` — a new unified plotting interface accessible via `ds.xyz.plot()` that auto-detects plot type (line, scatter, heatmap) from data dimensions
+- Add {func}`~xyzpy.plot.infiniplot.infiniplot` — a new unified plotting interface accessible via `ds.xyz.plot()` that auto-detects plot type (line, scatter, heatmap) from data dimensions - see {doc}`plotting` for details
 - Add scatter plot support (`data_var` vs `data_var`) to `xyz.plot`
 - Add {func}`~xyzpy.cmoke` (OKLCH-based) and {func}`~xyzpy.cimluv` (HSLuv-based) perceptually uniform single-hue colormap generators
 - Add {class}`~xyzpy.MemoryMonitor` context manager for peak memory tracking, plus {func}`~xyzpy.get_peak_memory_usage`, {func}`~xyzpy.report_memory`, and {func}`~xyzpy.report_memory_gpu` utilities
