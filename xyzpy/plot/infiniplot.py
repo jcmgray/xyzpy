@@ -1106,7 +1106,12 @@ class Infiniplotter:
                 legend_handles = []
 
         if self.legend_merge == "auto":
-            self.legend_merge = len(self.mapped) <= 1
+            self.legend_merge = (
+                # all mapped style correspond to same dimension
+                (len(self.mapped) <= 1)
+                # color and hue are always effectively fused
+                or (set(self.mapped) == {self.hue, self.color})
+            )
 
         if self.handles_merged and self.legend_merge:
             # entry for every unique style combination
@@ -1468,16 +1473,19 @@ class Infiniplotter:
                             spanlabel = line
                             # actual line location is value in dict
                             line = _spans[spanlabel]
-                            trans = transforms.blended_transform_factory(
-                                ax.transAxes, ax.transData
-                            )
 
                             if h_or_v == "h":
+                                trans = transforms.blended_transform_factory(
+                                    ax.transAxes, ax.transData
+                                )
                                 _span_label_coo = (0.0, line)
                                 va = "bottom"
                             else:
-                                _span_label_coo = (line, 1.0)
-                                va = "top"
+                                trans = transforms.blended_transform_factory(
+                                    ax.transData, ax.transAxes
+                                )
+                                _span_label_coo = (line, 0.0)
+                                va = "bottom"
 
                             ax.text(
                                 *_span_label_coo,

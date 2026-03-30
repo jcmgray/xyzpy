@@ -1,6 +1,7 @@
 import matplotlib
 import numpy as np
 import xarray as xr
+from numpy.testing import assert_allclose
 from pytest import fixture, mark
 
 import xyzpy as xyz
@@ -265,6 +266,29 @@ class TestILinePlot:
 class TestHeatmap:
     def test_simple(self, dataset_heatmap):
         dataset_heatmap.xyz.plot(x="x", y="y", z="c")
+
+    def test_vspans_dict_label_uses_data_x_axes_y(self, dataset_heatmap):
+        import matplotlib.transforms as transforms
+
+        fig, axs = dataset_heatmap.xyz.plot(
+            x="x",
+            y="y",
+            z="c",
+            legend=False,
+            vspans={"origin": 15.0},
+        )
+
+        ax = axs[0, 0]
+        (text,) = ax.texts
+
+        expected = transforms.blended_transform_factory(
+            ax.transData,
+            ax.transAxes,
+        ).transform((15.0, 0.0))
+        actual = text.get_transform().transform(text.get_position())
+
+        assert text.get_text() == "origin"
+        assert_allclose(actual, expected)
 
     def test_multi_plot_4d(self, dataset_4d):
         dataset_4d.xyz.plot("x", "y", "c", row="phi")
