@@ -43,8 +43,8 @@ The following guides introduce the main parts of ``xyzpy``:
 :caption: Guides
 :maxdepth: 2
 installation
-generate
-gen_parallel
+inputs_and_outputs
+computing_results
 plotting
 visualization
 utilities
