@@ -1,7 +1,6 @@
 @import url('https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Next:ital,wght@0,200..800;1,200..800&family=Spline+Sans+Mono:ital,wght@0,300..700;1,300..700&display=swap');
 
 h1, h2, h3 {
-    font-family: 'Spline Sans Mono', monospace;
     font-weight: bold;
 }
 
@@ -15,22 +14,6 @@ h2 {
 
 h3 {
 	font-size: 1.5rem;
-}
-
-/* .toctree-l2 {
-	font-size: 0.85rem;
-} */
-
-body {
-    font-family: 'Atkinson Hyperlegible Next', sans-serif;
-}
-
-/* article {
-	font-size: 0.9rem;
-} */
-
-code, kbd, pre, samp {
-    font-family: 'Spline Sans Mono', monospace;
 }
 
 code.literal {

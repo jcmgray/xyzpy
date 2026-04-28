@@ -69,10 +69,16 @@ html_theme_options = {
     "light_css_variables": {
         "color-brand-primary": "#069eec",
         "color-brand-content": "#069eec",
+        "font-stack": "Atkinson Hyperlegible Next, sans-serif",
+        "font-stack--monospace": "Spline Sans Mono, monospace",
+        "font-stack--headings": "Spline Sans Mono, monospace",
     },
     "dark_css_variables": {
         "color-brand-primary": "#069eec",
         "color-brand-content": "#069eec",
+        "font-stack": "Atkinson Hyperlegible Next, sans-serif",
+        "font-stack--monospace": "Spline Sans Mono, monospace",
+        "font-stack--headings": "Spline Sans Mono, monospace",
     },
     "light_logo": "xyzpy-logo-title.png",
     "dark_logo": "xyzpy-logo-title.png",
