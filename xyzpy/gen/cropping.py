@@ -797,8 +797,8 @@ class Crop(object):
     def grow_subprocess(
         self,
         batch_ids=None,
-        num_workers=1,
-        num_threads=1,
+        num_workers=None,
+        num_threads=None,
         gpus=None,
         affinities=None,
         raise_errors=False,
@@ -819,9 +819,9 @@ class Crop(object):
         batch_ids : int or sequence of int, optional
             Which batch numbers to grow, defaults to all missing.
         num_workers : int, optional
-            The maximum number of concurrent subprocesses.
+            The maximum number of concurrent subprocesses (default 1).
         num_threads : int, optional
-            The number of threads per subprocess.
+            The number of threads per subprocess (default 1).
         gpus : int, str, or sequence of int, optional
             GPU device IDs to assign to subprocesses via
             ``CUDA_VISIBLE_DEVICES``. Each subprocess gets a single GPU from
@@ -851,6 +851,11 @@ class Crop(object):
         """
         from subprocess import DEVNULL, PIPE, Popen
 
+        if num_workers is None:
+            num_workers = 1
+        if num_threads is None:
+            num_threads = 1
+
         if batch_ids is None:
             batch_ids = self.missing_results()
         elif isinstance(batch_ids, int):
@@ -877,7 +882,7 @@ class Crop(object):
         pargs = [
             sys.executable,
             "-m",
-            "xyzpy.gen.xyzpy_grow_cli",
+            "xyzpy_grow",
             self.name,
             "--parent-dir",
             self.parent_dir,
@@ -997,6 +1002,10 @@ class Crop(object):
         self,
         batch_ids=None,
         subprocess="auto",
+        num_workers=None,
+        num_threads=None,
+        gpus=None,
+        affinities=None,
         raise_errors=False,
         debugging=False,
         verbosity=1,
@@ -1011,15 +1020,41 @@ class Crop(object):
         ----------
         batch_ids : int or sequence of ints, optional
             Which batch numbers to grow, by default all missing results.
-        raise_errors : bool, optional
-            Whether to raise errors if they occur during growing.
         subprocess : "auto" or bool, optional
             Whether to grow each batch in a fresh subprocess. This adds about
             1 second of overhead per batch, but allows the number of threads,
             cpu affinity and gpu assignment to be controlled. If "auto"
-            (default) then subprocesses will be used if `num_threads`, `gpus`
-            or `affinities` are specified.
+            (default) then subprocesses will be used if ``num_threads``,
+            ``gpus`` or ``affinities`` are specified.
             See :meth:`Crop.grow_subprocess` for details.
+        num_workers : int, optional
+            Maximum number of batches to run concurrently. In subprocess mode
+            this is the cap on simultaneous subprocesses (defaults to 1 if not
+            given). In in-process mode this is the size of the joblib loky
+            process pool used by ``combo_runner_core`` (``None`` = serial).
+        num_threads : int, optional
+            Number of threads each worker is allowed to use, applied via the
+            standard env vars (``OMP_NUM_THREADS``, ``MKL_NUM_THREADS``,
+            ``OPENBLAS_NUM_THREADS``, ...). Only meaningful in subprocess mode
+            (the env vars must be set before numerical libraries are imported);
+            setting it implies ``subprocess=True`` when ``subprocess="auto"``.
+            Passing this with ``subprocess=False`` raises ``ValueError``.
+        gpus : int, str, or sequence of int, optional
+            GPU device IDs to assign to subprocesses via
+            ``CUDA_VISIBLE_DEVICES``. Each subprocess gets a single GPU from
+            this pool; the pool also caps concurrency to its size. Repeat IDs
+            to oversubscribe (e.g. ``"0,0,1,1"`` shares each GPU between two
+            workers). Subprocess-mode only — implies ``subprocess=True`` when
+            ``subprocess="auto"``; raises ``ValueError`` with
+            ``subprocess=False``.
+        affinities : int, str, or sequence of int, optional
+            CPU core IDs to pin subprocesses to via ``taskset``. Each
+            subprocess gets one affinity from the pool, which also caps
+            concurrency. Subprocess-mode only — implies ``subprocess=True``
+            when ``subprocess="auto"``; raises ``ValueError`` with
+            ``subprocess=False``.
+        raise_errors : bool, optional
+            Whether to raise errors if they occur during growing.
         debugging : bool, optional
             Whether to set the logging level to debug.
         verbosity : int, optional
@@ -1033,8 +1068,10 @@ class Crop(object):
         desc : str, optional
             Description to show in the progress bar when growing.
         **combo_runner_opts
-            Additional options to pass to the `combo_runner_core` function.
-            Only if `subprocess`` is False.
+            Additional options forwarded to either :meth:`Crop.grow_subprocess`
+            (``min_wait``, ``max_wait``, ...) when ``subprocess`` is True, or
+            to ``combo_runner_core`` (``executor``, ``parallel``, ...) when
+            ``subprocess`` is False.
         """
         if batch_ids is None:
             batch_ids = self.missing_results()
@@ -1042,18 +1079,19 @@ class Crop(object):
             batch_ids = (batch_ids,)
 
         if subprocess == "auto":
-            if combo_runner_opts.get("num_threads", None) is not None:
-                subprocess = True
-            elif combo_runner_opts.get("gpus", None) is not None:
-                subprocess = True
-            elif combo_runner_opts.get("affinities", None) is not None:
-                subprocess = True
-            else:
-                subprocess = False
+            subprocess = (
+                num_threads is not None
+                or gpus is not None
+                or affinities is not None
+            )
 
         if subprocess:
             self.grow_subprocess(
                 batch_ids=batch_ids,
+                num_workers=num_workers,
+                num_threads=num_threads,
+                gpus=gpus,
+                affinities=affinities,
                 raise_errors=raise_errors,
                 verbosity=verbosity,
                 verbosity_grow=verbosity_grow,
@@ -1061,6 +1099,24 @@ class Crop(object):
                 **combo_runner_opts,
             )
         else:
+            subprocess_only = [
+                name
+                for name, val in (
+                    ("num_threads", num_threads),
+                    ("gpus", gpus),
+                    ("affinities", affinities),
+                )
+                if val is not None
+            ]
+            if subprocess_only:
+                raise ValueError(
+                    f"{', '.join(repr(n) for n in subprocess_only)} "
+                    "only meaningful when growing in subprocess mode "
+                    "(they configure per-subprocess env vars / pinning before "
+                    "numerical libraries import). Either pass "
+                    "`subprocess=True` or drop them and configure the "
+                    "environment yourself before invoking the parent process."
+                )
             combo_runner_core(
                 grow,
                 combos=(("batch_number", batch_ids),),
@@ -1070,6 +1126,7 @@ class Crop(object):
                     "raise_errors": raise_errors,
                     "debugging": debugging,
                 },
+                num_workers=num_workers,
                 verbosity=verbosity,
                 desc=desc,
                 **combo_runner_opts,

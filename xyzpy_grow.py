@@ -1,3 +1,11 @@
+"""Top-level CLI entry point for ``xyzpy-grow``.
+
+This module lives outside the ``xyzpy`` package on purpose: importing it must
+not trigger ``xyzpy/__init__.py`` (which eagerly imports numpy/xarray/etc.),
+otherwise the thread-control env vars set below would be assigned too late to
+affect the BLAS/OpenMP runtimes.
+"""
+
 import argparse
 import os
 import sys
@@ -158,7 +166,9 @@ def main():
 
     parent_dir = Path(args.parent_dir).expanduser().resolve()
 
-    # common thread control environment variables
+    # common thread control environment variables -- must be set before any
+    # numpy / xarray / BLAS import, which is why this module lives outside the
+    # `xyzpy` package (so importing it does not trigger `xyzpy/__init__.py`).
     os.environ["OMP_NUM_THREADS"] = str(args.num_threads)
     os.environ["MKL_NUM_THREADS"] = str(args.num_threads)
     os.environ["OPENBLAS_NUM_THREADS"] = str(args.num_threads)

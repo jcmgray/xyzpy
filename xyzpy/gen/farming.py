@@ -874,6 +874,11 @@ class Harvester(object):
         missing_only=True,
         shuffle=True,
         subprocess="auto",
+        num_workers=None,
+        num_threads=None,
+        gpus=None,
+        affinities=None,
+        log=False,
         raise_errors=True,
         verbosity=1,
         on_existing="ask",
@@ -916,8 +921,32 @@ class Harvester(object):
             Whether to grow each batch in a fresh subprocess. This adds about
             1 second of overhead per batch, but allows the number of threads,
             cpu affinity and gpu assignment to be controlled. If "auto"
-            (default) then subprocesses will be used if `num_threads`, `gpus`
-            or `affinities` are specified. See `grow_subprocess` for details.
+            (default) subprocesses are used when ``num_threads``, ``gpus`` or
+            ``affinities`` are specified. See :meth:`xyzpy.Crop.grow` for
+            details.
+        num_workers : int, optional
+            Maximum number of batches to run concurrently. In subprocess mode
+            this caps simultaneous subprocesses (defaults to 1 if not given).
+            In in-process mode this is the joblib loky pool size (``None`` =
+            serial). Forwarded to :meth:`xyzpy.Crop.grow`.
+        num_threads : int, optional
+            Number of threads each worker is allowed to use, applied via the
+            standard env vars (``OMP_NUM_THREADS``, ``MKL_NUM_THREADS``, etc.)
+            in each subprocess. Implies ``subprocess=True`` when
+            ``subprocess="auto"``. Forwarded to :meth:`xyzpy.Crop.grow`.
+        gpus : int, str, or sequence of int, optional
+            GPU device IDs to assign to subprocesses via
+            ``CUDA_VISIBLE_DEVICES``; the pool also caps concurrency. Implies
+            ``subprocess=True`` when ``subprocess="auto"``. Forwarded to
+            :meth:`xyzpy.Crop.grow`.
+        affinities : int, str, or sequence of int, optional
+            CPU core IDs to pin subprocesses to via ``taskset``; the pool also
+            caps concurrency. Implies ``subprocess=True`` when
+            ``subprocess="auto"``. Forwarded to :meth:`xyzpy.Crop.grow`.
+        log : bool, optional
+            Whether to save subprocess stdout and stderr to files in the crop
+            directory under ``logs/batch-{batch_id}.log``. Subprocess-mode
+            only. Forwarded to :meth:`xyzpy.Crop.grow`.
         raise_errors : bool, optional
             If True (default), raise any errors that occur during growing,
             otherwise just log them and continue with the next batch.
@@ -935,13 +964,13 @@ class Harvester(object):
             Whether to delete the on-disk batch, result and log files after
             successfully reaping.
         grow_kwargs
-            Keyword arguments to be supplied to the grow method of the Crop
-            instances, e.g. for controlling subprocess behaviour. See
-            :meth:`xyzpy.Crop.grow` for details.
+            Further keyword arguments forwarded to :meth:`xyzpy.Crop.grow`
+            (e.g. ``executor``, ``min_wait``, ...).
 
         See Also
         --------
         Harvester.harvest_combos
+        xyzpy.Crop.grow
         """
         crop = self.Crop(name)
 
@@ -973,13 +1002,15 @@ class Harvester(object):
                 verbosity=verbosity,
             )
             try:
-                if subprocess == "auto":
-                    # XXX: detect num_threads, affinites, gpus
-                    subprocess = False
-
-                # start growing!
+                # start growing! `Crop.grow` handles `subprocess="auto"`
+                # detection from `num_threads` / `gpus` / `affinities`.
                 crop.grow(
                     subprocess=subprocess,
+                    num_workers=num_workers,
+                    num_threads=num_threads,
+                    gpus=gpus,
+                    affinities=affinities,
+                    log=log,
                     raise_errors=raise_errors,
                     verbosity=verbosity,
                     **grow_kwargs,
@@ -1020,6 +1051,11 @@ def cultivate(
     missing_only=True,
     shuffle=True,
     subprocess="auto",
+    num_workers=None,
+    num_threads=None,
+    gpus=None,
+    affinities=None,
+    log=False,
     raise_errors=True,
     verbosity=1,
     on_existing="ask",
@@ -1079,8 +1115,31 @@ def cultivate(
         Whether to grow each batch in a fresh subprocess. This adds about
         1 second of overhead per batch, but allows the number of threads,
         cpu affinity and gpu assignment to be controlled. If "auto"
-        (default) then subprocesses will be used if `num_threads`, `gpus`
-        or `affinities` are specified. See `grow_subprocess` for details.
+        (default) subprocesses are used when ``num_threads``, ``gpus`` or
+        ``affinities`` are specified. See :meth:`xyzpy.Crop.grow` for details.
+    num_workers : int, optional
+        Maximum number of batches to run concurrently. In subprocess mode
+        this caps simultaneous subprocesses (defaults to 1 if not given).
+        In in-process mode this is the joblib loky pool size (``None`` =
+        serial). Forwarded to :meth:`xyzpy.Crop.grow`.
+    num_threads : int, optional
+        Number of threads each worker is allowed to use, applied via the
+        standard env vars (``OMP_NUM_THREADS``, ``MKL_NUM_THREADS``, etc.)
+        in each subprocess. Implies ``subprocess=True`` when
+        ``subprocess="auto"``. Forwarded to :meth:`xyzpy.Crop.grow`.
+    gpus : int, str, or sequence of int, optional
+        GPU device IDs to assign to subprocesses via
+        ``CUDA_VISIBLE_DEVICES``; the pool also caps concurrency. Implies
+        ``subprocess=True`` when ``subprocess="auto"``. Forwarded to
+        :meth:`xyzpy.Crop.grow`.
+    affinities : int, str, or sequence of int, optional
+        CPU core IDs to pin subprocesses to via ``taskset``; the pool also
+        caps concurrency. Implies ``subprocess=True`` when
+        ``subprocess="auto"``. Forwarded to :meth:`xyzpy.Crop.grow`.
+    log : bool, optional
+        Whether to save subprocess stdout and stderr to files in the crop
+        directory under ``logs/batch-{batch_id}.log``. Subprocess-mode only.
+        Forwarded to :meth:`xyzpy.Crop.grow`.
     raise_errors : bool, optional
         If True (default), raise any errors that occur during growing,
         otherwise just log them and continue with the next batch.
@@ -1098,13 +1157,13 @@ def cultivate(
         Whether to delete the on-disk batch, result and log files after
         successfully reaping.
     grow_kwargs
-        Keyword arguments to be supplied to the grow method of the Crop
-        instances, e.g. for controlling subprocess behaviour. See
-        :meth:`xyzpy.Crop.grow` for details.
+        Further keyword arguments forwarded to :meth:`xyzpy.Crop.grow`
+        (e.g. ``executor``, ``min_wait``, ...).
 
     See Also
     --------
     Harvester.cultivate
+    xyzpy.Crop.grow
     """
 
     runner_opts = {} if runner_opts is None else dict(runner_opts)
@@ -1132,6 +1191,11 @@ def cultivate(
         missing_only=missing_only,
         shuffle=shuffle,
         subprocess=subprocess,
+        num_workers=num_workers,
+        num_threads=num_threads,
+        gpus=gpus,
+        affinities=affinities,
+        log=log,
         raise_errors=raise_errors,
         verbosity=verbosity,
         on_existing=on_existing,

@@ -62,7 +62,7 @@ docs = [
 "Changelog" = "https://xyzpy.readthedocs.io/en/latest/changelog.html"
 
 [project.scripts]
-xyzpy-grow = "xyzpy.gen.xyzpy_grow_cli:main"
+xyzpy-grow = "xyzpy_grow:main"
 
 [build-system]
 requires = ["hatchling", "hatch-vcs"]
@@ -73,6 +73,13 @@ source = "vcs"
 
 [tool.hatch.build.hooks.vcs]
 version-file = "xyzpy/_version.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["xyzpy"]
+include = ["xyzpy_grow.py"]
+
+[tool.hatch.build.targets.sdist]
+include = ["xyzpy", "xyzpy_grow.py", "tests", "docs", "README.md", "LICENSE"]
 
 [tool.pytest.ini_options]
 testpaths = "tests"
