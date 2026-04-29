@@ -3,6 +3,14 @@
 Release notes for `xyzpy`.
 
 
+(whats-new-1-3-1)=
+## v1.3.1 (2026-04-29)
+
+**Bug fixes:**
+
+- Fix `xyzpy-grow --num-threads N` having no effect on numpy / BLAS / OpenMP threading. The CLI entry point lived inside the `xyzpy` package, so importing it ran `xyzpy/__init__.py` (which eagerly imports `xarray` / `numpy`) before `main()` could set `OMP_NUM_THREADS` etc. — the env vars were assigned too late. The entry point is now a top-level `xyzpy_grow` module, so the threading env vars land before any numerical library is imported. The recursive subprocess invocation in {meth}`~xyzpy.Crop.grow_subprocess` was updated to match.
+
+
 (whats-new-1-3-0)=
 ## v1.3.0 (2026-03-30)
 
