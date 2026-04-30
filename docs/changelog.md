@@ -3,8 +3,8 @@
 Release notes for `xyzpy`.
 
 
-(whats-new-1-3-3)=
-## v1.3.3 (2026-04-30)
+(whats-new-1-3-4)=
+## v1.3.4 (2026-04-30)
 
 **Enhancements:**
 
@@ -13,6 +13,14 @@ Release notes for `xyzpy`.
 **Bug fixes:**
 
 - Fix {func}`~xyzpy.parse_into_cases` raising `IndexError` (or silently returning wrong cases) when both `combos` and `cases` are supplied alongside a `ds` whose internal dimension order differs from the case-keys-then-combo-keys insertion order. Per-variable indexers are now built in the variable's own dim order, and dims not present in `ds` are now treated as new coordinate locations rather than crashing.
+
+
+(whats-new-1-3-3)=
+## v1.3.3 (2026-04-30)
+
+**Bug fixes:**
+
+- Fix [cultivate](xyzpy.cultivate) silently ignoring `cases`.
 
 
 (whats-new-1-3-2)=
