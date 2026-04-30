@@ -131,16 +131,18 @@ dmypy.json
 # ruff formatter
 .ruff_cache
 
+# editors
 .vscode
-
-symmray/_version.py
-notebooks
+.idea
 
 # pixi environments
 .pixi/*
 !.pixi/config.toml
 
-# Auto-generated documentation
+# auto-generated documentation
 _version.py
 docs/_autosummary/
 docs/autoapi
+
+# scratch
+notebooks

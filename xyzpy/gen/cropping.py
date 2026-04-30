@@ -544,7 +544,7 @@ class Crop(object):
         ----------
         action : {'ask', 'reap', 'delete', 'skip', 'raise'}
             What to do with the existing crop. If ``'ask'`` (default),
-            interactively prompt the user. Otherwise execute the
+            interactively prompt the user. Otherwise, execute the
             specified action directly.
         msg : str, optional
             Message to display when prompting.
@@ -685,7 +685,7 @@ class Crop(object):
         combos : dict_like[str, iterable]
             The combinations to sow for all or some function arguments.
         cases : iterable or mappings, optional
-            Optionally provide an sequence of individual cases to sow for some
+            Optionally provide a sequence of individual cases to sow for some
             or all function arguments.
         constants : mapping, optional
             Provide additional constant function values to use when sowing.
@@ -1223,7 +1223,7 @@ class Crop(object):
         ----------
         var_names : str, sequence of strings, or None
             Variable name(s) of the output(s) of `fn`, set to None if
-            fn outputs data already labelled in a Dataset or DataArray.
+            fn outputs data already labeled in a Dataset or DataArray.
         var_dims : sequence of either strings or string sequences, optional
             'Internal' names of dimensions for each variable, the values for
             each dimension should be contained as a mapping in either
@@ -1259,7 +1259,7 @@ class Crop(object):
         Returns
         -------
         xarray.Dataset or pandas.Dataframe
-            Multidimensional labelled dataset contatining all the results.
+            Multidimensional labeled dataset containing all the results.
         """
         check_ready_to_reap(self, allow_incomplete, wait)
 
@@ -2037,9 +2037,9 @@ def gen_cluster_script(
         specified by the string.
     launcher : str, optional
         How to launch the script, default: the current Python interpreter. But
-        could for example be ``'mpiexec python'`` for a MPI program.
+        could for example be ``'mpiexec python'`` for an MPI program.
     setup : str, optional
-        Python script to run before growing, for things that shouldnt't be put
+        Python script to run before growing, for things that shouldn't be put
         in the crop function itself, e.g. one-time imports with side-effects
         like: ``"import tensorflow as tf; tf.enable_eager_execution()``".
     shell_setup : str, optional
@@ -2441,7 +2441,7 @@ def grow_cluster(
 def gen_qsub_script(
     crop, batch_ids=None, *, scheduler="sge", **kwargs
 ):  # pragma: no cover
-    """Generate a qsub script to grow a Crop. Deprecated in favour of
+    """Generate a qsub script to grow a Crop. Deprecated in favor of
     `gen_cluster_script` and will be removed in the future.
 
     Parameters
@@ -2451,7 +2451,7 @@ def gen_qsub_script(
     batch_ids : int or tuple[int]
         Which batch numbers to grow, defaults to all missing batches.
     scheduler : {'sge', 'pbs'}, optional
-        Whether to use a SGE or PBS submission script template.
+        Whether to use an SGE or PBS submission script template.
     kwargs
         See `gen_cluster_script` for all other parameters.
     """
@@ -2467,7 +2467,7 @@ def qsub_grow(
     crop, batch_ids=None, *, scheduler="sge", **kwargs
 ):  # pragma: no cover
     """Automagically submit SGE or PBS jobs to grow all missing results.
-    Deprecated in favour of `grow_cluster` and will be removed in the future.
+    Deprecated in favor of `grow_cluster` and will be removed in the future.
 
     Parameters
     ----------

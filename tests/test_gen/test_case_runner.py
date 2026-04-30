@@ -53,7 +53,7 @@ class TestCaseRunner:
     def test_single_args(self):
         cases = (1, 2, 3)
         xs = xyz.case_runner(
-            foo3_scalar, "a", cases, constants={"b": 10, "c": 100}
+            foo3_scalar, ("a",), cases, constants={"b": 10, "c": 100}
         )
         assert xs == (111, 112, 113)
 
@@ -260,6 +260,62 @@ class TestFindMissingCases:
 
         for case in cases_expected:
             assert xyz.is_case_missing(func.full_ds, case)
+
+    def test_parse_into_cases_dim_order_mismatch(self):
+        # ds dim order is (x, y, opt1, opt2) but setting iteration order
+        # (case keys then combo keys) is (opt1, opt2, x, y). Previously
+        # this triggered an IndexError because ilocs were applied
+        # positionally against ds[v]'s axes.
+        ds = xr.Dataset(
+            coords={
+                "x": [1, 2, 3],
+                "y": [10.0, 20.0, 30.0, 40.0],
+                "opt1": ["a", "b"],
+                "opt2": ["p", "q"],
+            },
+        )
+        ds["z"] = (
+            ("x", "y", "opt1", "opt2"),
+            np.full((3, 4, 2, 2), np.nan),
+        )
+        ds["z"].loc[dict(x=1, y=10.0, opt1="a", opt2="p")] = 0.5
+
+        cases = [
+            {"opt1": "a", "opt2": "p"},
+            {"opt1": "b", "opt2": "q"},
+        ]
+        combos = dict(x=[1, 2, 3], y=[10.0, 20.0, 30.0, 40.0])
+
+        result = xyz.parse_into_cases(combos=combos, cases=cases, ds=ds)
+        # 2 cases * 12 combos = 24 settings; 1 filled -> 23 missing
+        assert len(result) == 23
+        assert {"x": 1, "y": 10.0, "opt1": "a", "opt2": "p"} not in result
+        for case in result:
+            assert xyz.is_case_missing(ds, case)
+
+    def test_parse_into_cases_inner_dim(self):
+        # variable has an inner dim ('i') not present in cases; indexer
+        # should slice it fully and reduce across it
+        ds = xr.Dataset(
+            coords={
+                "x": [1, 2, 3],
+                "opt": ["a", "b"],
+                "i": [0, 1, 2],
+            },
+        )
+        ds["z"] = (
+            ("x", "opt", "i"),
+            np.full((3, 2, 3), np.nan),
+        )
+        # fully fill (x=1, opt='a') across i so that case is *not* missing
+        ds["z"].loc[dict(x=1, opt="a")] = 0.5
+
+        cases = [{"opt": "a"}, {"opt": "b"}]
+        combos = dict(x=[1, 2, 3])
+        result = xyz.parse_into_cases(combos=combos, cases=cases, ds=ds)
+        # 6 settings, 1 fully filled -> 5 missing
+        assert len(result) == 5
+        assert {"x": 1, "opt": "a"} not in result
 
     def test_simple(self):
         ds = xr.Dataset(coords={"a": [1, 2, 3], "b": [40, 50]})

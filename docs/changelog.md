@@ -3,6 +3,26 @@
 Release notes for `xyzpy`.
 
 
+(whats-new-1-3-3)=
+## v1.3.3 (2026-04-30)
+
+**Enhancements:**
+
+- Expose `parent_dir` on {meth}`~xyzpy.Harvester.cultivate` and {func}`~xyzpy.cultivate` so the on-disk crop folder can be placed somewhere other than the current working directory.
+
+**Bug fixes:**
+
+- Fix {func}`~xyzpy.parse_into_cases` raising `IndexError` (or silently returning wrong cases) when both `combos` and `cases` are supplied alongside a `ds` whose internal dimension order differs from the case-keys-then-combo-keys insertion order. Per-variable indexers are now built in the variable's own dim order, and dims not present in `ds` are now treated as new coordinate locations rather than crashing.
+
+
+(whats-new-1-3-2)=
+## v1.3.2 (2026-04-30)
+
+**Bug fixes:**
+
+- Fix `xyzpy_grow` not being shipped in the built wheel/sdist after the v1.3.1 entry-point relocation, which caused `xyzpy-grow` to fail with `ModuleNotFoundError: No module named 'xyzpy_grow'` on the conda-forge feedstock CI. The hatchling build now uses `force-include` to ship the top-level `xyzpy_grow.py` alongside the `xyzpy` package.
+
+
 (whats-new-1-3-1)=
 ## v1.3.1 (2026-04-29)
 

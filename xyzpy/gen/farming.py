@@ -869,6 +869,7 @@ class Harvester(object):
         cases=None,
         constants=None,
         name=None,
+        parent_dir=None,
         batchsize=None,
         num_batches=None,
         missing_only=True,
@@ -905,6 +906,9 @@ class Harvester(object):
             Name for the crop to be used for on-disk storage of batches,
             results and logs. You can use different names to grow results for
             the same dataset concurrently.
+        parent_dir : str, optional
+            Parent directory in which to create the crop folder
+            (``.xyz-{name}/``). Defaults to the current working directory.
         batchsize : int, optional
             If given, the target number of cases to sow in each batch. This is
             computed from ``num_batches`` if not given and 1 if neither given.
@@ -972,7 +976,7 @@ class Harvester(object):
         Harvester.harvest_combos
         xyzpy.Crop.grow
         """
-        crop = self.Crop(name)
+        crop = self.Crop(name, parent_dir=parent_dir)
 
         if crop.is_prepared():
             crop.handle_existing(action=on_existing)
@@ -1046,6 +1050,7 @@ def cultivate(
     cases=None,
     constants=None,
     name=None,
+    parent_dir=None,
     batchsize=None,
     num_batches=None,
     missing_only=True,
@@ -1099,6 +1104,9 @@ def cultivate(
         Name for the crop to be used for on-disk storage of batches,
         results and logs. You can use different names to grow results for
         the same dataset concurrently.
+    parent_dir : str, optional
+        Parent directory in which to create the crop folder
+        (``.xyz-{name}/``). Defaults to the current working directory.
     batchsize : int, optional
         If given, the target number of cases to sow in each batch. This is
         computed from ``num_batches`` if not given and 1 if neither given.
@@ -1186,6 +1194,7 @@ def cultivate(
         cases=cases,
         constants=constants,
         name=name,
+        parent_dir=parent_dir,
         batchsize=batchsize,
         num_batches=num_batches,
         missing_only=missing_only,

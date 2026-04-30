@@ -264,7 +264,9 @@ class TestHarvester:
             hds = load_ds(fl_pth)
 
             assert h.last_ds.identical(fn3_fba_ds)
-            assert h.full_ds.identical(fn3_fba_ds)
+            # cases-first input means b comes before a in the result; just
+            # require the data to match after restoring canonical dim order
+            assert h.full_ds.transpose("a", "b", "time").identical(fn3_fba_ds)
             assert hds.identical(fn3_fba_ds)
 
     def test_harvest_combos_sow_and_reap_thread_wait(
@@ -395,7 +397,9 @@ class TestHarvester:
             h.harvest_cases([(1, 3), (2, 4)], chunks=1)
             h.harvest_cases([(1, 4), (2, 3)], chunks=1)
             assert not h.last_ds.identical(fn3_fba_ds)
-            assert h.full_ds.identical(fn3_fba_ds)
+            # cases-first input means b comes before a in the result; just
+            # require the data to match after restoring canonical dim order
+            assert h.full_ds.transpose("a", "b", "time").identical(fn3_fba_ds)
             assert h.full_ds["sum"].chunks is not None
             h.full_ds.close()
 
@@ -413,7 +417,9 @@ class TestHarvester:
             h.harvest_cases([(1, 3), (2, 4)])
             h.harvest_cases([(1, 4), (2, 3)])
             assert not h.last_ds.identical(fn3_fba_ds)
-            assert h.full_ds.identical(fn3_fba_ds)
+            # cases-first input means b comes before a in the result; just
+            # require the data to match after restoring canonical dim order
+            assert h.full_ds.transpose("a", "b", "time").identical(fn3_fba_ds)
             assert h.full_ds["sum"].chunks is not None
             h.full_ds.close()
 
@@ -461,6 +467,43 @@ class TestHarvester:
         assert foo.full_ds["x"].ndim == 3
         assert foo.full_ds["x"].size == 8
         assert 6 not in foo.full_ds.coords["c"].values
+
+    def test_cultivate_combos_and_cases(self, fn3_fba_runner, fn3_fba_ds):
+        # mix combos and cases: cases supplies `b` values, combos supplies
+        # `a` values - covers the parse_into_cases combos+cases+ds path
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fl_pth = os.path.join(tmpdir, "test.h5")
+            h = Harvester(fn3_fba_runner, fl_pth)
+
+            h.cultivate(
+                combos={"a": (1, 2)},
+                cases=[{"b": 3}, {"b": 4}],
+                parent_dir=tmpdir,
+                num_batches=2,
+                shuffle=False,
+                verbosity=0,
+                on_existing="raise",
+                on_error="raise",
+                clean_up=True,
+            )
+            # cases-first input means b comes before a in the result; just
+            # require the data to match after restoring canonical dim order
+            assert h.full_ds.transpose("a", "b", "time").identical(fn3_fba_ds)
+
+            # second cultivate with the same combos should be a no-op
+            # under missing_only=True - parse_into_cases filters everything
+            h.cultivate(
+                combos={"a": (1, 2)},
+                cases=[{"b": 3}, {"b": 4}],
+                parent_dir=tmpdir,
+                num_batches=2,
+                shuffle=False,
+                verbosity=0,
+                on_existing="raise",
+                on_error="raise",
+                clean_up=True,
+            )
+            assert h.full_ds.transpose("a", "b", "time").identical(fn3_fba_ds)
 
 
 class TestSampler:

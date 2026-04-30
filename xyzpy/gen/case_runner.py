@@ -314,33 +314,48 @@ def parse_into_cases(combos=None, cases=None, ds=None, method="isnull"):
         for dim in ds.dims
     }
 
-    # first we sort into cases which are outside of the existing coordinates
+    # first we sort into cases which are outside of the existing coordinates,
+    # collecting per-dim ilocs for those inside (keyed by dim so that we can
+    # later index each variable in its own dim order)
     cases_inside = []
-    ilocs = []
+    ilocs_by_dim = {dim: [] for dim in ds.dims}
     for case in cases:
         for combo in itertools.product(*combo_values):
             setting = case | dict(zip(combo_keys, combo))
             # build its index, or break if outside
-            iloc = []
+            setting_loc = {}
+
+            outside = False
             for dim, val in setting.items():
+                if dim not in existing_coords:
+                    # dim not in ds at all -> new coordinate location
+                    outside = True
+                    break
                 idx = existing_coords[dim].get(val, None)
                 if idx is None:
                     # missing value, don't need to check actual data
-                    new_cases.append(setting)
+                    outside = True
                     break
-                iloc.append(idx)
+                setting_loc[dim] = idx
+            if outside:
+                new_cases.append(setting)
             else:
                 # no break - location is in bounds
                 cases_inside.append(setting)
-                ilocs.append(iloc)
+                for dim, idx in setting_loc.items():
+                    ilocs_by_dim[dim].append(idx)
 
     if not cases_inside:
         # no cases inside, we're done
         return new_cases
 
     # now we check if the actual data for the cases inside is finite
-    # this fancy index extracts the values at the inside case locations
-    indices = tuple(np.array(col) for col in zip(*ilocs))
+    # these fancy index cols extract the values at the inside case locations
+    ilocs_by_dim = {
+        dim: np.array(idx_list)
+        for dim, idx_list in ilocs_by_dim.items()
+        if idx_list
+    }
 
     if isinstance(ds, xr.DataArray):
         ds = ds.to_dataset()
@@ -354,7 +369,13 @@ def parse_into_cases(combos=None, cases=None, ds=None, method="isnull"):
 
     missing = None
     for v in ds.data_vars:
-        missing_v = ds[v].values[indices]
+        # build per-variable indexer in the variable's own dim order,
+        # any dims not constrained by the cases are sliced fully
+        indexer = tuple(
+            ilocs_by_dim[d] if d in ilocs_by_dim else slice(None)
+            for d in ds[v].dims
+        )
+        missing_v = ds[v].values[indexer]
         if missing_v.ndim > 1:
             # sub-coordinates, we need to reduce over
             missing_v = missing_v.reshape(missing_v.shape[0], -1).any(axis=1)
