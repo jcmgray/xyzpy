@@ -76,7 +76,9 @@ version-file = "xyzpy/_version.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["xyzpy"]
-include = ["xyzpy_grow.py"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"xyzpy_grow.py" = "xyzpy_grow.py"
 
 [tool.hatch.build.targets.sdist]
 include = ["xyzpy", "xyzpy_grow.py", "tests", "docs", "README.md", "LICENSE"]
