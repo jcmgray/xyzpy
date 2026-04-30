@@ -988,7 +988,7 @@ class Harvester(object):
         else:
             ds = None
         combos = self._maybe_expand_combos(combos)
-        cases = parse_into_cases(combos, ds=ds)
+        cases = parse_into_cases(combos, cases=cases, ds=ds)
 
         if cases:
             # now write the cases to disk
