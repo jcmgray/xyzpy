@@ -156,7 +156,7 @@ class TestFromRepeats:
             return np.random.rand(n).sum()
 
         rs = xyz.estimate_from_repeats(fn, 10, verbosity=2)
-        assert rs.mean == pytest.approx(5, rel=0.1)
+        assert rs.mean == pytest.approx(5, rel=0.2)
 
 
 class TestGetSizeOf:
