@@ -917,7 +917,8 @@ class Harvester(object):
             from ``batchsize`` if not given and 1 if neither given.
         missing_only : bool, optional
             If True (default), only run cases that are not already present in
-            the on-disk dataset
+            the on-disk dataset. If `False`, the new results will overwrite
+            any existing results.
         shuffle : bool, optional
             If True (default), shuffle the order of cases before sowing and
             growing. This can be a useful basic form of load balancing.
