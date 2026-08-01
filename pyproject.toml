@@ -54,7 +54,7 @@ docs = [
     "ipython",
     "matplotlib",
     "myst-nb",
-    "setuptools_scm",
+    "setuptools-scm",
     "sphinx-autoapi",
     "sphinx-copybutton",
     "sphinx-design"
@@ -148,7 +148,7 @@ furo = "*"
 ipython = "*"
 myst-nb = "*"
 ruff = "*"
-setuptools_scm = "*"
+setuptools-scm = "*"
 sphinx = "*"
 sphinx-autoapi = "*"
 sphinx-copybutton = "*"

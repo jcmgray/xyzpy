@@ -126,5 +126,6 @@ index_examples
 :caption: Development
 :maxdepth: 2
 changelog
+develop
 GitHub Repository <https://github.com/jcmgray/xyzpy>
 ```
