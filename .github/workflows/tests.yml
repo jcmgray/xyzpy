@@ -28,9 +28,9 @@ jobs:
           env: testpymid
 
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
 
-    - uses: prefix-dev/setup-pixi@v0.9.6
+    - uses: prefix-dev/setup-pixi@v0.10.0
       with:
         environments: ${{ matrix.env }}
 
@@ -38,6 +38,6 @@ jobs:
       run: pixi run -e ${{ matrix.env }} test
 
     - name: Report to codecov
-      uses: codecov/codecov-action@v6
+      uses: codecov/codecov-action@v7
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
