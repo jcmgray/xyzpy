@@ -20,7 +20,7 @@ Release notes for `xyzpy`.
 
 **Bug fixes:**
 
-- Fix [cultivate](xyzpy.cultivate) silently ignoring `cases`.
+- Fix [cultivate](#farming.cultivate) silently ignoring `cases`.
 
 
 (whats-new-1-3-2)=
