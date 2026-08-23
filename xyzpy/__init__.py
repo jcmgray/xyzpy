@@ -124,7 +124,59 @@ from .utils import (
     unzip,
 )
 
+
+def plot(xs, ys=None, **kwargs):
+    """Plot y-data against x-data
+
+    If ``ys`` is not given, the function treats ``xs`` as y-data. It uses
+    ``range(xs.shape[-1])`` as x-data. The y-data can contain multiple series
+    along a z-axis. The x-data can also vary along this axis. The function
+    passes all keyword arguments to
+    :func:`infiniplot`
+
+    Parameters
+    ----------
+    xs : array_like
+        The x-data or, if ``ys`` is not given, the y-data to plot
+    ys : array_like, optional
+        The y-data to plot
+    kwargs : dict
+        Options for :func:`infiniplot`
+    """
+    if ys is None:
+        ys = xs
+        xs = range(xr.DataArray(ys).shape[-1])
+
+    ds = auto_xyz_ds(xs, ys)
+    if ds.sizes["z"] > 1:
+        kwargs.setdefault("color", "z")
+    if "x" in ds.data_vars:
+        kwargs.setdefault("xlink", "_x")
+
+    return infiniplot(ds, "x", "y", **kwargs)
+
+
 __all__ = [
+    "AutoHeatMap",
+    "AutoHistogram",
+    "AutoLinePlot",
+    "AutoScatter",
+    "Benchmarker",
+    "Crop",
+    "Harvester",
+    "HeatMap",
+    "Histogram",
+    "LinePlot",
+    "MemoryMonitor",
+    "RayExecutor",
+    "RayGPUExecutor",
+    "Runner",
+    "RunningCovariance",
+    "RunningCovarianceMatrix",
+    "RunningStatistics",
+    "Sampler",
+    "Scatter",
+    "Timer",
     "auto_heatmap",
     "auto_histogram",
     "auto_iheatmap",
@@ -133,27 +185,21 @@ __all__ = [
     "auto_lineplot",
     "auto_scatter",
     "auto_xyz_ds",
-    "AutoHeatMap",
-    "AutoHistogram",
-    "AutoLinePlot",
-    "AutoScatter",
     "benchmark",
-    "Benchmarker",
     "cache_to_disk",
+    "case_runner",
     "case_runner_to_df",
     "case_runner_to_ds",
-    "case_runner",
     "check_runs",
     "cimluv",
-    "cimple_bright",
     "cimple",
+    "cimple_bright",
     "clean_slurm_outputs",
     "cmoke",
+    "combo_runner",
     "combo_runner_to_df",
     "combo_runner_to_ds",
-    "combo_runner",
     "convert_colors",
-    "Crop",
     "cultivate",
     "estimate_from_repeats",
     "find_missing_cases",
@@ -162,11 +208,8 @@ __all__ = [
     "get_peak_memory_usage",
     "getsizeof",
     "grow",
-    "Harvester",
     "heatmap",
-    "HeatMap",
     "histogram",
-    "Histogram",
     "iheatmap",
     "ilineplot",
     "infiniplot",
@@ -174,32 +217,22 @@ __all__ = [
     "iscatter",
     "label",
     "lineplot",
-    "LinePlot",
     "load_crops",
     "load_df",
     "load_ds",
     "manage_slurm_outputs",
-    "MemoryMonitor",
     "merge_sync_conflict_datasets",
     "neutral_style",
     "parse_into_cases",
+    "plot",
     "progbar",
-    "RayExecutor",
-    "RayGPUExecutor",
-    "report_memory_gpu",
     "report_memory",
-    "Runner",
-    "RunningCovariance",
-    "RunningCovarianceMatrix",
-    "RunningStatistics",
-    "Sampler",
+    "report_memory_gpu",
     "save_df",
     "save_ds",
     "save_merge_ds",
     "scatter",
-    "Scatter",
     "sort_dims",
-    "Timer",
     "trimna",
     "unzip",
     "visualize_matrix",

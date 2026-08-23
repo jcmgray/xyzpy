@@ -299,6 +299,52 @@ class TestHeatmap:
         dataset_5d.xyz.plot("x", "y", "c", col="phi", row="A")
 
 
+class TestPlot:
+    def test_y_data(self):
+        ys = np.arange(5)
+        _, axs = xyz.plot(ys, show_and_close=False)
+
+        assert axs[0, 0].lines[0].get_xdata().tolist() == list(range(5))
+        assert axs[0, 0].lines[0].get_ydata().tolist() == ys.tolist()
+
+    def test_x_and_y_data(self):
+        xs = np.linspace(0.0, 1.0, 5)
+        ys = np.arange(5)
+        _, axs = xyz.plot(xs, ys, show_and_close=False)
+
+        assert axs[0, 0].lines[0].get_xdata().tolist() == xs.tolist()
+        assert axs[0, 0].lines[0].get_ydata().tolist() == ys.tolist()
+
+    @mark.parametrize("with_xs", [False, True])
+    def test_y_data_varying_over_z(self, with_xs):
+        xs = np.linspace(0.0, 1.0, 5)
+        ys = np.arange(10).reshape(2, 5)
+
+        if with_xs:
+            _, axs = xyz.plot(xs, ys, show_and_close=False)
+        else:
+            _, axs = xyz.plot(ys, show_and_close=False)
+
+        lines = axs[0, 0].lines
+        assert len(lines) == 2
+        assert lines[0].get_ydata().tolist() == ys[0].tolist()
+        assert lines[1].get_ydata().tolist() == ys[1].tolist()
+        assert lines[0].get_color() != lines[1].get_color()
+
+    def test_x_and_y_data_varying_over_z(self):
+        xs = np.arange(10).reshape(2, 5)
+        ys = xs**2
+        _, axs = xyz.plot(xs, ys, show_and_close=False)
+
+        lines = axs[0, 0].lines
+        assert len(lines) == 2
+        assert lines[0].get_xdata().tolist() == xs[0].tolist()
+        assert lines[1].get_xdata().tolist() == xs[1].tolist()
+
+    def test_options(self):
+        xyz.plot(np.arange(5), show_and_close=False, color="red", marker="o")
+
+
 class TestIHeatmap:
     def test_simple(self, dataset_heatmap):
         dataset_heatmap.xyz.iheatmap("x", "y", "c", return_fig=True)
