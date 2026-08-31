@@ -49,17 +49,23 @@ def read_from_disk(fname):
 
 
 @functools.lru_cache(8)
-def get_picklelib(picklelib="joblib.externals.cloudpickle"):
-    return importlib.import_module(picklelib)
+def get_picklelib(picklelib="cloudpickle"):
+    try:
+        return importlib.import_module(picklelib)
+    except ImportError:
+        if picklelib != "cloudpickle":
+            raise
+        # older versions of joblib vendored cloudpickle
+        return importlib.import_module("joblib.externals.cloudpickle")
 
 
-def to_pickle(obj, picklelib="joblib.externals.cloudpickle"):
+def to_pickle(obj, picklelib="cloudpickle"):
     plib = get_picklelib(picklelib)
     s = plib.dumps(obj)
     return s
 
 
-def from_pickle(s, picklelib="joblib.externals.cloudpickle"):
+def from_pickle(s, picklelib="cloudpickle"):
     plib = get_picklelib(picklelib)
     obj = plib.loads(s)
     return obj

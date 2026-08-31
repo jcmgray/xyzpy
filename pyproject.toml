@@ -28,7 +28,7 @@ keywords = [
     "xarray",
 ]
 dependencies = [
-    "dask",
+    "cloudpickle",
     "h5netcdf",
     "h5py",
     "joblib",
@@ -41,6 +41,7 @@ dependencies = [
 [project.optional-dependencies]
 tests = [
     "coverage",
+    "dask",
     "pytest-cov",
     "pytest",
 ]
@@ -108,7 +109,7 @@ platforms = ["linux-64", "osx-arm64", "osx-64", "win-64"]
 
 [tool.pixi.dependencies]
 python = ">=3.10"
-dask = "*"
+cloudpickle = "*"
 h5netcdf = "*"
 h5py = "*"
 joblib = "*"
@@ -123,6 +124,7 @@ xyzpy = { path = ".", editable = true }
 [tool.pixi.feature.testing.dependencies]
 bokeh = "*"
 coverage = "*"
+dask = "*"
 hdf4 = "*"
 ipython = "*"
 matplotlib = "*"
