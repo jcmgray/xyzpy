@@ -3,6 +3,18 @@
 Release notes for `xyzpy`.
 
 
+(whats-new-1-3-5)=
+## v1.3.5 (unreleased)
+
+**Bug fixes:**
+
+- Default to importing `cloudpickle` directly rather than `joblib.externals.cloudpickle`, which recent `joblib` versions no longer vendor. The old location is still used as a fallback.
+
+**Other:**
+
+- Add `cloudpickle` as an explicit dependency, and demote `dask` to a test dependency, since it is only needed for the optional chunked/lazy `xarray` loading path.
+
+
 (whats-new-1-3-4)=
 ## v1.3.4 (2026-04-30)
 
