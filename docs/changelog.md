@@ -4,7 +4,11 @@ Release notes for `xyzpy`.
 
 
 (whats-new-1-3-5)=
-## v1.3.5 (unreleased)
+## v1.3.5 (2026-08-31)
+
+**Enhancements:**
+
+- Add top-level `xyz.plot` for directly plotting array-like y-data or x/y pairs, including multiple series and per-series x-values. Plotting options are passed through to {func}`~xyzpy.infiniplot`.
 
 **Bug fixes:**
 
