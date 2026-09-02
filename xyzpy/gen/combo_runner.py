@@ -1,4 +1,4 @@
-,"""Functions for systematically evaluating a function over all combinations."""
+"""Functions for systematically evaluating a function over all combinations."""
 
 import functools
 import itertools
