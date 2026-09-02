@@ -200,7 +200,7 @@ def save_merge_ds(ds, fname, overwrite=None, **kwargs):
     elif overwrite is False:
         new_ds = old_ds.combine_first(ds)
     else:
-        new_ds = xr.merge([old_ds, ds], join="outer")
+        new_ds = xr.merge([old_ds, ds], join="outer", compat="no_conflicts")
 
     # avoid string truncation
     new_ds = new_ds.drop_encoding()
@@ -386,7 +386,7 @@ def merge_sync_conflict_datasets(
         for ds in datasets[1:]:
             full_dataset = full_dataset.combine_first(ds)
     else:
-        full_dataset = xr.merge(datasets, join="outer")
+        full_dataset = xr.merge(datasets, join="outer", compat="no_conflicts")
 
     # avoid string truncation
     full_dataset = full_dataset.drop_encoding()

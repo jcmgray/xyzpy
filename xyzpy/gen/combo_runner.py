@@ -1,4 +1,4 @@
-"""Functions for systematically evaluating a function over all combinations."""
+,"""Functions for systematically evaluating a function over all combinations."""
 
 import functools
 import itertools
@@ -470,6 +470,15 @@ def combo_runner(
     )
 
 
+# explicitly supply these as xarray is changing defaults
+_CONCAT_OPTS = {
+    "data_vars": "all",
+    "coords": "different",
+    "compat": "equals",
+    "join": "outer",
+}
+
+
 def multi_concat(results, dims):
     """Concatenate a nested list of xarray objects along several dimensions."""
     if len(dims) == 1:
@@ -483,11 +492,13 @@ def multi_concat(results, dims):
                 for obj in results
             ],
             dim=dims[0],
+            **_CONCAT_OPTS,
         )
     else:
         return xr.concat(
             [multi_concat(sub_results, dims[1:]) for sub_results in results],
             dim=dims[0],
+            **_CONCAT_OPTS,
         )
 
 

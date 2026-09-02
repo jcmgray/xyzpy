@@ -138,5 +138,7 @@ class TestSaveAndLoad:
             with raises(xr.MergeError):
                 save_merge_ds(ds3, fname)
             save_merge_ds(ds3, fname, overwrite=True)
-            exp = ds3.combine_first(xr.merge([ds1, ds2]))
+            exp = ds3.combine_first(
+                xr.merge([ds1, ds2], join="outer", compat="no_conflicts")
+            )
             assert load_ds(fname).identical(exp)

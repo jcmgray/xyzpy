@@ -10,6 +10,10 @@ Release notes for `xyzpy`.
 
 - {func}`~xyzpy.infiniplot`: the `hues`, `colors`, `markers`, `linestyles`, `markersizes`, `linewidths` and `markeredgecolors` options now also accept a dict, mapping only the given coordinate values, with every other value keeping its default style.
 
+**Other:**
+
+- Pass `compat` and other combine options explicitly to `xarray.merge` and `xarray.concat`, so that behavior is unchanged when xarray switches to its new defaults.
+
 
 (whats-new-1-3-5)=
 ## v1.3.5 (2026-08-31)
