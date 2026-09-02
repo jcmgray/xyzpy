@@ -52,6 +52,7 @@ plotting = [
 docs = [
     "bokeh",
     "furo",
+    "ipykernel",
     "ipython",
     "matplotlib",
     "myst-nb",

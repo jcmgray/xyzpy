@@ -21905,6 +21905,7 @@ packages:
   - xarray
   - bokeh ; extra == 'docs'
   - furo ; extra == 'docs'
+  - ipykernel ; extra == 'docs'
   - ipython ; extra == 'docs'
   - matplotlib ; extra == 'docs'
   - myst-nb ; extra == 'docs'
