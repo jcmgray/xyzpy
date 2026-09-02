@@ -420,6 +420,17 @@ class Infiniplotter:
                 setattr(self, f"color{_a}", getattr(self, f"hue{_a}"))
                 setattr(self, f"hue{_a}", None)
 
+        # per value style overrides, e.g. hues={'b': 'green'}, the remaining
+        # values then simply take their default styles
+        self.overrides = {}
+        for _prop in _STYLE_SORT_ORDER:
+            _values = getattr(self, f"{_prop}s")
+            if isinstance(_values, dict):
+                self.overrides[_prop] = dict(_values)
+                setattr(self, f"{_prop}s", None)
+            else:
+                self.overrides[_prop] = {}
+
         # default style options
         self.base_style = {
             "alpha": self.alpha,
@@ -495,6 +506,12 @@ class Infiniplotter:
             ),
             default_values=default_colormaps,
         )
+        # hues are specified as colormaps, note this is done after the above
+        # so that ``autohue_opts`` matches that of the default hues
+        self.overrides["hue"] = {
+            k: to_colormap(v, **self.autohue_opts)
+            for k, v in self.overrides["hue"].items()
+        }
         self.init_mapped_dim(
             "color",
             custom_values=self.colors,
@@ -801,6 +818,16 @@ class Infiniplotter:
 
             self.input_values[name] = self.ds[dim].values
             self.sizes[name] = len(self.input_values[name])
+
+            unmatched = set(self.overrides.get(name, ())).difference(
+                self.input_values[name]
+            )
+            if unmatched:
+                warnings.warn(
+                    f"Style key(s) {sorted(unmatched)} do not appear in "
+                    f"mapped dimension `{dim}`, ignoring."
+                )
+
             self.labels[dim] = (
                 _make_bold(dim) if dim_label is None else dim_label
             )
@@ -884,7 +911,9 @@ class Infiniplotter:
                     ihue = loc[self.hue]
                     hue_in = self.input_values["hue"][ihue]
                     sub_key[self.hue] = hue_in
-                    self.cmap_or_colors = self.output_values["hue"][ihue]
+                    self.cmap_or_colors = self.overrides["hue"].get(
+                        hue_in, self.output_values["hue"][ihue]
+                    )
 
                 icolor = loc[self.color]
                 color_in = self.input_values["color"][icolor]
@@ -894,6 +923,8 @@ class Infiniplotter:
                     color_out = self.cmap_or_colors(
                         self.output_values["color"][icolor]
                     )
+
+                color_out = self.overrides["color"].get(color_in, color_out)
 
                 sub_key[self.color] = color_in
                 specific_style["color"] = color_out
@@ -917,7 +948,9 @@ class Infiniplotter:
                 if dim is not None:
                     idx = loc[dim]
                     prop_in = self.input_values[prop][idx]
-                    prop_out = self.output_values[prop][idx]
+                    prop_out = self.overrides[prop].get(
+                        prop_in, self.output_values[prop][idx]
+                    )
                     sub_key[dim] = prop_in
                     specific_style[prop] = prop_out
 
@@ -1573,8 +1606,10 @@ def infiniplot(
         intensity of each line. If ``hue`` is also specified, this controls the
         intensity of the color. If not a dimension, this is used as a constant
         color for all lines.
-    colors : sequence, optional
+    colors : sequence or dict, optional
         An explicit sequence of colors to use for the color-mapped dimension.
+        If a dict, only the given coordinate values are mapped, with the
+        rest taking their default color.
     color_order : sequence, optional
         An explicit order of values to use for the color-mapped dimension.
     color_label : str, optional
@@ -1593,8 +1628,10 @@ def infiniplot(
         hue of each line. If ``color`` is also specified, this controls the hue
         of the color. If not a dimension, this is used as a constant hue for
         all lines.
-    hues : sequence, optional
+    hues : sequence or dict, optional
         An explicit sequence of hues to use for the hue-mapped dimension.
+        If a dict, only the given coordinate values are mapped, with the
+        rest taking their default hue.
     hue_order : sequence, optional
         An explicit order of values to use for the hue-mapped dimension.
     hue_label : str, optional
@@ -1621,8 +1658,10 @@ def infiniplot(
         If specified, the name of a dimension to use for mapping the marker
         style of each line. If not a dimension, this is used as a constant
         marker style for all lines.
-    markers : sequence, optional
+    markers : sequence or dict, optional
         An explicit sequence of markers to use for the marker-mapped dimension.
+        If a dict, only the given coordinate values are mapped, with the
+        rest taking their default marker.
     marker_order : sequence, optional
         An explicit order of values to use for the marker-mapped dimension.
     marker_label : str, optional
@@ -1634,9 +1673,11 @@ def infiniplot(
         If specified, the name of a dimension to use for mapping the marker
         size of each line. If not a dimension, this is used as a constant
         marker size for all lines.
-    markersizes : sequence, optional
+    markersizes : sequence or dict, optional
         An explicit sequence of marker sizes to use for the markersize-mapped
         dimension.
+        If a dict, only the given coordinate values are mapped, with the
+        rest taking their default marker size.
     markersize_order : sequence, optional
         An explicit order of values to use for the markersize-mapped dimension.
     markersize_label : str, optional
@@ -1648,9 +1689,11 @@ def infiniplot(
         If specified, the name of a dimension to use for mapping the marker
         edge color of each line. If not a dimension, this is used as a constant
         marker edge color for all lines.
-    markeredgecolors : sequence, optional
+    markeredgecolors : sequence or dict, optional
         An explicit sequence of marker edge colors to use for the
         markeredgecolor-mapped dimension.
+        If a dict, only the given coordinate values are mapped, with the
+        rest taking their default marker edge color.
     markeredgecolor_order : sequence, optional
         An explicit order of values to use for the markeredgecolor-mapped
         dimension.
@@ -1663,9 +1706,11 @@ def infiniplot(
         If specified, the name of a dimension to use for mapping the line
         width of each line. If not a dimension, this is used as a constant
         line width for all lines.
-    linewidths : sequence, optional
+    linewidths : sequence or dict, optional
         An explicit sequence of line widths to use for the linewidth-mapped
         dimension.
+        If a dict, only the given coordinate values are mapped, with the
+        rest taking their default line width.
     linewidth_order : sequence, optional
         An explicit order of values to use for the linewidth-mapped dimension.
     linewidth_label : str, optional
@@ -1677,9 +1722,11 @@ def infiniplot(
         If specified, the name of a dimension to use for mapping the line
         style of each line. If not a dimension, this is used as a constant
         line style for all lines.
-    linestyles : sequence, optional
+    linestyles : sequence or dict, optional
         An explicit sequence of line styles to use for the linestyle-mapped
         dimension.
+        If a dict, only the given coordinate values are mapped, with the
+        rest taking their default line style.
     linestyle_order : sequence, optional
         An explicit order of values to use for the linestyle-mapped dimension.
     linestyle_label : str, optional

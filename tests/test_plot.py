@@ -2,7 +2,7 @@ import matplotlib
 import numpy as np
 import xarray as xr
 from numpy.testing import assert_allclose
-from pytest import fixture, mark
+from pytest import fixture, mark, warns
 
 import xyzpy as xyz
 from xyzpy.plot.color import convert_colors
@@ -268,9 +268,9 @@ class TestHeatmap:
         dataset_heatmap.xyz.plot(x="x", y="y", z="c")
 
     def test_vspans_dict_label_uses_data_x_axes_y(self, dataset_heatmap):
-        import matplotlib.transforms as transforms
+        from matplotlib import transforms
 
-        fig, axs = dataset_heatmap.xyz.plot(
+        _fig, axs = dataset_heatmap.xyz.plot(
             x="x",
             y="y",
             z="c",
@@ -343,6 +343,83 @@ class TestPlot:
 
     def test_options(self):
         xyz.plot(np.arange(5), show_and_close=False, color="red", marker="o")
+
+
+class TestStyleOverrides:
+    """Supplying a partial dict of styles, keyed by coordinate value."""
+
+    @staticmethod
+    def make_ds():
+        return xr.Dataset(
+            coords={"Z": ["a", "b", "c"], "x": np.arange(5)},
+            data_vars={"y": (("Z", "x"), np.random.rand(3, 5))},
+        )
+
+    def test_hues_only_overrides_given_value(self):
+        ds = self.make_ds()
+
+        _, axs = xyz.infiniplot(ds, "x", "y", hue="Z", show_and_close=False)
+        default = [line.get_color() for line in axs[0, 0].lines]
+
+        _, axs = xyz.infiniplot(
+            ds, "x", "y", hue="Z", hues={"b": "green"}, show_and_close=False
+        )
+        colors = [line.get_color() for line in axs[0, 0].lines]
+
+        assert colors == [default[0], "green", default[2]]
+
+    def test_hues_with_color_also_mapped(self):
+        ds = self.make_ds().expand_dims({"w": [0, 1]})
+
+        kws = {
+            "x": "x",
+            "y": "y",
+            "hue": "Z",
+            "color": "w",
+            "show_and_close": False,
+        }
+        _, axs = xyz.infiniplot(ds, **kws)
+        default = [line.get_color() for line in axs[0, 0].lines]
+
+        _, axs = xyz.infiniplot(ds, hues={"b": "green"}, **kws)
+        colors = [line.get_color() for line in axs[0, 0].lines]
+
+        # lines are ordered (a, 0), (a, 1), (b, 0), (b, 1), (c, 0), (c, 1)
+        assert colors[2] != default[2]
+        assert colors[3] != default[3]
+        assert colors[:2] == default[:2]
+        assert colors[4:] == default[4:]
+
+    def test_markers(self):
+        ds = self.make_ds()
+
+        _, axs = xyz.infiniplot(ds, "x", "y", marker="Z", show_and_close=False)
+        default = [line.get_marker() for line in axs[0, 0].lines]
+
+        _, axs = xyz.infiniplot(
+            ds, "x", "y", marker="Z", markers={"b": "*"}, show_and_close=False
+        )
+        markers = [line.get_marker() for line in axs[0, 0].lines]
+
+        assert markers == [default[0], "*", default[2]]
+
+    def test_unmatched_key_warns_and_is_ignored(self):
+        ds = self.make_ds()
+
+        _, axs = xyz.infiniplot(ds, "x", "y", hue="Z", show_and_close=False)
+        default = [line.get_color() for line in axs[0, 0].lines]
+
+        with warns(UserWarning, match="do not appear"):
+            _, axs = xyz.infiniplot(
+                ds,
+                "x",
+                "y",
+                hue="Z",
+                hues={"bb": "green"},
+                show_and_close=False,
+            )
+
+        assert [line.get_color() for line in axs[0, 0].lines] == default
 
 
 class TestIHeatmap:
