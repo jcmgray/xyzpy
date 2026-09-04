@@ -422,6 +422,59 @@ class TestStyleOverrides:
         assert [line.get_color() for line in axs[0, 0].lines] == default
 
 
+class TestConstantStyles:
+    """Style properties supplied as constants rather than dimension names."""
+
+    @staticmethod
+    def make_ds():
+        return xr.Dataset(
+            coords={"Z": ["a", "b", "c"], "w": [0, 1], "x": np.arange(5)},
+            data_vars={"y": (("Z", "w", "x"), np.random.rand(3, 2, 5))},
+        )
+
+    @mark.parametrize("prop", ["color", "hue"])
+    @mark.parametrize("c", [(1.0, 0.0, 0.0), [1.0, 0.0, 0.0], "red"])
+    def test_constant_color(self, prop, c):
+        # with no other color property mapped, `hue` behaves just like `color`
+        ds = self.make_ds()
+        _, axs = xyz.infiniplot(
+            ds, "x", "y", show_and_close=False, **{prop: c}
+        )
+        lines = axs[0, 0].lines
+        assert len(lines) == 6
+        assert all(
+            matplotlib.colors.to_rgb(line.get_color()) == (1.0, 0.0, 0.0)
+            for line in lines
+        )
+
+    def test_constant_rgba_tuple(self):
+        ds = self.make_ds()
+        _, axs = xyz.infiniplot(
+            ds, "x", "y", color=(1.0, 0.0, 0.0, 0.5), show_and_close=False
+        )
+        lines = axs[0, 0].lines
+        assert all(line.get_color() == (1.0, 0.0, 0.0, 0.5) for line in lines)
+
+    @mark.parametrize("h", [(1.0, 0.0, 0.0), "red"])
+    def test_constant_hue_with_color_mapped(self, h):
+        # a constant hue means a single colormap, swept by ``color``
+        ds = self.make_ds()
+        _, axs = xyz.infiniplot(
+            ds, "x", "y", hue=h, color="w", show_and_close=False
+        )
+        colors = [tuple(line.get_color()) for line in axs[0, 0].lines]
+        # only ``w`` is mapped, giving two intensities of the one hue
+        assert len(set(colors)) == 2
+
+    def test_fused_dims_still_detected(self):
+        ds = self.make_ds()
+        _, axs = xyz.infiniplot(
+            ds, "x", "y", color=("Z", "w"), show_and_close=False
+        )
+        colors = [tuple(line.get_color()) for line in axs[0, 0].lines]
+        assert len(set(colors)) == 6
+
+
 class TestIHeatmap:
     def test_simple(self, dataset_heatmap):
         dataset_heatmap.xyz.iheatmap("x", "y", "c", return_fig=True)
