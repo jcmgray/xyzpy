@@ -781,8 +781,9 @@ class Infiniplotter:
             # make hashable
             dim = tuple(dim)
 
-        # handle fused dimensions
-        if isinstance(dim, tuple):
+        # handle fused dimensions, only a tuple of strings can name dimensions,
+        # anything else is a constant property such as an (r, g, b) color
+        if isinstance(dim, tuple) and all(isinstance(x, str) for x in dim):
             # fused named
             new_dim = ", ".join(dim)
             if new_dim in self.ds.dims:
@@ -796,7 +797,13 @@ class Infiniplotter:
 
         if (dim is not None) and (dim not in self.ds.dims):
             # attribute is just manually specified, not mapped to dimension
-            self.base_style[name] = dim
+            if name == "hue":
+                # if `color` were unset, `hue` would already have been renamed
+                # to it above, so here it can only mean a single colormap,
+                # which `color` then sweeps the intensity of
+                self.palette = dim
+            else:
+                self.base_style[name] = dim
             self.sizes[name] = 1
             setattr(self, name, None)
             return
