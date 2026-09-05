@@ -9,6 +9,7 @@ Release notes for `xyzpy`.
 **Enhancements:**
 
 - {func}`~xyzpy.infiniplot`: the `hues`, `colors`, `markers`, `linestyles`, `markersizes`, `linewidths` and `markeredgecolors` options now also accept a dict, mapping only the given coordinate values, with every other value keeping its default style.
+- {func}`~xyzpy.benchmark`: add `torch_cuda_sync=True` for accurately timing asynchronous PyTorch CUDA work by synchronizing the current device at each timing boundary.
 
 **Other:**
 

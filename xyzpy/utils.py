@@ -88,7 +88,7 @@ def _get_fn_name(fn):
     elif hasattr(fn, "func"):
         return fn.func.__name__
     else:
-        raise ValueError("Could not extract function name from {}".format(fn))
+        raise ValueError(f"Could not extract function name from {fn}")
 
 
 def progbar(it=None, nb=False, **kwargs):
@@ -135,7 +135,7 @@ def getsizeof(obj):
     excluded = type, ModuleType, FunctionType
     if isinstance(obj, excluded):
         raise TypeError(
-            "getsize() does not take argument of type: {}".format(type(obj))
+            f"getsize() does not take argument of type: {type(obj)}"
         )
 
     seen_ids = set()
@@ -143,11 +143,11 @@ def getsizeof(obj):
     objects = [obj]
     while objects:
         need_referents = []
-        for obj in objects:
-            if not isinstance(obj, excluded) and id(obj) not in seen_ids:
-                seen_ids.add(id(obj))
-                size += sys.getsizeof(obj)
-                need_referents.append(obj)
+        for o in objects:
+            if not isinstance(o, excluded) and id(o) not in seen_ids:
+                seen_ids.add(id(o))
+                size += sys.getsizeof(o)
+                need_referents.append(o)
         objects = get_referents(*need_referents)
     return size
 
@@ -196,7 +196,14 @@ def _auto_min_time(timer, min_t=0.2, repeats=2, get="min"):
 
 
 def benchmark(
-    fn, setup=None, n=None, min_t=0.2, repeats=2, get="min", starmap=False
+    fn,
+    setup=None,
+    n=None,
+    min_t=0.2,
+    repeats=2,
+    get="min",
+    starmap=False,
+    torch_cuda_sync=False,
 ):
     """Benchmark the time it takes to run ``fn``.
 
@@ -217,6 +224,10 @@ def benchmark(
         Return the minimum or mean time for each run.
     starmap : bool, optional
         Unpack the arguments from ``setup``, if given.
+    torch_cuda_sync : bool, optional
+        Synchronize PyTorch's current CUDA device before each timer read.
+        Enable this when ``fn`` launches asynchronous CUDA work. PyTorch and
+        an available CUDA device are required.
 
     Returns
     -------
@@ -242,18 +253,39 @@ def benchmark(
     """
     from timeit import Timer
 
+    timer_opts = {}
+    if torch_cuda_sync:
+        try:
+            import torch
+        except ImportError as exc:
+            raise ImportError(
+                "torch is required when torch_cuda_sync=True"
+            ) from exc
+
+        if not torch.cuda.is_available():
+            raise RuntimeError("torch CUDA is not available")
+
+        def cuda_timer():
+            torch.cuda.synchronize()
+            return time.perf_counter()
+
+        timer_opts["timer"] = cuda_timer
+
     if n is None:
         n = ""
 
     if setup is None:
         setup_str = ""
-        stmnt_str = "fn({})".format(n)
+        stmnt_str = f"fn({n})"
     else:
-        setup_str = "X=setup({})".format(n)
+        setup_str = f"X=setup({n})"
         stmnt_str = "fn(*X)" if starmap else "fn(X)"
 
     timer = Timer(
-        setup=setup_str, stmt=stmnt_str, globals={"setup": setup, "fn": fn}
+        setup=setup_str,
+        stmt=stmnt_str,
+        globals={"setup": setup, "fn": fn},
+        **timer_opts,
     )
 
     return _auto_min_time(timer, min_t=min_t, repeats=repeats, get=get)
@@ -731,9 +763,8 @@ def estimate_from_repeats(
                 )
 
             # need at least min_samples to check convergence
-            if i > min_samples:
-                if rs.converged(rtol, tol_scale * rtol):
-                    break
+            if (i > min_samples) and rs.converged(rtol, tol_scale * rtol):
+                break
 
             # reached the maximum number of samples to try
             if i >= max_samples - 1:
@@ -875,7 +906,7 @@ def report_memory():
             f"Memory used: {used_memory / 1e9:>10.2f}GB / "
             f"Total memory: {total_memory / 1e9:>10.2f}GB "
         )
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         return f"failed to read memory: {e}"
 
 
@@ -938,7 +969,7 @@ def report_memory_gpu():
             f"GPU Memory used: {gpu_memory_used / 1e3:>6.2f}GB / "
             f"GPU Total memory: {gpu_memory_total / 1e3:>6.2f}GB "
         )
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         return f"failed to read gpu memory: {e}"
 
 

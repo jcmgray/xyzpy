@@ -1,4 +1,6 @@
 import functools
+import sys
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -74,6 +76,51 @@ class TestBenchmark:
             n=10,
         )
         assert t > 0
+
+    def test_torch_cuda_sync(self, monkeypatch):
+        events = []
+        torch = SimpleNamespace(
+            cuda=SimpleNamespace(
+                is_available=lambda: True,
+                synchronize=lambda: events.append("sync"),
+            )
+        )
+        monkeypatch.setitem(sys.modules, "torch", torch)
+
+        def setup():
+            events.append("setup")
+
+        def fn(_):
+            events.append("fn")
+
+        t = xyz.benchmark(
+            fn,
+            setup=setup,
+            min_t=0.0,
+            repeats=1,
+            torch_cuda_sync=True,
+        )
+
+        assert t > 0
+        assert events == ["setup", "sync", "fn", "sync"]
+
+    def test_torch_cuda_sync_requires_torch(self, monkeypatch):
+        monkeypatch.setitem(sys.modules, "torch", None)
+
+        with pytest.raises(
+            ImportError,
+            match="torch is required when torch_cuda_sync=True",
+        ):
+            xyz.benchmark(lambda: None, torch_cuda_sync=True)
+
+    def test_torch_cuda_sync_requires_cuda(self, monkeypatch):
+        torch = SimpleNamespace(
+            cuda=SimpleNamespace(is_available=lambda: False)
+        )
+        monkeypatch.setitem(sys.modules, "torch", torch)
+
+        with pytest.raises(RuntimeError, match="torch CUDA is not available"):
+            xyz.benchmark(lambda: None, torch_cuda_sync=True)
 
 
 class TestBenchmarker:
