@@ -2,7 +2,7 @@ import matplotlib
 import numpy as np
 import xarray as xr
 from numpy.testing import assert_allclose
-from pytest import fixture, mark, warns
+from pytest import fixture, mark, raises, warns
 
 import xyzpy as xyz
 from xyzpy.plot.color import convert_colors
@@ -297,6 +297,27 @@ class TestHeatmap:
     def test_multi_plot_5d(self, dataset_5d):
         dataset_5d.xyz.plot("x", "y", "c", row="phi", col="A")
         dataset_5d.xyz.plot("x", "y", "c", col="phi", row="A")
+
+    def test_fused_col(self, dataset_5d):
+        _fig, axs = dataset_5d.xyz.plot("x", "y", "c", col=("phi", "A"))
+        assert axs.shape == (1, 6)
+
+    def test_fused_row(self, dataset_5d):
+        _fig, axs = dataset_5d.xyz.plot("x", "y", "c", row=["phi", "A"])
+        assert axs.shape == (6, 1)
+
+    def test_bad_fused_col_raises(self, dataset_5d):
+        with raises(ValueError, match="phinot"):
+            dataset_5d.xyz.plot("x", "y", "c", col=("phinot", "A"))
+
+    def test_consumed_fused_dim_raises(self, dataset_5d):
+        # ``phi`` is fused into ``col``, so is no longer available to ``row``
+        with raises(ValueError, match="phi"):
+            dataset_5d.xyz.plot("x", "y", "c", col=("phi", "A"), row="phi")
+
+    def test_bad_col_raises(self, dataset_5d):
+        with raises(ValueError, match="phinot"):
+            dataset_5d.xyz.plot("x", "y", "c", col="phinot")
 
 
 class TestPlot:

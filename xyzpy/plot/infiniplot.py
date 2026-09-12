@@ -793,9 +793,22 @@ class Infiniplotter:
                 # create a new fused dimension
                 self.ds = self.ds.stack({new_dim: dim})
                 dim = new_dim
-            # else not a valid fused dimensions -> assume constant property
+            else:
+                # fuse tuple[str] but not all are dims -> raise
+                missing = [x for x in dim if x not in self.ds.dims]
+                raise ValueError(
+                    f"Can't fuse {dim} for `{name}`: {missing} not in "
+                    f"dimensions {sorted(self.ds.dims)}."
+                )
 
         if (dim is not None) and (dim not in self.ds.dims):
+            if name in ("col", "row"):
+                # unlike the style properties, a constant makes no sense here
+                raise ValueError(
+                    f"Can't facet `{name}` by {dim!r}: not in "
+                    f"dimensions {sorted(self.ds.dims)}."
+                )
+
             # attribute is just manually specified, not mapped to dimension
             if name == "hue":
                 # if `color` were unset, `hue` would already have been renamed
