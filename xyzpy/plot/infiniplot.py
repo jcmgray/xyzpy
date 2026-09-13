@@ -651,20 +651,26 @@ class Infiniplotter:
             if isinstance(self.aggregate, str):
                 self.aggregate = [self.aggregate]
 
-            if isinstance(self.aggregate, (list, tuple)) and set(
-                self.aggregate
-            ) == set(self.unmapped):
-                # user has explicitly supplied all remaining dimensions
-                self.aggregate = True
+            if self.aggregate is not True:
+                unaggregated = [
+                    d
+                    for d in self.unmapped
+                    if (self.ds.sizes[d] > 1)
+                    and (
+                        not isinstance(self.aggregate, (list, tuple))
+                        or (d not in self.aggregate)
+                    )
+                ]
 
-            elif self.aggregate is not True:
-                # default to aggregating over all unmapped dimensions, but warn
-                warnings.warn(
-                    "Heatmap: aggregating over all unmapped dimensions: "
-                    f"{self.unmapped}. Set `aggregate=True` to acknowledge "
-                    "and disable this warning, or map the dimension(s) to "
-                    "`row` or `col`."
-                )
+                if unaggregated:
+                    # default to aggregating over all of them, but warn
+                    warnings.warn(
+                        "Heatmap: aggregating over all unmapped dimensions: "
+                        f"{unaggregated}. Set `aggregate=True` to "
+                        "acknowledge and disable this warning, or map the "
+                        "dimension(s) to `row` or `col`."
+                    )
+
                 self.aggregate = True
 
         # get the target data array and possibly aggregate some dimensions

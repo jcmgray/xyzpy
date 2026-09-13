@@ -1,3 +1,5 @@
+import warnings
+
 import matplotlib
 import numpy as np
 import xarray as xr
@@ -289,6 +291,26 @@ class TestHeatmap:
 
         assert text.get_text() == "origin"
         assert_allclose(actual, expected)
+
+    def test_unmapped_dims_warn(self, dataset_4d):
+        with warns(UserWarning, match="aggregating over all unmapped"):
+            dataset_4d.xyz.plot("x", "y", "c")
+
+    def test_unmapped_singlet_dims_dont_warn(self, dataset_heatmap):
+        ds = dataset_heatmap.expand_dims({"phi": [0.0]})
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            ds.xyz.plot("x", "y", "c")
+        assert not [
+            w
+            for w in caught
+            if "aggregating over all unmapped" in str(w.message)
+        ]
+
+    def test_unmapped_mixed_dims_warn_about_the_big_one(self, dataset_4d):
+        ds = dataset_4d.expand_dims({"theta": [0.0]})
+        with warns(UserWarning, match=r"dimensions: \['phi'\]"):
+            ds.xyz.plot("x", "y", "c")
 
     def test_multi_plot_4d(self, dataset_4d):
         dataset_4d.xyz.plot("x", "y", "c", row="phi")

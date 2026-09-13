@@ -16,6 +16,7 @@ Release notes for `xyzpy`.
 - {func}`~xyzpy.infiniplot`: fix a crash when `hue`, `color` or any other style property is given as a constant `(r, g, b)` or `(r, g, b, a)` tuple, which was being mistaken for a sequence of dimension names to fuse.
 - {func}`~xyzpy.infiniplot`: fix a crash when `hue` is given as a constant while `color` is mapped to a dimension. The constant now sets the single colormap that `color` sweeps the intensity of.
 - {func}`~xyzpy.infiniplot`: `col` and `row` now raise an error if given name(s) which aren't valid dims
+- {func}`~xyzpy.infiniplot`: heatmaps no longer warn about aggregating over unmapped dimensions of size 1.
 
 **Other:**
 
