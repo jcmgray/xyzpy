@@ -45,6 +45,7 @@ The following guides introduce the main parts of ``xyzpy``:
 installation
 inputs_and_outputs
 computing_results
+auto_grow
 plotting
 visualization
 utilities

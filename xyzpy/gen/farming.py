@@ -1,8 +1,13 @@
 """Objects for labelling and succesively running functions."""
 
+import datetime
 import functools
+import hashlib
+import json
 import os
+import re
 import shutil
+import tempfile
 import warnings
 from pathlib import Path
 
@@ -10,7 +15,8 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
-from ..manage import load_df, load_ds, save_df, save_ds
+from ..manage import auto_add_extension, load_df, load_ds, save_df, save_ds
+from ..utils import _get_fn_name
 from . import cropping
 from .case_runner import case_runner_to_ds, parse_into_cases
 from .combo_runner import combo_runner_to_ds
@@ -32,7 +38,82 @@ from .prepare import (
 # --------------------------------------------------------------------------- #
 
 
-class Runner(object):
+def _sow_constants_equal(left, right):
+    """Return whether two constant values match, including arrays and NaNs."""
+    if type(left) is not type(right):
+        return False
+    if isinstance(left, dict):
+        return left.keys() == right.keys() and all(
+            _sow_constants_equal(left[key], right[key]) for key in left
+        )
+    if isinstance(left, (list, tuple)):
+        return len(left) == len(right) and all(
+            _sow_constants_equal(a, b) for a, b in zip(left, right)
+        )
+    if isinstance(left, np.ndarray):
+        if left.dtype != right.dtype or left.shape != right.shape:
+            return False
+        if left.dtype.hasobject:
+            return all(
+                _sow_constants_equal(a, b)
+                for a, b in zip(left.flat, right.flat)
+            )
+        return np.array_equal(left, right, equal_nan=left.dtype.kind in "fcMm")
+    try:
+        if isinstance(left, (float, complex, np.number)):
+            return bool(np.array_equal(left, right, equal_nan=True))
+        if bool(left == right):
+            return True
+    except Exception:  # noqa: BLE001, S110
+        pass
+    try:
+        return cropping.to_pickle(left) == cropping.to_pickle(right)
+    except Exception:  # noqa: BLE001
+        # unknown equality means the constants may have changed
+        return False
+
+
+def _sow_coordinate(value):
+    """Convert a coordinate value to a stable JSON value."""
+    if isinstance(value, (np.datetime64, pd.Timestamp)):
+        return ["datetime", pd.Timestamp(value).isoformat()]
+    if isinstance(value, (np.timedelta64, pd.Timedelta)):
+        return ["timedelta", pd.Timedelta(value).isoformat()]
+    if isinstance(value, np.generic):
+        value = value.item()
+    if value is None or isinstance(value, (str, bool, int)):
+        return value
+    if isinstance(value, float):
+        return int(value) if value.is_integer() else value
+    if isinstance(value, complex):
+        return [
+            "complex",
+            _sow_coordinate(value.real),
+            _sow_coordinate(value.imag),
+        ]
+    if isinstance(value, bytes):
+        return ["bytes", value.hex()]
+    if isinstance(value, dict):
+        return [
+            "mapping",
+            sorted(
+                (
+                    [_sow_coordinate(key), _sow_coordinate(item)]
+                    for key, item in value.items()
+                ),
+                key=lambda pair: json.dumps(pair, separators=(",", ":")),
+            ),
+        ]
+    if isinstance(value, (tuple, list, range, np.ndarray, pd.Index)):
+        return ["sequence", [_sow_coordinate(item) for item in value]]
+    if isinstance(value, (datetime.datetime, datetime.date)):
+        return ["datetime", pd.Timestamp(value).isoformat()]
+    if isinstance(value, datetime.timedelta):
+        return ["timedelta", pd.Timedelta(value).isoformat()]
+    raise TypeError(f"Cannot use {type(value).__name__} as a crop coordinate.")
+
+
+class Runner:
     """Container class with all the information needed to systematically
     run a function over many parameters and capture the output in a dataset.
 
@@ -417,7 +498,7 @@ def label(
 # --------------------------------------------------------------------------- #
 
 
-class Harvester(object):
+class Harvester:
     """Container class for collecting and aggregating data to disk.
 
     Parameters
@@ -453,7 +534,7 @@ class Harvester(object):
         full_ds=None,
     ):
         self.runner = runner
-        self.data_name = data_name
+        self.data_name = None if data_name is None else str(data_name)
         if engine is None:
             # allow None for default
             engine = "h5netcdf"
@@ -477,6 +558,31 @@ class Harvester(object):
         """Dataset containing the last runs' data."""
         return self.runner.last_ds
 
+    def _dataset_path(self, engine=None):
+        if self.data_name is None:
+            return None
+        return Path(
+            auto_add_extension(str(self.data_name), engine or self.engine)
+        ).expanduser()
+
+    def _dataset_stamp(self, engine=None):
+        """Return a fast filesystem stamp for the dataset path."""
+        path = self._dataset_path(engine)
+        if path is None:
+            return None
+        try:
+            stat = path.stat()
+        except FileNotFoundError:
+            return None
+        return (
+            str(path.resolve()),
+            stat.st_dev,
+            stat.st_ino,
+            stat.st_mtime_ns,
+            stat.st_ctime_ns,
+            stat.st_size,
+        )
+
     def load_full_ds(self, chunks=None, engine=None):
         """Load the disk dataset into ``full_ds``.
 
@@ -497,29 +603,40 @@ class Harvester(object):
         if chunks is None:
             chunks = self.chunks
 
-        # Check file exists and can be written to
-        if os.access(self.data_name, os.W_OK):
-            self._full_ds = load_ds(
-                self.data_name, engine=engine, chunks=chunks
-            )
-
-        # Do nothing if file does not exist at all
-        elif not Path(self.data_name).is_file():  # pragma: no cover
-            pass
-
-        # Catch read-only errors etc.
-        else:
-            raise OSError(
-                "The file '{}' exists but cannot be written to".format(
-                    self.data_name
-                )
-            )
+        path = self._dataset_path(engine)
+        stamp = self._dataset_stamp(engine)
+        if stamp is not None:
+            # if the path changes during this load, the next access reloads it
+            dataset = load_ds(str(path), engine=engine, chunks=chunks)
+            if self._full_ds is not None:
+                self._full_ds.close()
+            self._full_ds = dataset
+        elif getattr(self, "_disk_stamp", None) is not None:
+            # clear data when another process deletes the file
+            if self._full_ds is not None:
+                self._full_ds.close()
+            self._full_ds = None
+        self._disk_stamp = stamp
 
     @property
     def full_ds(self):
-        """Dataset containing all saved runs."""
-        if self._full_ds is None:
-            self.load_full_ds()
+        """All merged runs.
+
+        A disk-backed dataset reloads when its file or Zarr store changes. A
+        reload drops unsaved in-memory changes.
+        """
+        path = self._dataset_path()
+        if path is not None and (
+            self._full_ds is None
+            or self._dataset_stamp() != getattr(self, "_disk_stamp", None)
+        ):
+            chunks = (
+                self._full_ds.chunks if self._full_ds is not None else None
+            )
+            if chunks:
+                # chunk sizes remain valid if the disk dimensions have grown
+                chunks = {dim: sizes[0] for dim, sizes in chunks.items()}
+            self.load_full_ds(chunks=chunks or None)
         return self._full_ds
 
     def save_full_ds(self, new_full_ds=None, engine=None):
@@ -534,8 +651,6 @@ class Harvester(object):
         engine : str, optional
             Engine to use to save and load datasets.
         """
-        from ..manage import auto_add_extension
-
         if self.data_name is None:
             raise XYZError(
                 "You didn't set a ``data_name`` for this harvester "
@@ -551,7 +666,7 @@ class Harvester(object):
 
             self._full_ds = new_full_ds
 
-        file_path = Path(auto_add_extension(self.data_name, engine))
+        file_path = self._dataset_path(engine)
         backup_path = Path(str(file_path) + ".bak")
 
         # first move existing file to backup
@@ -565,7 +680,7 @@ class Harvester(object):
             file_path.rename(backup_path)
 
         try:
-            save_ds(self._full_ds, self.data_name, engine=engine)
+            save_ds(self._full_ds, str(file_path), engine=engine)
         except Exception:
             # restore backup on error
             if backup_path.exists():
@@ -577,6 +692,7 @@ class Harvester(object):
                 backup_path.rename(file_path)
             raise
         else:
+            self._disk_stamp = self._dataset_stamp(engine)
             # successful save, delete backup
             if backup_path.exists():
                 if engine == "zarr":
@@ -586,14 +702,12 @@ class Harvester(object):
 
     def delete_ds(self, backup=False):
         """Delete the on-disk dataset, optionally backing it up first."""
-        from ..manage import auto_add_extension
-
-        file_path = Path(auto_add_extension(self.data_name, self.engine))
+        file_path = self._dataset_path()
 
         if backup:
             import datetime
 
-            ts = "{:%Y%m%d-%H%M%S}".format(datetime.datetime.now())
+            ts = f"{datetime.datetime.now():%Y%m%d-%H%M%S}"  # noqa: DTZ005
             shutil.copy(file_path, str(file_path) + f".BAK-{ts}")
 
         if self._full_ds is not None:
@@ -603,6 +717,8 @@ class Harvester(object):
             shutil.rmtree(file_path)
         else:
             file_path.unlink()
+        self._full_ds = None
+        self._disk_stamp = None
 
     def add_ds(
         self, new_ds, sync=True, overwrite=None, chunks=None, engine=None
@@ -863,6 +979,251 @@ class Harvester(object):
 
         return string.format(self=self)
 
+    def _prepare_cases(self, combos=None, cases=None, *, missing_only=True):
+        """Expand combos and cases, then optionally remove saved cases."""
+        if cases is not None:
+            if not isinstance(cases, dict):
+                cases = tuple(cases)
+            cases = parse_cases(cases, self.runner.fn_args) if cases else ()
+
+        return parse_into_cases(
+            self._maybe_expand_combos(combos),
+            cases=cases,
+            ds=self.full_ds if missing_only else None,
+        )
+
+    def sow(
+        self,
+        combos=None,
+        cases=None,
+        constants=None,
+        name=None,
+        parent_dir=None,
+        batchsize=None,
+        num_batches=None,
+        missing_only=True,
+        shuffle=True,
+        verbosity=1,
+    ):
+        """Write missing cases to a Crop without growing them.
+
+        ``xyzpy-auto-grow`` can find and grow the returned Crop. Equivalent
+        coordinate requests reuse the same Crop. Reuse saves the current
+        function and updates supplied constants in batches without results.
+        Existing results, batch order, and saved Harvester settings are kept.
+
+        Parameters
+        ----------
+        combos : dict_like[str, iterable], optional
+            Product of values for each argument. An ellipsis uses the current
+            values of that dataset coordinate.
+        cases : sequence of mappings or tuples, optional
+            Individual settings, combined with every combination.
+        constants : dict, optional
+            Extra constant arguments.
+        name : str, optional
+            Crop name. By default, use the function name and a digest of the
+            full coordinate request and target dataset.
+        parent_dir : str, optional
+            Directory that will contain the Crop. The default is the current
+            directory.
+        batchsize : int, optional
+            Target number of cases in each batch. The default is 1 unless
+            ``num_batches`` is given.
+        num_batches : int, optional
+            Target number of batches.
+        missing_only : bool, optional
+            Skip cases already in the dataset. The default is True. This does
+            not check pending Crops.
+        shuffle : bool or int, optional
+            Shuffle cases before writing batches. The default is True.
+        verbosity : int, optional
+            Sowing progress verbosity. The default is 1.
+
+        Returns
+        -------
+        Crop or None
+            A matching Crop, a new Crop, or None when a new request has no
+            missing cases.
+
+        Notes
+        -----
+        The request key uses all requested coordinates before missing cases
+        are removed. Input order does not affect it. Constants used as output
+        coordinates are included.
+
+        Function source, other constants, resources, attributes, batch
+        settings, and shuffle are not included. A matching Crop saves the
+        current function and updates supplied constants in batches without
+        results. Omitted constants keep their saved values. Completed batch
+        files and results are kept. Running batches that already loaded their
+        inputs can use the old values. Shared dataset attributes record the
+        latest constants when reaping.
+
+        If constants are unchanged, batch files are not rewritten and held
+        failures remain held. Function updates are saved independently.
+
+        An explicit name for another request raises ``XYZError``. So does an
+        old Crop without a request key or an incomplete Crop.
+
+        See Also
+        --------
+        Harvester.cultivate, xyzpy.sow, xyzpy.Crop.reap
+        """
+        target = None
+        if self.data_name is not None:
+            target = str(
+                Path(auto_add_extension(str(self.data_name), self.engine))
+                .expanduser()
+                .resolve()
+            )
+
+        requested_cases = self._prepare_cases(
+            combos, cases, missing_only=False
+        )
+        fn_name = _get_fn_name(self.fn)
+        output_coords = dict(self.runner.var_coords)
+        effective_constants = {
+            **self.runner.constants,
+            **parse_constants(constants),
+        }
+        for dims in self.runner.var_dims.values():
+            for dim in dims:
+                if dim not in output_coords and dim in effective_constants:
+                    output_coords[dim] = effective_constants[dim]
+
+        # sort case keys so input order does not change the request key
+        case_keys = sorted(
+            json.dumps(_sow_coordinate(case), separators=(",", ":"))
+            for case in requested_cases
+        )
+        request_key = [
+            "xyzpy.sow.v1",
+            fn_name,
+            target,
+            self.engine if target is not None else None,
+            case_keys,
+            _sow_coordinate(output_coords),
+        ]
+        digest = hashlib.sha256(
+            json.dumps(request_key, separators=(",", ":")).encode()
+        ).hexdigest()
+        if name is None:
+            safe_fn_name = re.sub(r"[^A-Za-z0-9_.-]", "_", fn_name)
+            name = f"{safe_fn_name}-{digest[:16]}"
+        if not name or name in (".", "..") or "/" in name or "\\" in name:
+            raise ValueError("Crop name must be a single directory name.")
+
+        parent = Path("." if parent_dir is None else parent_dir)
+        parent = parent.expanduser().resolve()
+        location = parent / f".xyz-{name}"
+        crop = cropping.Crop(
+            farmer=self, name=name, parent_dir=str(parent), autoload=False
+        )
+        if location.exists():
+            if not crop.is_prepared():
+                raise XYZError(
+                    f"Crop {name!r} is incomplete. Remove its directory or "
+                    "use another name."
+                )
+            info = crop.load_info()
+            if info.get("_sow_request") != digest:
+                raise XYZError(
+                    f"Crop {name!r} belongs to another request or has no sow "
+                    "metadata. Remove its directory or use another name."
+                )
+            expected = range(1, info["num_batches"] + 1)
+            if not all(
+                (location / "batches" / cropping.BTCH_NM.format(i)).is_file()
+                for i in expected
+            ):
+                raise XYZError(
+                    f"Crop {name!r} is incomplete. Remove its directory or "
+                    "use another name."
+                )
+            if crop.save_fn and crop.fn is not None:
+                # use the current function for batches that have not run
+                fn_pkl = cropping.to_pickle(crop.fn)
+                fn_path = location / cropping.FNCT_NM
+                if (
+                    not fn_path.is_file()
+                    or cropping.read_from_disk(fn_path) != fn_pkl
+                ):
+                    cropping.write_to_disk(fn_pkl, fn_path)
+            existing = cropping.Crop(name=name, parent_dir=str(parent))
+            saved_constants = {
+                **existing.runner.constants,
+                **info.get("_sow_constants", {}),
+            }
+            updated_constants = {**saved_constants, **effective_constants}
+            if not _sow_constants_equal(saved_constants, updated_constants):
+                # keep batch order and results, replace only supplied constants
+                for batch_id in expected:
+                    if (
+                        location
+                        / "results"
+                        / cropping.RSLT_NM.format(batch_id)
+                    ).is_file():
+                        continue
+                    batch = existing.load_batch(batch_id)
+                    for case in batch:
+                        case.update(effective_constants)
+                    batch_path = (
+                        location
+                        / "batches"
+                        / cropping.BTCH_NM.format(batch_id)
+                    )
+                    cropping.write_to_disk(batch, batch_path)
+                info["_sow_constants"] = {
+                    **info.get("_sow_constants", {}),
+                    **effective_constants,
+                }
+                cropping.write_to_disk(info, location / cropping.INFO_NM)
+            if self.data_name is None:
+                # reap with saved metadata, then update the calling Harvester
+                existing._reap_harvester = self
+            return existing
+
+        pending_cases = parse_into_cases(
+            cases=requested_cases, ds=self.full_ds if missing_only else None
+        )
+        if not pending_cases:
+            return None
+
+        parent.mkdir(parents=True, exist_ok=True)
+        # build outside the final path so failed submissions stay hidden
+        with tempfile.TemporaryDirectory(
+            prefix=".xyz-sowing-", dir=parent
+        ) as staging_dir:
+            crop.location = str(Path(staging_dir) / f".xyz-{name}")
+            crop.sow_combos(
+                combos=None,
+                cases=pending_cases,
+                constants=constants,
+                batchsize=batchsize,
+                num_batches=num_batches,
+                shuffle=shuffle,
+                verbosity=verbosity,
+            )
+            info = crop.load_info()
+            info["_sow_request"] = digest
+            info["_sow_constants"] = parse_constants(constants)
+            info["_sow_var_coords"] = output_coords
+            staging_crop = Path(crop.location)
+            cropping.write_to_disk(info, staging_crop / cropping.INFO_NM)
+            try:
+                location.mkdir()
+            except FileExistsError as exc:
+                raise XYZError(f"Crop {name!r} already exists.") from exc
+            # move the function last so the watcher only sees complete crops
+            for item in sorted(
+                staging_crop.iterdir(),
+                key=lambda item: item.name == cropping.FNCT_NM,
+            ):
+                item.rename(location / item.name)
+            crop.location = str(location)
+        return crop
+
     def cultivate(
         self,
         combos=None,
@@ -923,42 +1284,29 @@ class Harvester(object):
             If True (default), shuffle the order of cases before sowing and
             growing. This can be a useful basic form of load balancing.
         subprocess : "auto" or bool, optional
-            Whether to grow each batch in a fresh subprocess. This adds about
-            1 second of overhead per batch, but allows the number of threads,
-            cpu affinity and gpu assignment to be controlled. If "auto"
-            (default) subprocesses are used when ``num_threads``, ``gpus`` or
-            ``affinities`` are specified. See :meth:`xyzpy.Crop.grow` for
-            details.
-        num_workers : int, optional
-            Maximum number of batches to run concurrently. In subprocess mode
-            this caps simultaneous subprocesses (defaults to 1 if not given).
-            In in-process mode this is the joblib loky pool size (``None`` =
-            serial). Forwarded to :meth:`xyzpy.Crop.grow`.
-        num_threads : int, optional
-            Number of threads each worker is allowed to use, applied via the
-            standard env vars (``OMP_NUM_THREADS``, ``MKL_NUM_THREADS``, etc.)
-            in each subprocess. Implies ``subprocess=True`` when
-            ``subprocess="auto"``. Forwarded to :meth:`xyzpy.Crop.grow`.
-        gpus : int, str, or sequence of int, optional
-            GPU device IDs to assign to subprocesses via
-            ``CUDA_VISIBLE_DEVICES``; the pool also caps concurrency. Implies
-            ``subprocess=True`` when ``subprocess="auto"``. Forwarded to
+            Use a new process for each batch. ``"auto"`` does this when
+            ``num_threads``, ``gpus``, or ``affinities`` is set. See
             :meth:`xyzpy.Crop.grow`.
+        num_workers : int, optional
+            Maximum number of batches to run at once. Child-process mode uses
+            1 by default. In-process mode passes this value to
+            :meth:`xyzpy.Crop.grow`.
+        num_threads : int, optional
+            Thread limit for each child process. With ``"auto"``, this enables
+            child-process mode.
+        gpus : int, str, or sequence of int, optional
+            GPU IDs for ``CUDA_VISIBLE_DEVICES``. The pool also limits
+            concurrency. With ``"auto"``, this enables child-process mode.
         affinities : int, str, or sequence of int, optional
-            CPU core IDs to pin subprocesses to via ``taskset``; the pool also
-            caps concurrency. Implies ``subprocess=True`` when
-            ``subprocess="auto"``. Forwarded to :meth:`xyzpy.Crop.grow`.
+            CPU core IDs for ``taskset``. The pool also limits concurrency.
+            With ``"auto"``, this enables child-process mode.
         log : bool, optional
-            Whether to save subprocess stdout and stderr to files in the crop
-            directory under ``logs/batch-{batch_id}.log``. Subprocess-mode
-            only. Forwarded to :meth:`xyzpy.Crop.grow`.
+            Save child-process output to ``logs/batch-{batch_id}.log``.
         raise_errors : bool, optional
-            If True (default), raise any errors that occur during growing,
-            otherwise just log them and continue with the next batch.
+            Raise after a batch fails. The default is True.
         verbosity : int, optional
-            The level of logging to print during the sow/grow/reap process.
-            0: no output, 1: progress bars, 2: progress bars with current
-            setting postfixed.
+            Output level. 0 hides output. 1 shows progress. 2 also shows each
+            setting.
         on_existing : {'ask', 'reap', 'delete', 'skip', 'raise'}, optional
             What to do if a crop with the same name already exists on
             disk. Default is ``'ask'`` (interactive prompt).
@@ -988,12 +1336,7 @@ class Harvester(object):
                 return self.full_ds
 
         # first map to cases, possibly parsing out existing data
-        if missing_only:
-            ds = self.full_ds
-        else:
-            ds = None
-        combos = self._maybe_expand_combos(combos)
-        cases = parse_into_cases(combos, cases=cases, ds=ds)
+        cases = self._prepare_cases(combos, cases, missing_only=missing_only)
 
         if cases:
             # now write the cases to disk
@@ -1028,8 +1371,8 @@ class Harvester(object):
                     verbosity=verbosity,
                 )
 
-            except (Exception, KeyboardInterrupt) as e:
-                msg = f"Grow/reap errored with {str(e)}"
+            except (Exception, KeyboardInterrupt) as e:  # noqa: BLE001
+                msg = f"Grow/reap errored with {e!s}"
                 crop.handle_existing(
                     action=on_error,
                     msg=msg,
@@ -1038,6 +1381,162 @@ class Harvester(object):
                 )
 
         return self.full_ds
+
+
+def sow(
+    fn,
+    *,
+    var_names=None,
+    data_name=None,
+    runner_opts=None,
+    harvester_opts=None,
+    combos=None,
+    cases=None,
+    constants=None,
+    name=None,
+    parent_dir=None,
+    batchsize=None,
+    num_batches=None,
+    missing_only=True,
+    shuffle=True,
+    verbosity=1,
+):
+    """Write function calls to a Crop for later growth.
+
+    This creates a :class:`Runner` and :class:`Harvester` for ``fn``. It
+    expands ``combos`` and ``cases``, skips saved cases by default, and writes
+    the remaining cases as batch files. It does not run ``fn`` or change the
+    dataset.
+
+    Grow the returned Crop with ``xyzpy-auto-grow`` or
+    :meth:`Crop.grow`. Then use :meth:`Crop.reap` to add its results to the
+    dataset.
+
+    Parameters
+    ----------
+    fn : callable
+        Function to run for each case.
+    var_names : str or sequence of str, optional
+        Names for the returned values. Omit this when ``fn`` returns labelled
+        data.
+    data_name : str or path-like, optional
+        Persistent dataset path. Existing data is used to find missing cases.
+        Reaping writes results to the same path.
+    runner_opts : dict, optional
+        Extra :class:`Runner` options, such as ``var_dims``, ``var_coords``,
+        resources, or attributes.
+    harvester_opts : dict, optional
+        Extra :class:`Harvester` options, such as the storage engine or
+        chunk sizes.
+    combos : mapping, optional
+        Values for each function argument. Their Cartesian product forms the
+        combinations. An ellipsis uses the current values of that dataset
+        coordinate.
+    cases : sequence of mappings or tuples, optional
+        Individual settings. Each case is combined with every combination.
+    constants : mapping, optional
+        Arguments that have the same value in every case.
+    name : str, optional
+        Crop name. By default, a stable name is made from the function name,
+        coordinate request, and absolute dataset path.
+    parent_dir : str or path-like, optional
+        Directory that will contain the Crop. The default is the current
+        directory.
+    batchsize : int, optional
+        Target number of cases in each batch. The default is 1 unless
+        ``num_batches`` is given.
+    num_batches : int, optional
+        Target number of batches. This determines ``batchsize`` when it is
+        not given.
+    missing_only : bool, optional
+        Skip cases already in the dataset. The default is True. This does not
+        check cases waiting in other Crops.
+    shuffle : bool or int, optional
+        Shuffle cases before writing batches. An integer sets the random seed.
+        The default is True.
+    verbosity : int, optional
+        Sowing progress level. The default is 1.
+
+    Returns
+    -------
+    Crop or None
+        A matching Crop, a new Crop, or None when a new request has no missing
+        cases. A matching Crop is returned even when it has no missing work.
+
+    Notes
+    -----
+    Equivalent coordinate requests reuse the same Crop. Input order does not
+    affect the request key. Reuse saves the current function and updates
+    supplied constants in batches without results. Omitted constants keep
+    their saved values. Completed batch files and results are kept, as are
+    batch order and saved Harvester settings. Running batches that already
+    loaded their inputs can use the old values. Shared dataset attributes
+    record the latest constants when reaping.
+
+    Unchanged constants leave batch files and held failures untouched.
+    Function updates are saved independently.
+
+    Set a new explicit ``name`` to submit the same coordinates as separate
+    work. An explicit name that belongs to another request raises
+    :class:`XYZError`.
+
+    With ``missing_only=False``, all requested cases are written for a new
+    Crop. Reaping them can require ``crop.reap(overwrite=True)`` when the
+    dataset already contains those coordinates.
+
+    Examples
+    --------
+    Sow batches for a watcher, then wait for and reap their results:
+
+    .. code-block:: python
+
+        import xyzpy as xyz
+
+        def square(x):
+            return x**2
+
+        crop = xyz.sow(
+            square,
+            var_names="value",
+            data_name="results.h5",
+            combos={"x": range(10)},
+        )
+
+        # xyzpy-auto-grow runs the batches in another process
+        crop.reap(wait=True)
+
+    See Also
+    --------
+    Harvester.sow, cultivate, xyzpy.Crop.reap
+    """
+    runner_opts = {} if runner_opts is None else dict(runner_opts)
+    runner_opts.setdefault("var_names", var_names)
+    harvester_opts = {} if harvester_opts is None else dict(harvester_opts)
+    harvester_opts.setdefault("data_name", data_name)
+    if harvester_opts["data_name"] is not None:
+        harvester_opts["data_name"] = str(
+            Path(
+                auto_add_extension(
+                    str(harvester_opts["data_name"]),
+                    harvester_opts.get("engine") or "h5netcdf",
+                )
+            )
+            .expanduser()
+            .resolve()
+        )
+    harvester = Harvester(Runner(fn, **runner_opts), **harvester_opts)
+    return harvester.sow(
+        combos=combos,
+        cases=cases,
+        constants=constants,
+        name=name,
+        parent_dir=parent_dir,
+        batchsize=batchsize,
+        num_batches=num_batches,
+        missing_only=missing_only,
+        shuffle=shuffle,
+        verbosity=verbosity,
+    )
 
 
 def cultivate(
@@ -1121,41 +1620,29 @@ def cultivate(
         If True (default), shuffle the order of cases before sowing and
         growing. This can be a useful basic form of load balancing.
     subprocess : "auto" or bool, optional
-        Whether to grow each batch in a fresh subprocess. This adds about
-        1 second of overhead per batch, but allows the number of threads,
-        cpu affinity and gpu assignment to be controlled. If "auto"
-        (default) subprocesses are used when ``num_threads``, ``gpus`` or
-        ``affinities`` are specified. See :meth:`xyzpy.Crop.grow` for details.
-    num_workers : int, optional
-        Maximum number of batches to run concurrently. In subprocess mode
-        this caps simultaneous subprocesses (defaults to 1 if not given).
-        In in-process mode this is the joblib loky pool size (``None`` =
-        serial). Forwarded to :meth:`xyzpy.Crop.grow`.
-    num_threads : int, optional
-        Number of threads each worker is allowed to use, applied via the
-        standard env vars (``OMP_NUM_THREADS``, ``MKL_NUM_THREADS``, etc.)
-        in each subprocess. Implies ``subprocess=True`` when
-        ``subprocess="auto"``. Forwarded to :meth:`xyzpy.Crop.grow`.
-    gpus : int, str, or sequence of int, optional
-        GPU device IDs to assign to subprocesses via
-        ``CUDA_VISIBLE_DEVICES``; the pool also caps concurrency. Implies
-        ``subprocess=True`` when ``subprocess="auto"``. Forwarded to
+        Use a new process for each batch. ``"auto"`` does this when
+        ``num_threads``, ``gpus``, or ``affinities`` is set. See
         :meth:`xyzpy.Crop.grow`.
+    num_workers : int, optional
+        Maximum number of batches to run at once. Child-process mode uses 1 by
+        default. In-process mode passes this value to
+        :meth:`xyzpy.Crop.grow`.
+    num_threads : int, optional
+        Thread limit for each child process. With ``"auto"``, this enables
+        child-process mode.
+    gpus : int, str, or sequence of int, optional
+        GPU IDs for ``CUDA_VISIBLE_DEVICES``. The pool also limits concurrency.
+        With ``"auto"``, this enables child-process mode.
     affinities : int, str, or sequence of int, optional
-        CPU core IDs to pin subprocesses to via ``taskset``; the pool also
-        caps concurrency. Implies ``subprocess=True`` when
-        ``subprocess="auto"``. Forwarded to :meth:`xyzpy.Crop.grow`.
+        CPU core IDs for ``taskset``. The pool also limits concurrency. With
+        ``"auto"``, this enables child-process mode.
     log : bool, optional
-        Whether to save subprocess stdout and stderr to files in the crop
-        directory under ``logs/batch-{batch_id}.log``. Subprocess-mode only.
-        Forwarded to :meth:`xyzpy.Crop.grow`.
+        Save child-process output to ``logs/batch-{batch_id}.log``.
     raise_errors : bool, optional
-        If True (default), raise any errors that occur during growing,
-        otherwise just log them and continue with the next batch.
+        Raise after a batch fails. The default is True.
     verbosity : int, optional
-        The level of logging to print during the sow/grow/reap process.
-        0: no output, 1: progress bars, 2: progress bars with current
-        setting postfixed.
+        Output level. 0 hides output. 1 shows progress. 2 also shows each
+        setting.
     on_existing : {'ask', 'reap', 'delete', 'skip', 'raise'}, optional
         What to do if a crop with the same name already exists on
         disk. Default is ``'ask'`` (interactive prompt).
@@ -1285,9 +1772,7 @@ class Sampler:
         # Catch read-only errors etc.
         else:
             raise OSError(
-                "The file '{}' exists but cannot be written to".format(
-                    self.data_name
-                )
+                f"The file '{self.data_name}' exists but cannot be written to"
             )
 
     @property
@@ -1329,8 +1814,8 @@ class Sampler:
         if backup:
             import datetime
 
-            ts = "{:%Y%m%d-%H%M%S}".format(datetime.datetime.now())
-            shutil.copy(self.data_name, self.data_name + ".BAK-{}".format(ts))
+            ts = f"{datetime.datetime.now():%Y%m%d-%H%M%S}"  # noqa: DTZ005
+            shutil.copy(self.data_name, self.data_name + f".BAK-{ts}")
 
         Path(self.data_name).unlink()
 
@@ -1370,7 +1855,6 @@ class Sampler:
             self._full_df = new_full_df
 
     def gen_cases_fnargs(self, n, combos=None):
-        """ """
         combos = {} if combos is None else dict(combos)
         combos = {**self.default_combos, **combos}
         cases = tuple(

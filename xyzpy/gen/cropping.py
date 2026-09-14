@@ -8,8 +8,10 @@ import os
 import pickle
 import re
 import shutil
+import stat
 import sys
 import time
+import uuid
 import warnings
 from pathlib import Path
 
@@ -24,6 +26,7 @@ from .combo_runner import (
     nan_like_result,
 )
 from .farming import Harvester, Runner, Sampler, XYZError
+from .growing import _BatchTask, _SubprocessRunner
 from .prepare import (
     parse_attrs,
     parse_cases,
@@ -34,13 +37,35 @@ from .prepare import (
 
 BTCH_NM = "xyz-batch-{}.jbdmp"
 RSLT_NM = "xyz-result-{}.jbdmp"
+# file patterns used by directory scans
+BTCH_RE = re.compile(r"xyz-batch-(\d+)\.jbdmp")
+RSLT_RE = re.compile(r"xyz-result-(\d+)\.jbdmp")
 FNCT_NM = "xyz-function.clpkl"
 INFO_NM = "xyz-settings.jbdmp"
 
 
 def write_to_disk(obj, fname):
-    with open(fname, "wb") as file:
-        pickle.dump(obj, file)
+    """Write a pickle and replace the target atomically."""
+    path = Path(fname)
+    temp_path = None
+    try:
+        # new files use 0666, limited by the process umask
+        candidate_path = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+        with open(candidate_path, "xb") as file:
+            temp_path = candidate_path
+            pickle.dump(obj, file)
+            file.flush()
+        try:
+            mode = stat.S_IMODE(path.stat().st_mode)
+        except FileNotFoundError:
+            pass
+        else:
+            os.chmod(temp_path, mode)
+        temp_path.replace(path)
+    except BaseException:
+        if temp_path is not None:
+            temp_path.unlink(missing_ok=True)
+        raise
 
 
 def read_from_disk(fname):
@@ -145,72 +170,7 @@ def check_ready_to_reap(crop, allow_incomplete, wait):
         )
 
 
-# ----------- subprocess resource pooling ----------- #
-
-
-def _parse_resource_ids(raw):
-    """Normalize an int, list, tuple, range, or comma-separated string
-    into a list of integer resource IDs.
-    """
-    if isinstance(raw, int):
-        return [raw]
-    elif isinstance(raw, (list, tuple, range)):
-        return list(map(int, raw))
-    else:
-        return list(map(int, raw.split(",")))
-
-
-def _acquire_affinity(rid, pargs, env):
-    """Prepend ``taskset -c <cpu>`` to pin to a CPU core."""
-    pargs[0:0] = ["taskset", "-c", str(rid)]
-
-
-def _acquire_gpu(rid, pargs, env):
-    """Set ``CUDA_VISIBLE_DEVICES`` to pin to a GPU."""
-    env["CUDA_VISIBLE_DEVICES"] = str(rid)
-
-
-class _ResourcePool:
-    """A pool of reusable resource IDs (CPUs, GPUs, etc.) that can be
-    acquired and released once per batch subprocess.
-
-    Parameters
-    ----------
-    ids : list of int
-        The resource IDs available to hand out.
-    acquire_fn : callable
-        ``fn(rid, pargs, env)`` — mutate *pargs* (the command prefix
-        list) and/or *env* (the environment dict) to apply *rid*.
-    """
-
-    def __init__(self, ids, acquire_fn):
-        self.free = list(ids)
-        self.used = {}
-        self.acquire_fn = acquire_fn
-
-    @classmethod
-    def from_raw(cls, raw, acquire_fn):
-        """Create a pool from a raw user value, or return ``None``."""
-        if raw is None:
-            return None
-        return cls(_parse_resource_ids(raw), acquire_fn)
-
-    def available(self):
-        """Whether there is at least one free resource."""
-        return bool(self.free)
-
-    def acquire(self, batch_id, pargs, env):
-        """Pop a resource, apply it, and track it against *batch_id*."""
-        rid = self.free.pop()
-        self.used[batch_id] = rid
-        self.acquire_fn(rid, pargs, env)
-
-    def release(self, batch_id):
-        """Return the resource used by *batch_id* to the free pool."""
-        self.free.append(self.used.pop(batch_id))
-
-
-class Crop(object):
+class Crop:
     """Encapsulates all the details describing a single 'crop', that is,
     its location, name, and batch size/number. Also allows tracking of
     crop's progress, and experimentally, automatic submission of
@@ -378,9 +338,24 @@ class Crop(object):
         # If saving Harvester or Runner, strip out function information so
         #   as just to use pickle.
         if self.farmer is not None:
-            farmer_copy = copy.deepcopy(self.farmer)
-            farmer_copy.fn = None
-            farmer_pkl = to_pickle(farmer_copy)
+            # avoid pickling cached datasets into crop
+            stashed = []
+            for obj, attr in (
+                (self.farmer, "_full_ds"),
+                (self.farmer, "_full_df"),
+                (self.farmer, "_last_df"),
+                (self.runner, "_last_ds"),
+            ):
+                if getattr(obj, attr, None) is not None:
+                    stashed.append((obj, attr, getattr(obj, attr)))
+                    setattr(obj, attr, None)
+            try:
+                farmer_copy = copy.deepcopy(self.farmer)
+                farmer_copy.fn = None
+                farmer_pkl = to_pickle(farmer_copy)
+            finally:
+                for obj, attr, value in stashed:
+                    setattr(obj, attr, value)
         else:
             farmer_pkl = None
 
@@ -436,7 +411,7 @@ class Crop(object):
         farmer_pkl = settings["farmer"]
         farmer = None if farmer_pkl is None else from_pickle(farmer_pkl)
 
-        fn, farmer = parse_fn_farmer(None, farmer)
+        _fn, farmer = parse_fn_farmer(None, farmer)
 
         # if crop already has a harvester/runner. (e.g. was instantiated from
         # one) by default don't overwrite from disk
@@ -462,9 +437,9 @@ class Crop(object):
             else:
                 # TODO: check equality?
                 raise XYZError(
-                    "Trying to load this Crop's function, {}, from "
+                    f"Trying to load this Crop's function, {self._fn}, from "
                     "disk but its farmer already has a function "
-                    "set: {}.".format(self._fn, self.farmer.fn)
+                    f"set: {self.farmer.fn}."
                 )
 
     def prepare(self, combos=None, cases=None, fn_args=None):
@@ -477,8 +452,13 @@ class Crop(object):
         self.save_info(combos=combos, cases=cases, fn_args=fn_args)
 
     def is_prepared(self):
-        """Check whether this crop has been written to disk."""
-        return (Path(self.location) / INFO_NM).exists()
+        """Return True when the settings and any saved function exist."""
+        location = Path(self.location)
+        if not (location / INFO_NM).exists():
+            return False
+        if not self.save_fn:
+            return True
+        return (location / FNCT_NM).exists()
 
     def calc_progress(self):
         """Calculate how much progressed has been made in growing the batches."""
@@ -815,48 +795,45 @@ class Crop(object):
         verbosity_grow=0,
         desc="Grow",
     ):
-        """Grow particular or missing batches using a single fresh subprocess
-        per batch. This has a higher overhead for starting each process, but is
-        more robust memory wise, and allows controlling the number of threads
-        used, CPU affinity and GPU assignment.
+        """Grow each selected batch in a new process.
+
+        A new process applies thread, GPU, and CPU settings before numeric
+        libraries load. It also isolates batch memory. Process startup adds
+        overhead.
 
         Parameters
         ----------
         batch_ids : int or sequence of int, optional
-            Which batch numbers to grow, defaults to all missing.
+            Batches to grow. The default is all missing batches.
         num_workers : int, optional
-            The maximum number of concurrent subprocesses (default 1).
+            Maximum number of batches to run at once. The default is 1.
         num_threads : int, optional
-            The number of threads per subprocess (default 1).
+            Thread limit for each process. The default is 1.
         gpus : int, str, or sequence of int, optional
-            GPU device IDs to assign to subprocesses via
-            ``CUDA_VISIBLE_DEVICES``. Each subprocess gets a single GPU from
-            this pool; the pool also limits concurrency to the number of GPUs
-            provided. You can oversubscribe GPUs by repeating device IDs, e.g.
-            ``0,0,1,1`` to allow 2 subprocesses to share each GPU.
+            GPU IDs for ``CUDA_VISIBLE_DEVICES``. Each process gets one entry.
+            The pool also limits concurrency. Repeat an ID to let more than one
+            process use that GPU, e.g. ``0,0,1,1``.
         affinities : int, str, or sequence of int, optional
-            CPU core IDs to pin subprocesses to via ``taskset``.
-            Also limits concurrency to the number of affinities.
+            CPU core IDs for ``taskset``. Each process gets one entry. The pool
+            also limits concurrency.
         raise_errors : bool, optional
-            Whether to raise errors encountered during growing.
+            Stop new batches and raise after active batches finish.
         log : bool, optional
-            Whether to save subprocess stdout and stderr to log files in the
-            crop directory under ``logs/batch-{batch_id}.log``. Default is
-            False, which discards stdout and only prints stderr on error.
+            Save stdout and stderr to ``logs/batch-{batch_id}.log``. The
+            default is False. Without a log, stdout is discarded and stderr is
+            shown only after an error.
         min_wait : float, optional
             Minimum polling interval in seconds.
         max_wait : float, optional
             Maximum polling interval in seconds.
         verbosity : int, optional
-            How much information to show when growing. 0: no output, 1:
-            progress bar, 2: progress bar with each setting being grown.
+            Output level. 0 hides output. 1 shows progress. 2 also shows each
+            setting.
         verbosity_grow : int, optional
-            Verbosity within each batch grow.
+            Output level inside each batch.
         desc : str, optional
-            Description to show in the progress bar when sowing.
+            Progress label.
         """
-        from subprocess import DEVNULL, PIPE, Popen
-
         if num_workers is None:
             num_workers = 1
         if num_threads is None:
@@ -867,142 +844,66 @@ class Crop(object):
         elif isinstance(batch_ids, int):
             batch_ids = (batch_ids,)
 
-        if log:
-            from pathlib import Path
-
-            log_dir = Path(self.location) / "logs"
-            log_dir.mkdir(exist_ok=True)
-
-        # queue is reversed so that we can pop from right
-        queue = list(reversed(batch_ids))
-        # map each batch id to the process
-        processing = {}
-        # track open log file handles
-        log_files = {}
-
-        if verbosity:
-            pbar = progbar(total=len(queue), desc=desc)
-        else:
-            pbar = None
-
-        pargs = [
-            sys.executable,
-            "-m",
-            "xyzpy_grow",
-            self.name,
-            "--parent-dir",
-            self.parent_dir,
-            "--num-threads",
-            str(num_threads),
-            "--verbosity-grow",
-            str(verbosity_grow),
-        ]
-        if raise_errors:
-            pargs.append("--raise-errors")
-
-        pools = []
-        for raw, acquire_fn in (
-            (affinities, _acquire_affinity),
-            (gpus, _acquire_gpu),
-        ):
-            pool = _ResourcePool.from_raw(raw, acquire_fn)
-            if pool is not None:
-                pools.append(pool)
+        queue = list(dict.fromkeys(batch_ids))
+        runner = _SubprocessRunner(
+            num_workers=num_workers,
+            num_threads=num_threads,
+            gpus=gpus,
+            affinities=affinities,
+            log=log,
+            verbosity_grow=verbosity_grow,
+            raise_errors=raise_errors,
+        )
+        tasks = {
+            batch_id: _BatchTask(
+                crop_name=self.name,
+                parent_dir=Path(self.parent_dir).resolve(),
+                batch_id=batch_id,
+            )
+            for batch_id in queue
+        }
+        progress = progbar(total=len(queue), desc=desc) if verbosity else None
+        failure = None
+        poll_wait = min_wait
 
         try:
-            while queue or processing:
-                # still work to do!
-                while (
-                    # there are batches still
-                    bool(queue)
-                    and
-                    # and there are free workers
-                    (len(processing) < num_workers)
-                    and
-                    # and all resource pools have availability
-                    all(pool.available() for pool in pools)
-                ):
-                    # can submit more work!
-                    batch_id = queue.pop()
-                    these_pargs = []
-                    env = os.environ.copy() if pools else None
+            while queue or runner.active:
+                while queue and failure is None and runner.can_submit():
+                    runner.submit(tasks[queue.pop(0)])
 
-                    for pool in pools:
-                        pool.acquire(batch_id, these_pargs, env)
+                completions = runner.poll()
+                for completion in completions:
+                    if progress is not None:
+                        progress.update()
+                    if not completion.success:
+                        message = (
+                            f"batch {completion.task.batch_id} failed: "
+                            f"{completion.message}"
+                        )
+                        if completion.log_path is not None:
+                            message += f". Log: {completion.log_path}"
+                        print(message)
+                        if raise_errors:
+                            if failure is None:
+                                failure = RuntimeError(message)
+                            queue.clear()
 
-                    these_pargs.extend(pargs)
-                    these_pargs.append("--batch-id")
-                    these_pargs.append(str(batch_id))
-
-                    if log:
-                        log_f = open(log_dir / f"batch-{batch_id}.log", "w")
-                        log_files[batch_id] = log_f
-                        stdout = log_f
-                        stderr = log_f
-                    else:
-                        stdout = DEVNULL
-                        stderr = PIPE
-
-                    processing[batch_id] = Popen(
-                        these_pargs,
-                        stdout=stdout,
-                        stderr=stderr,
-                        text=True,
-                        env=env,
+                if completions:
+                    poll_wait = min_wait
+                elif runner.active:
+                    time.sleep(poll_wait)
+                    poll_wait = min(1.2 * poll_wait, max_wait)
+                elif queue and not runner.can_submit():
+                    raise ValueError(
+                        "No worker slot is available for the queued batches."
                     )
-
-                all_running = True
-                # reset wait time
-                dt = min_wait
-
-                while processing and all_running:
-                    # check for finished work
-                    for batch_id in tuple(processing):
-                        p = processing[batch_id]
-                        retcode = p.poll()
-                        if retcode is not None:
-                            # batch finished!
-                            del processing[batch_id]
-                            all_running = False
-
-                            for pool in pools:
-                                pool.release(batch_id)
-
-                            if log:
-                                log_files.pop(batch_id).close()
-                                if retcode != 0:
-                                    # flag to user the batch log location
-                                    log_path = (
-                                        log_dir / f"batch-{batch_id}.log"
-                                    )
-                                    print(
-                                        f"batch {batch_id} failed "
-                                        f"(retcode={retcode}), see {log_path}"
-                                    )
-                            else:
-                                # drain stderr to avoid resource leaks
-                                _, stderr = p.communicate()
-                                if retcode != 0:
-                                    print(retcode, stderr)
-
-                            if pbar is not None:
-                                pbar.update()
-
-                    if all_running:
-                        # exponential backoff
-                        time.sleep(dt)
-                        dt = min(1.2 * dt, max_wait)
-
-        except KeyboardInterrupt:
-            # kill all processes
-            for p in processing.values():
-                p.kill()
-            for f in log_files.values():
-                f.close()
-            raise
         finally:
-            if pbar is not None:
-                pbar.close()
+            runner.terminate()
+            if progress is not None:
+                progress.close()
+
+        if raise_errors and failure is not None:
+            raise failure
 
     def grow(
         self,
@@ -1020,64 +921,50 @@ class Crop(object):
         desc="Grow",
         **combo_runner_opts,
     ):
-        """Grow specific batch numbers using this process.
+        """Grow selected batches here or in child processes.
 
         Parameters
         ----------
         batch_ids : int or sequence of ints, optional
-            Which batch numbers to grow, by default all missing results.
+            Batches to grow. The default is all missing batches.
         subprocess : "auto" or bool, optional
-            Whether to grow each batch in a fresh subprocess. This adds about
-            1 second of overhead per batch, but allows the number of threads,
-            cpu affinity and gpu assignment to be controlled. If "auto"
-            (default) then subprocesses will be used if ``num_threads``,
-            ``gpus`` or ``affinities`` are specified.
-            See :meth:`Crop.grow_subprocess` for details.
+            Use a new process for each batch. ``"auto"`` does this when
+            ``num_threads``, ``gpus``, or ``affinities`` is set. See
+            :meth:`Crop.grow_subprocess`.
         num_workers : int, optional
-            Maximum number of batches to run concurrently. In subprocess mode
-            this is the cap on simultaneous subprocesses (defaults to 1 if not
-            given). In in-process mode this is the size of the joblib loky
-            process pool used by ``combo_runner_core`` (``None`` = serial).
+            Maximum number of batches to run at once. Child-process mode uses
+            1 by default. In-process mode passes this value to
+            ``combo_runner_core``.
         num_threads : int, optional
-            Number of threads each worker is allowed to use, applied via the
-            standard env vars (``OMP_NUM_THREADS``, ``MKL_NUM_THREADS``,
-            ``OPENBLAS_NUM_THREADS``, ...). Only meaningful in subprocess mode
-            (the env vars must be set before numerical libraries are imported);
-            setting it implies ``subprocess=True`` when ``subprocess="auto"``.
-            Passing this with ``subprocess=False`` raises ``ValueError``.
+            Thread limit for each child process. This sets standard environment
+            variables before numeric libraries load. With ``"auto"``, this
+            enables child-process mode. It cannot be used with
+            ``subprocess=False``.
         gpus : int, str, or sequence of int, optional
-            GPU device IDs to assign to subprocesses via
-            ``CUDA_VISIBLE_DEVICES``. Each subprocess gets a single GPU from
-            this pool; the pool also caps concurrency to its size. Repeat IDs
-            to oversubscribe (e.g. ``"0,0,1,1"`` shares each GPU between two
-            workers). Subprocess-mode only — implies ``subprocess=True`` when
-            ``subprocess="auto"``; raises ``ValueError`` with
-            ``subprocess=False``.
+            GPU IDs for ``CUDA_VISIBLE_DEVICES``. Each child process gets one
+            entry. The pool also limits concurrency. Repeat an ID to let more
+            than one process use that GPU. With ``"auto"``, this enables
+            child-process mode. It cannot be used with ``subprocess=False``.
         affinities : int, str, or sequence of int, optional
-            CPU core IDs to pin subprocesses to via ``taskset``. Each
-            subprocess gets one affinity from the pool, which also caps
-            concurrency. Subprocess-mode only — implies ``subprocess=True``
-            when ``subprocess="auto"``; raises ``ValueError`` with
-            ``subprocess=False``.
+            CPU core IDs for ``taskset``. Each child process gets one entry.
+            The pool also limits concurrency. With ``"auto"``, this enables
+            child-process mode. It cannot be used with ``subprocess=False``.
         raise_errors : bool, optional
-            Whether to raise errors if they occur during growing.
+            Raise after a batch fails.
         debugging : bool, optional
-            Whether to set the logging level to debug.
+            Set the logging level to debug.
         verbosity : int, optional
-            How much information to show when growing. 0: no output, 1:
-            progress bar, 2: progress bar with each setting being grown.
+            Output level. 0 hides output. 1 shows progress. 2 also shows each
+            setting.
         verbosity_grow : int, optional
-            How much information to show when growing each batch.
+            Output level inside each batch.
         log : bool, optional
-            Whether to save subprocess output to log files. Only used
-            when ``subprocess=True``.
+            Save child-process output to log files.
         desc : str, optional
-            Description to show in the progress bar when growing.
+            Progress label.
         **combo_runner_opts
-            Additional options forwarded to either :meth:`Crop.grow_subprocess`
-            (``min_wait``, ``max_wait``, ...) when ``subprocess`` is True, or
-            to ``combo_runner_core`` (``executor``, ``parallel``, ...) when
-            ``subprocess`` is False.
+            Extra options for :meth:`Crop.grow_subprocess` in child-process
+            mode, or ``combo_runner_core`` in in-process mode.
         """
         if batch_ids is None:
             batch_ids = self.missing_results()
@@ -1105,7 +992,7 @@ class Crop(object):
                 **combo_runner_opts,
             )
         else:
-            subprocess_only = [
+            process_options = [
                 name
                 for name, val in (
                     ("num_threads", num_threads),
@@ -1114,14 +1001,11 @@ class Crop(object):
                 )
                 if val is not None
             ]
-            if subprocess_only:
+            if process_options:
                 raise ValueError(
-                    f"{', '.join(repr(n) for n in subprocess_only)} "
-                    "only meaningful when growing in subprocess mode "
-                    "(they configure per-subprocess env vars / pinning before "
-                    "numerical libraries import). Either pass "
-                    "`subprocess=True` or drop them and configure the "
-                    "environment yourself before invoking the parent process."
+                    f"{', '.join(repr(n) for n in process_options)} can only "
+                    "be used with subprocess=True. Set subprocess=True, or "
+                    "configure the parent process before calling grow()."
                 )
             combo_runner_core(
                 grow,
@@ -1324,16 +1208,18 @@ class Crop(object):
         desc="Reap",
         **kwargs,
     ):
-        """Reap a Crop over sowed combos and save to a dataset defined by a
-        :class:`~xyzpy.Runner`.
-        """
-        # Can ignore `Runner.resources` as they play no part in desecribing the
-        #   output, though they should be supplied to sow and thus grow.
+        """Build a Dataset or DataFrame from this Crop and a Runner."""
+        settings = self.load_info()
+        constants = {
+            **runner._constants,
+            **settings.get("_sow_constants", {}),
+        }
+        # resources are run inputs and do not describe saved output
         data = self.reap_combos_to_ds(
             var_names=runner._var_names,
             var_dims=runner._var_dims,
-            var_coords=runner._var_coords,
-            constants=runner._constants,
+            var_coords=settings.get("_sow_var_coords", runner._var_coords),
+            constants=constants,
             attrs=runner._attrs,
             parse=False,
             wait=wait,
@@ -1382,7 +1268,8 @@ class Crop(object):
         )
 
         if sync:
-            harvester.add_ds(ds, sync=sync, overwrite=overwrite)
+            target = getattr(self, "_reap_harvester", harvester)
+            target.add_ds(ds, sync=sync, overwrite=overwrite)
 
         # defer cleaning up until we have sucessfully synced new dataset
         if clean_up is None:
@@ -1470,13 +1357,13 @@ class Crop(object):
         -------
         nested tuple or xarray.Dataset
         """
-        opts = dict(
-            clean_up=clean_up,
-            wait=wait,
-            allow_incomplete=allow_incomplete,
-            verbosity=verbosity,
-            desc=desc,
-        )
+        opts = {
+            "clean_up": clean_up,
+            "wait": wait,
+            "allow_incomplete": allow_incomplete,
+            "verbosity": verbosity,
+            "desc": desc,
+        }
 
         if isinstance(self.farmer, Runner):
             return self.reap_runner(self.farmer, **opts)
@@ -1513,21 +1400,20 @@ class Crop(object):
 
         for result_file in result_files:
             # load corresponding batch file to check length.
-            result_name = Path(result_file).name
-            result_num = result_name.strip("xyz-result-").strip(".jbdmp")
+            result_num = RSLT_RE.fullmatch(Path(result_file).name).group(1)
             batch = self.load_batch(result_num)
 
             try:
                 result = read_from_disk(result_file)
                 unloadable = False
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 unloadable = True
                 err = e
 
             if unloadable or (len(result) != len(batch)):
-                msg = "result {} is bad".format(result_file)
+                msg = f"result {result_file} is bad"
                 msg += "." if not delete_bad else " - deleting it."
-                msg += " Error was: {}".format(err) if unloadable else ""
+                msg += f" Error was: {err}" if unloadable else ""
                 print(msg)
 
                 if delete_bad:
@@ -1598,10 +1484,10 @@ def load_crops(directory="."):
         if match:
             names.append(match.groups(1)[0])
 
-    return {name: Crop(name=name) for name in names}
+    return {name: Crop(name=name, parent_dir=directory) for name in names}
 
 
-class Sower(object):
+class Sower:
     """Class for sowing a 'crop' of batched combos to then 'grow' (on any
     number of workers sharing the filesystem) and then reap.
     """
@@ -1731,10 +1617,8 @@ def grow(
 
     if len(cases) == 0:
         raise ValueError(
-            "Something has gone wrong with the loading of batch {} ".format(
-                BTCH_NM.format(batch_number)
-            )
-            + "for the crop at {}.".format(crop.location)
+            f"Something has gone wrong with the loading of batch "
+            f"{BTCH_NM.format(batch_number)} for the crop at {crop.location}."
         )
     if verbosity >= 1:
         print(f"xyzpy: loaded batch {batch_number} of {crop_name}.")
@@ -1785,11 +1669,11 @@ def grow(
         # possibly catch errors, so they don't crash the whole process
         print(f"xyzpy: error - batch {batch_number} failed with error: {e}")
         if raise_errors:
-            raise e
+            raise
 
         # allow ctrl-c to stop the process
         if isinstance(e, KeyboardInterrupt):
-            raise e
+            raise
 
         print(f"xyzpy: ... continuing since raise_errors={raise_errors}.")
 
@@ -1803,7 +1687,7 @@ def grow(
 # --------------------------------------------------------------------------- #
 
 
-class Reaper(object):
+class Reaper:
     """Class that acts as a stateful function to retrieve already sown and
     grow results.
     """
@@ -1841,8 +1725,8 @@ class Reaper(object):
 
             if (res is None) or len(res) == 0:
                 raise ValueError(
-                    "Something not right: result {} contains "
-                    "no data upon read from disk.".format(x)
+                    f"Something not right: result {x} contains "
+                    "no data upon read from disk."
                 )
             return res
 
