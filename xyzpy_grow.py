@@ -10,10 +10,9 @@ import argparse
 import os
 import sys
 from pathlib import Path
-from typing import Optional
 
 
-def parse_num_workers(value: Optional[str]) -> Optional[int]:
+def parse_num_workers(value: str | None) -> int | None:
     if value is None:
         return None
     try:
@@ -31,7 +30,7 @@ def parse_int_or_float(string):
         return float(string)
 
 
-def parse_bool_flag(value: Optional[str] = None) -> bool:
+def parse_bool_flag(value: str | None = None) -> bool:
     if value is None:
         return False
     if value.lower() in ("false", "0", "no"):

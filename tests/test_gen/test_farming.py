@@ -225,9 +225,9 @@ class TestHarvester:
             h = Harvester(fn3_fba_runner, fl_pth)
             h.harvest_combos((("a", (1, 2)), ("b", (3, 4))))
             hds = load_ds(fl_pth)
-        assert h.last_ds.identical(fn3_fba_ds)
-        assert h.full_ds.identical(fn3_fba_ds)
-        assert hds.identical(fn3_fba_ds)
+            assert h.last_ds.identical(fn3_fba_ds)
+            assert h.full_ds.identical(fn3_fba_ds)
+            assert hds.identical(fn3_fba_ds)
 
     def test_label_as_harvester(self, fn3_fba_runner, fn3_fba_ds):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -243,9 +243,9 @@ class TestHarvester:
             )(fn3_fba)
             h.harvest_combos((("a", (1, 2)), ("b", (3, 4))))
             hds = load_ds(fl_pth)
-        assert h.last_ds.identical(fn3_fba_ds)
-        assert h.full_ds.identical(fn3_fba_ds)
-        assert hds.identical(fn3_fba_ds)
+            assert h.last_ds.identical(fn3_fba_ds)
+            assert h.full_ds.identical(fn3_fba_ds)
+            assert hds.identical(fn3_fba_ds)
 
     def test_harvest_combos_new_sow_reap_separate(
         self, fn3_fba_runner, fn3_fba_ds
@@ -290,9 +290,9 @@ class TestHarvester:
 
             hds = load_ds(fl_pth)
 
-        assert h.last_ds.identical(fn3_fba_ds)
-        assert h.full_ds.identical(fn3_fba_ds)
-        assert hds.identical(fn3_fba_ds)
+            assert h.last_ds.identical(fn3_fba_ds)
+            assert h.full_ds.identical(fn3_fba_ds)
+            assert hds.identical(fn3_fba_ds)
 
     def test_harvest_combos_new_sow_reap_incomplete(
         self, fn3_fba_runner, fn3_fba_ds
@@ -323,9 +323,9 @@ class TestHarvester:
             h.harvest_combos((("a", (1,)), ("b", (3, 4))))
             h.harvest_combos((("a", (2,)), ("b", (3, 4))))
             hds = load_ds(fl_pth)
-        assert not h.last_ds.identical(fn3_fba_ds)
-        assert h.full_ds.identical(fn3_fba_ds)
-        assert hds.identical(fn3_fba_ds)
+            assert not h.last_ds.identical(fn3_fba_ds)
+            assert h.full_ds.identical(fn3_fba_ds)
+            assert hds.identical(fn3_fba_ds)
 
     def test_harvest_combos_overwrite(self, fn3_fba_runner, fn3_fba_ds):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -355,9 +355,9 @@ class TestHarvester:
             h = Harvester(fn3_fba_runner, fl_pth)
             h.harvest_cases(cases)
             hds = load_ds(fl_pth)
-        assert h.last_ds.identical(fn3_fba_ds)
-        assert h.full_ds.identical(fn3_fba_ds)
-        assert hds.identical(fn3_fba_ds)
+            assert h.last_ds.identical(fn3_fba_ds)
+            assert h.full_ds.identical(fn3_fba_ds)
+            assert hds.identical(fn3_fba_ds)
 
     def test_harvest_cases_merge(self, fn3_fba_runner, fn3_fba_ds):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -366,9 +366,9 @@ class TestHarvester:
             h.harvest_cases([(1, 3), (2, 4)])
             h.harvest_cases([(1, 4), (2, 3)])
             hds = load_ds(fl_pth)
-        assert not h.last_ds.identical(fn3_fba_ds)
-        assert h.full_ds.identical(fn3_fba_ds)
-        assert hds.identical(fn3_fba_ds)
+            assert not h.last_ds.identical(fn3_fba_ds)
+            assert h.full_ds.identical(fn3_fba_ds)
+            assert hds.identical(fn3_fba_ds)
 
     def test_harvest_cases_overwrite(self, fn3_fba_runner, fn3_fba_ds):
         with tempfile.TemporaryDirectory() as tmpdir:

@@ -43,6 +43,7 @@ from .gen.farming import (
     Sampler,
     cultivate,
     label,
+    sow,
 )
 from .gen.ray_executor import (
     RayExecutor,
@@ -233,6 +234,7 @@ __all__ = [
     "save_merge_ds",
     "scatter",
     "sort_dims",
+    "sow",
     "trimna",
     "unzip",
     "visualize_matrix",

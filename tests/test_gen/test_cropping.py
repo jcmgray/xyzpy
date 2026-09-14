@@ -11,13 +11,14 @@ from xyzpy import Harvester, Runner, combo_runner, combo_runner_to_ds, label
 from xyzpy.gen.cropping import (
     Crop,
     XYZError,
-    _acquire_affinity,
-    _acquire_gpu,
-    _parse_resource_ids,
-    _ResourcePool,
     grow,
     load_crops,
     parse_crop_details,
+)
+from xyzpy.gen.growing import (
+    _acquire_affinity,
+    _acquire_gpu,
+    _parse_resource_ids,
 )
 
 from . import (
@@ -263,7 +264,7 @@ class TestSowerReaper:
             crop.sow_combos(combos)
 
             with pytest.raises(XYZError):
-                crop.all_nan_result
+                _ = crop.all_nan_result
 
             crop.grow(1)
             nres = crop.all_nan_result
@@ -360,7 +361,7 @@ class TestSowerReaper:
         with TemporaryDirectory() as tdir:
             disk_ds = os.path.join(tdir, "test.h5")
 
-            combos = dict(a=[1], b=[1, 2, 3])
+            combos = {"a": [1], "b": [1, 2, 3]}
             runner = Runner(fn, var_names=None)
             harvester = Harvester(runner, disk_ds)
             crop = harvester.Crop(name="fn", batchsize=1, parent_dir=tdir)
@@ -512,7 +513,7 @@ class TestSowerReaper:
             assert crop.is_prepared()
             assert crop.batchsize == 5
             assert crop.num_batches == 3
-            assert crop._batch_remainder is not None or True
+            assert crop._batch_remainder not in (None, True)
             crop.calc_progress()
             assert crop._num_sown_batches == 3
             assert crop._num_results == 0
@@ -564,77 +565,18 @@ class TestParseResourceIds:
 
 class TestAcquireFunctions:
     def test_acquire_affinity(self):
-        pargs = []
+        args = []
         env = {}
-        _acquire_affinity(5, pargs, env)
-        assert pargs == ["taskset", "-c", "5"]
+        _acquire_affinity(5, args, env)
+        assert args == ["taskset", "-c", "5"]
         assert env == {}
 
     def test_acquire_gpu(self):
-        pargs = []
+        args = []
         env = {}
-        _acquire_gpu(2, pargs, env)
-        assert pargs == []
+        _acquire_gpu(2, args, env)
+        assert args == []
         assert env == {"CUDA_VISIBLE_DEVICES": "2"}
-
-
-class TestResourcePool:
-    def test_from_raw_none(self):
-        assert _ResourcePool.from_raw(None, _acquire_gpu) is None
-
-    def test_from_raw_int(self):
-        pool = _ResourcePool.from_raw(3, _acquire_gpu)
-        assert pool.free == [3]
-
-    def test_from_raw_str(self):
-        pool = _ResourcePool.from_raw("0,1,2", _acquire_gpu)
-        assert pool.free == [0, 1, 2]
-
-    def test_from_raw_list(self):
-        pool = _ResourcePool.from_raw([4, 5], _acquire_affinity)
-        assert pool.free == [4, 5]
-
-    def test_available_when_free(self):
-        pool = _ResourcePool.from_raw([0, 1], _acquire_gpu)
-        assert pool.available()
-
-    def test_lifecycle(self):
-        pool = _ResourcePool.from_raw("0,1,2", _acquire_gpu)
-        assert pool.available()
-
-        # acquire all three
-        envs = {}
-        for batch_id in range(3):
-            pargs, env = [], {}
-            pool.acquire(batch_id, pargs, env)
-            envs[batch_id] = env
-
-        assert not pool.available()
-        assert len(pool.used) == 3
-        # each got a different GPU (popped from end)
-        assert envs[0] == {"CUDA_VISIBLE_DEVICES": "2"}
-        assert envs[1] == {"CUDA_VISIBLE_DEVICES": "1"}
-        assert envs[2] == {"CUDA_VISIBLE_DEVICES": "0"}
-
-        # release middle one
-        pool.release(1)
-        assert pool.available()
-        assert pool.free == [1]
-        assert 1 not in pool.used
-
-        # re-acquire
-        pargs, env = [], {}
-        pool.acquire(99, pargs, env)
-        assert env == {"CUDA_VISIBLE_DEVICES": "1"}
-        assert not pool.available()
-
-    def test_affinity_acquire_prepends(self):
-        pool = _ResourcePool.from_raw([7], _acquire_affinity)
-        pargs = ["python", "-m", "my_module"]
-        env = {}
-        pool.acquire(0, pargs, env)
-        assert pargs == ["taskset", "-c", "7", "python", "-m", "my_module"]
-        assert env == {}
 
 
 def foo_verbose(a, b, c):
