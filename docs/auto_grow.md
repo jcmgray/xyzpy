@@ -1,11 +1,12 @@
 # Growing crops automatically
 
-`xyzpy-auto-grow` watches one directory for `.xyz-*` [`Crop`](#cropping.Crop)
-directories. It grows missing batches from all Crops with one worker pool. It
-takes one batch from each Crop in turn. This lets a new Crop start before an
-older Crop finishes. See
+Use the CLI `xyzpy-auto-grow` to watch a directory for *any* `.xyz-*`
+[`Crop`](#cropping.Crop) directories and automatically grow missing batches.
+The batches are taken round-robin fashion from the crops, so that no one crop
+blocks all others. See
 [Batched / Distributed generation](computing_results.ipynb) for Crops
 themselves, and the other ways to grow them.
+
 
 ## Start the watcher
 
@@ -25,15 +26,23 @@ GPU and CPU pools can also limit how many batches run at once:
 ```bash
 xyzpy-auto-grow --num-workers 8 --gpus 0,0,1,1
 xyzpy-auto-grow --num-workers 8 --affinities 0,1,2,3
+# in both cases here num_workers is effectively 4
 ```
 
 Each GPU ID or CPU affinity is one worker slot. Repeat a GPU ID to let more
 than one worker use that device. Batch output goes to
 `.xyz-NAME/logs/batch-ID.log` by default.
 
+
 ## Sow from a notebook
 
-Use [`sow`](#farming.sow) to write batches without growing or reaping them:
+A useful companion to the watcher is [`xyz.sow`](#farming.sow) or
+[`Harvester.sow`](#Harvester.sow). These take a function, desired set of
+`combos` and/or `cases` and a dataset name, parse out the missing cases only
+(by default), and create a uniquely named `Crop` in the current directory.
+One can thus interactively `sow` and watch progress in a notebook unblocked,
+while the `xyzpy-auto-grow` watcher generates results in a terminal for
+example.
 
 ```python
 import xyzpy as xyz
@@ -69,69 +78,76 @@ for crop in (crop_a, crop_b):
 ```
 
 :::{note}
-The watcher grows batches. It does not call
-[`Crop.reap`](#Crop.reap) or change a dataset.
+The watcher just grows batches. It does not call [`Crop.reap`](#Crop.reap) or
+update any datasets.
 :::
 
 Use [`Harvester.sow`](#Harvester.sow) with `combos=...` or `cases=...` when
 you already have a [`Harvester`](#farming.Harvester). It parses combos and
 cases like [`cultivate`](#farming.cultivate). A value of `...` uses the current
-values of that coordinate. With `missing_only=True`, it skips cases that are
-already in the dataset. It does not check other pending Crops.
+values of that coordinate. With the default `missing_only=True`, it skips cases
+that are already in the dataset (but it does not check other pending Crops
+yet, and only takes affect on first sow).
 
-A new request returns `None` when all its cases are already in the dataset.
-A matching Crop is returned even when it has no missing work.
-`missing_only=False` only affects a new Crop. Give a new `name` to submit the
-same request again.
+If you call `sow` with equivalent function, combos, cases, and dataset name, it
+returns the same `Crop` as before, or `None` if all cases are already present
+in the dataset. You can use an explicit `name=` to create a separate Crop with
+identical work if necessary.
 
 Use [`Crop.reap`](#Crop.reap) with `overwrite=True` to replace conflicting
 values in the dataset. A failed reap keeps the Crop, so you can retry it.
 
+
 ## Crop names and reuse
 
-The default crop name contains the function name and a stable request key. The
-key includes the complete coordinate request and the absolute dataset path. It
-is made before missing cases are removed. Input order does not affect it.
-Constants used as output coordinates do affect it. Moving the dataset to a new
-absolute path changes the key.
+The default crop name contains the function name and a stable 'request key'
+identifying the set of results being generated. The key includes the complete
+coordinate request and the absolute dataset path. It is made before missing
+cases are removed. Input order does not affect it. Constants used as
+*output coordinates* do affect it. Moving the dataset to a new absolute path
+also changes the key.
 
-The key does not include function source, non-coordinate constants, resources,
-attributes, batch settings, or shuffle settings. When a matching crop exists,
-the current function replaces its saved function. Supplied constants update
-batches without results when their values change. Unchanged constants leave
-batch files untouched and held failures remain held. Omitted constants keep
-their saved values. Completed batch files and results stay unchanged, as do
-batch order and saved Harvester settings. Running batches that already loaded
-their inputs can use the old values.
+Everthing else - function source, non-coordinate constants, resources,
+attributes, batch settings, and shuffle settings - do not affect the key and
+should be modified with care when reusing the same Crop. If you do resow, only
+the function will updated on disk, and any new `constants` will also be written
+into *remaining* batches. **Completed results are untouched**. Any result files
+also keep completed batches out of the `xyzpy-auto-grow` queue.
 
-Shared dataset attributes reflect the latest constants, even when some results
-were computed with earlier values. Existing result files keep completed
-batches out of the grower queue.
+```{hint}
+Re-sowing is useful if you make some optimization or bug fix to the function,
+and simply want missing results to be generated with this new implementation.
+```
+```{note}
+*Other notes:*
 
-An explicit name cannot refer to a different coordinate request. Old crops
-without a request key are not reused. Incomplete crops are not overwritten.
-Remove an incomplete crop directory or use a new name.
+- An explicit `name` cannot refer to a *different* coordinate request.
+- Old-style crops without a 'request key' are not reused.
+- Incomplete crops are never overwritten.
+- Remove an incomplete crop directory or use a new `name`.
+- New Crops are prepared in a hidden temporary directory so a failed
+  preparation leaves the final name free for another attempt. The watcher only
+  sees the Crop after all batch files and metadata are ready. At which point,
+  [`Crop.is_prepared`](#Crop.is_prepared) returns `True`.
+```
 
-New Crops are prepared in a hidden temporary directory. A failed preparation
-leaves the final name free for another attempt. The watcher only sees the Crop
-after all batch files and metadata are ready. At this point,
-[`Crop.is_prepared`](#Crop.is_prepared) returns `True`.
 
 ## Dataset state
 
-For a disk-backed [`Harvester`](#farming.Harvester), the file on disk is the
-source of truth. Accessing [`Harvester.full_ds`](#Harvester.full_ds) reloads it
-after its file or Zarr store changes. A reload discards unsaved in-memory
-edits. Normal harvest operations save their changes. Calling
+Note for a disk-backed [`Harvester`](#farming.Harvester), the file on disk is
+the source of truth. Accessing [`Harvester.full_ds`](#Harvester.full_ds)
+reloads it after its file or Zarr store changes. A reload discards unsaved
+in-memory edits. Normal harvest operations save their changes. Calling
 [`Harvester.add_ds`](#Harvester.add_ds) with `sync=False` makes a temporary
 in-memory change.
 
 A reused in-memory Crop adds results to the Harvester that called
-[`Harvester.sow`](#Harvester.sow). It still uses the output metadata saved
-with the Crop.
+[`Harvester.sow`](#Harvester.sow). I.e. it always uses the initial output
+metadata saved with the Crop.
 
 Use [`Crop.reap`](#Crop.reap) with `allow_incomplete=True` to add available
 results and keep the Crop for its remaining batches.
+
 
 ## Change settings while running
 
@@ -141,8 +157,8 @@ or remove it while the watcher runs.
 
 ```toml
 num_workers = 8
-num_threads = 4
-gpus = [0, 0, 1, 1]
+num_threads = 8
+gpus = [0, 0, 1, 1, 2, 2, 3, 3]
 log = true
 ```
 
@@ -160,7 +176,8 @@ When you enable a GPU or affinity pool, the watcher first waits for active
 batches without that assignment to finish.
 :::
 
-An invalid file is reported. The last valid settings remain active.
+An invalid file is reported and last *valid settings* remain active.
+
 
 ## Progress, failures, and stopping
 
