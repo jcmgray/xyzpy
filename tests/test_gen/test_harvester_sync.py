@@ -38,6 +38,7 @@ class TestHarvesterSync:
 
     def test_delete_ds_expands_home(self, tmp_path, monkeypatch):
         monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.setenv("USERPROFILE", str(tmp_path))
         h = xyz.Harvester(xyz.Runner(twice, "value"), "~/data")
         h.harvest_combos({"x": [1]}, verbosity=0)
         path = tmp_path / "data.h5"
