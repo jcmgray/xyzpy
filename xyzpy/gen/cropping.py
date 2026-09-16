@@ -929,7 +929,7 @@ class Crop:
             Batches to grow. The default is all missing batches.
         subprocess : "auto" or bool, optional
             Use a new process for each batch. ``"auto"`` does this when
-            ``num_threads``, ``gpus``, or ``affinities`` is set. See
+            ``num_threads``, ``gpus``, ``affinities`` or ``log`` is set. See
             :meth:`Crop.grow_subprocess`.
         num_workers : int, optional
             Maximum number of batches to run at once. Child-process mode uses
@@ -959,7 +959,9 @@ class Crop:
         verbosity_grow : int, optional
             Output level inside each batch.
         log : bool, optional
-            Save child-process output to log files.
+            Save child-process output to log files. With ``"auto"``, this
+            enables child-process mode. It cannot be used with
+            ``subprocess=False``.
         desc : str, optional
             Progress label.
         **combo_runner_opts
@@ -976,6 +978,7 @@ class Crop:
                 num_threads is not None
                 or gpus is not None
                 or affinities is not None
+                or bool(log)
             )
 
         if subprocess:
@@ -994,12 +997,13 @@ class Crop:
         else:
             process_options = [
                 name
-                for name, val in (
-                    ("num_threads", num_threads),
-                    ("gpus", gpus),
-                    ("affinities", affinities),
+                for name, given in (
+                    ("num_threads", num_threads is not None),
+                    ("gpus", gpus is not None),
+                    ("affinities", affinities is not None),
+                    ("log", bool(log)),
                 )
-                if val is not None
+                if given
             ]
             if process_options:
                 raise ValueError(

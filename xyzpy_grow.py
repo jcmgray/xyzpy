@@ -41,6 +41,12 @@ def parse_bool_flag(value: str | None = None) -> bool:
         raise argparse.ArgumentTypeError(f"Invalid boolean value {value}.")
 
 
+def parse_auto_bool_flag(value: str | None = None) -> bool | str:
+    if value is not None and value.lower() == "auto":
+        return "auto"
+    return parse_bool_flag(value)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Grow crops using xyzpy-gen-cropping."
@@ -87,12 +93,13 @@ def main():
         "--subprocess",
         nargs="?",
         const=True,
-        default=False,
-        type=parse_bool_flag,
+        default="auto",
+        type=parse_auto_bool_flag,
         help=(
             "Run each batch in its own fresh subprocess. This is most robust "
             "in terms of memory, at the cost of the process startup overhead. "
-            "Optional value: true/false."
+            "Optional value: true/false/auto, default auto, which turns it on "
+            "if any of --gpus, --affinities or --log are given."
         ),
     )
     parser.add_argument(
@@ -103,8 +110,8 @@ def main():
         type=parse_bool_flag,
         help=(
             "Save subprocess stdout and stderr to log files in the crop "
-            "directory under logs/batch-{batch_id}.log. Only used when "
-            "--subprocess is enabled."
+            "directory under logs/batch-{batch_id}.log. This implies "
+            "--subprocess."
         ),
     )
     parser.add_argument(
@@ -112,12 +119,12 @@ def main():
         type=str,
         default=None,
         help=(
-            "If subprocess is enabled, this is an optional comma separated "
-            "list of GPU device IDs to assign to subprocesses via "
-            "CUDA_VISIBLE_DEVICES. Each subprocess gets a single GPU from this"
-            " pool; the pool also limits concurrency. You can oversubscribe "
-            "GPUs by repeating device IDs, e.g. `0,0,1,1` to allow 2 "
-            "subprocesses to share each GPU."
+            "An optional comma separated list of GPU device IDs to assign to "
+            "subprocesses via CUDA_VISIBLE_DEVICES. Each subprocess gets a "
+            "single GPU from this pool; the pool also limits concurrency. You "
+            "can oversubscribe GPUs by repeating device IDs, e.g. `0,0,1,1` "
+            "to allow 2 subprocesses to share each GPU. This implies "
+            "--subprocess."
         ),
     )
     parser.add_argument(
@@ -125,10 +132,10 @@ def main():
         type=str,
         default=None,
         help=(
-            "If subprocess is enabled, this is an optional comma separated "
-            "list of affinities to use, one for each process. This ensures a "
-            "single cpu core is used for each batch, regardless of other "
-            "environment variables."
+            "An optional comma separated list of affinities to use, one for "
+            "each process. This ensures a single cpu core is used for each "
+            "batch, regardless of other environment variables. This implies "
+            "--subprocess."
         ),
     )
     parser.add_argument(
@@ -163,6 +170,35 @@ def main():
     )
     args = parser.parse_args()
 
+    # options for child processes only
+    #     (n.b. not num_threads, which can be applied in this parent)
+    child_only = [
+        name
+        for name, given in (
+            ("--gpus", args.gpus is not None),
+            ("--affinities", args.affinities is not None),
+            ("--log", args.log),
+        )
+        if given
+    ]
+
+    if args.subprocess == "auto":
+        subprocess = bool(child_only)
+    else:
+        subprocess = args.subprocess
+        if not subprocess and child_only:
+            parser.error(
+                f"{', '.join(child_only)} can only be used with --subprocess."
+            )
+
+    if args.ray and subprocess:
+        if args.subprocess == "auto":
+            parser.error(
+                f"--ray cannot be used with {', '.join(child_only)}, "
+                "which imply subprocess mode."
+            )
+        parser.error("--ray cannot be used with --subprocess.")
+
     parent_dir = Path(args.parent_dir).expanduser().resolve()
 
     # common thread control environment variables -- must be set before any
@@ -180,13 +216,13 @@ def main():
 
     grow_kwargs = {
         "num_workers": args.num_workers,
-        "subprocess": args.subprocess,
+        "subprocess": subprocess,
         "raise_errors": args.raise_errors,
         "verbosity": args.verbosity,
         "verbosity_grow": args.verbosity_grow,
     }
 
-    if args.subprocess:
+    if subprocess:
         # this calls `xyzpy-grow` itself and we want to match env vars above
         grow_kwargs["num_threads"] = args.num_threads
         grow_kwargs["affinities"] = args.affinities
@@ -194,11 +230,6 @@ def main():
         grow_kwargs["log"] = args.log
 
     if args.ray:
-        if args.subprocess:
-            raise xyzpy.utils.XYZError(
-                "Cannot use subprocess mode with ray executor."
-            )
-
         if args.gpus_per_task is None:
             grow_kwargs["executor"] = xyzpy.RayExecutor(
                 num_cpus=args.num_workers,

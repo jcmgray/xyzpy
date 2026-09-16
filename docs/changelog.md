@@ -15,6 +15,7 @@ Release notes for `xyzpy`.
 - Stop saving cached datasets into crop settings files.
 - Make {meth}`~xyzpy.gen.cropping.Crop.is_prepared` require a saved function.
 - Require Python 3.11 or newer.
+- `xyzpy-grow`: `--subprocess` now defaults to `auto`, which turns subprocess mode on if any of `--gpus`, `--affinities` or `--log` are given, and errors if they are given alongside `--subprocess false`. `--num-threads` is not a trigger, since the CLI applies it to its own process. {meth}`~xyzpy.gen.cropping.Crop.grow` likewise now treats `log` as a trigger for `subprocess="auto"`.
 
 - {func}`~xyzpy.infiniplot`: the `hues`, `colors`, `markers`, `linestyles`, `markersizes`, `linewidths` and `markeredgecolors` options now also accept a dict, mapping only the given coordinate values, with every other value keeping its default style.
 - {func}`~xyzpy.benchmark`: add `torch_cuda_sync=True` for accurately timing asynchronous PyTorch CUDA work by synchronizing the current device at each timing boundary.

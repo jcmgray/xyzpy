@@ -190,6 +190,9 @@ class _SubprocessRunner:
             str(task.batch_id),
             "--num-threads",
             str(self.num_threads),
+            # the child grows its single batch here, in itself
+            "--subprocess",
+            "false",
             "--verbosity",
             "0",
             "--verbosity-grow",
