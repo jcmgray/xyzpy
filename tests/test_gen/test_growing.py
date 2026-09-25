@@ -1,3 +1,7 @@
+import shutil
+import signal
+import subprocess
+import sys
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -5,9 +9,57 @@ import pytest
 
 import xyzpy as xyz
 from xyzpy.gen import growing
-from xyzpy.gen.growing import _SubprocessRunner
+from xyzpy.gen.growing import _parse_memory, _SubprocessRunner
 
 from ..test_auto_grow import add_one
+
+
+def allocate(nbytes):
+    # use nonzero bytes, so the memory is really used
+    return len(b"x" * nbytes)
+
+
+def can_limit_memory():
+    if sys.platform != "linux" or shutil.which("systemd-run") is None:
+        return False
+    probe = subprocess.run(
+        [
+            "systemd-run",
+            "--user",
+            "--scope",
+            "--quiet",
+            "--collect",
+            "-p",
+            "MemoryMax=100M",
+            "true",
+        ],
+        capture_output=True,
+    )
+    return probe.returncode == 0
+
+
+class TestParseMemory:
+    @pytest.mark.parametrize(
+        "raw, expected",
+        [
+            (None, None),
+            (1000, 1000),
+            ("1000", 1000),
+            ("4k", 4 * 1024),
+            ("512M", 512 * 1024**2),
+            ("512mb", 512 * 1024**2),
+            ("100G", 100 * 1024**3),
+            ("100 GiB", 100 * 1024**3),
+            ("1.5t", int(1.5 * 1024**4)),
+        ],
+    )
+    def test_valid(self, raw, expected):
+        assert _parse_memory(raw) == expected
+
+    @pytest.mark.parametrize("raw", ["lots", "100X", "G", "0", -1, True])
+    def test_invalid(self, raw):
+        with pytest.raises(ValueError):
+            _parse_memory(raw)
 
 
 class TestSubprocessRunnerResources:
@@ -20,6 +72,7 @@ class TestSubprocessRunnerResources:
             num_threads=4,
             gpus=[0, 1],
             affinities=None,
+            max_memory=None,
             log=True,
             verbosity_grow=1,
         )
@@ -42,6 +95,7 @@ class TestSubprocessRunnerResources:
             num_threads=1,
             gpus=[1],
             affinities=None,
+            max_memory=None,
             log=False,
             verbosity_grow=0,
         )
@@ -99,3 +153,57 @@ class TestSubprocessRunner:
             assert spawn.call_count == 1
         finally:
             runner.terminate()
+
+
+class TestSubprocessRunnerMemory:
+    def test_command_runs_in_memory_scope(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(growing.shutil, "which", lambda cmd: cmd)
+        spawn = Mock()
+        monkeypatch.setattr(growing, "Popen", spawn)
+        runner = _SubprocessRunner(max_memory="1G", affinities=[3])
+        runner.submit(growing._BatchTask("test", tmp_path, 1))
+        args = spawn.call_args.args[0]
+        runner.terminate()
+        assert args[:3] == ["systemd-run", "--user", "--scope"]
+        assert f"MemoryMax={1024**3}" in args
+        assert "MemorySwapMax=0" in args
+        split = args.index("--")
+        assert args[split + 1 : split + 4] == ["taskset", "-c", "3"]
+
+    def test_no_memory_limit_by_default(self, tmp_path, monkeypatch):
+        spawn = Mock()
+        monkeypatch.setattr(growing, "Popen", spawn)
+        runner = _SubprocessRunner()
+        runner.submit(growing._BatchTask("test", tmp_path, 1))
+        runner.terminate()
+        assert spawn.call_args.args[0][0] == sys.executable
+
+    def test_missing_systemd_run_is_rejected(self, monkeypatch):
+        monkeypatch.setattr(growing.shutil, "which", lambda cmd: None)
+        with pytest.raises(ValueError, match="systemd-run"):
+            _SubprocessRunner(max_memory="1G")
+
+    @pytest.mark.skipif(
+        sys.platform == "win32", reason="SIGKILL is not available on Windows"
+    )
+    def test_kill_reports_memory_limit(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(growing.shutil, "which", lambda cmd: cmd)
+        process = Mock()
+        process.poll.return_value = -signal.SIGKILL
+        monkeypatch.setattr(growing, "Popen", Mock(return_value=process))
+        runner = _SubprocessRunner(max_memory="1G")
+        runner.submit(growing._BatchTask("test", tmp_path, 1))
+        (completion,) = runner.poll()
+        assert not completion.success
+        assert "memory limit" in completion.message
+
+    @pytest.mark.skipif(
+        not can_limit_memory(), reason="needs systemd-run --user on Linux"
+    )
+    def test_batch_over_limit_is_killed(self, tmp_path):
+        crop = xyz.Crop(fn=allocate, parent_dir=tmp_path)
+        crop.sow_cases("nbytes", [1024, 2 * 1024**3], verbosity=0)
+        crop.grow(max_memory="500M", verbosity=0)
+        assert crop.load_result(1) == (1024,)
+        assert not crop.is_ready_to_reap()
+        assert crop.missing_results() == (2,)

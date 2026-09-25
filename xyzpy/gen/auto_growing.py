@@ -11,7 +11,12 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .cropping import BTCH_RE, FNCT_NM, INFO_NM, RSLT_RE
-from .growing import _BatchTask, _parse_resource_ids, _SubprocessRunner
+from .growing import (
+    _BatchTask,
+    _parse_memory,
+    _parse_resource_ids,
+    _SubprocessRunner,
+)
 
 
 def _file_stamp(path):
@@ -28,6 +33,7 @@ CONFIG_KEYS = {
     "num_threads",
     "gpus",
     "affinities",
+    "max_memory",
     "raise_errors",
     "log",
     "min_wait",
@@ -98,6 +104,9 @@ def _validate_settings(settings):
         except (TypeError, ValueError) as exc:
             raise ValueError(f"{name} must contain integer IDs.") from exc
         validated[name] = value or None
+
+    # check only, keep the value as given so the display shows e.g. '100G'
+    _parse_memory(validated["max_memory"])
 
     if not isinstance(validated["desc"], str):
         raise TypeError("desc must be a string.")
@@ -222,6 +231,7 @@ class AutoGrower:
             num_threads=self.settings["num_threads"],
             gpus=self.settings["gpus"],
             affinities=self.settings["affinities"],
+            max_memory=self.settings["max_memory"],
             log=self.settings["log"],
             verbosity_grow=self.settings["verbosity_grow"],
             append_logs=True,
@@ -261,6 +271,7 @@ class AutoGrower:
             num_threads=settings["num_threads"],
             gpus=settings["gpus"],
             affinities=settings["affinities"],
+            max_memory=settings["max_memory"],
             log=settings["log"],
             verbosity_grow=settings["verbosity_grow"],
         )
@@ -425,7 +436,8 @@ class AutoGrower:
             (
                 f"workers={self.settings['num_workers']} "
                 f"threads={self.settings['num_threads']} "
-                f"gpus={gpu_text} affinities={affinity_text}"
+                f"gpus={gpu_text} affinities={affinity_text} "
+                f"max_memory={self.settings['max_memory'] or 'any'}"
             ),
             "",
             "crop                     done  queued  running  failed",
@@ -540,6 +552,7 @@ def build_parser():
     parser.add_argument("--num-threads", type=int, default=1)
     parser.add_argument("--gpus", default=None)
     parser.add_argument("--affinities", default=None)
+    parser.add_argument("--max-memory", default=None)
     parser.add_argument(
         "--raise-errors",
         nargs="?",

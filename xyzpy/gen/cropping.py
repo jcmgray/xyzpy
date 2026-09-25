@@ -787,6 +787,7 @@ class Crop:
         num_threads=None,
         gpus=None,
         affinities=None,
+        max_memory=None,
         raise_errors=False,
         log=False,
         min_wait=1e-6,
@@ -797,9 +798,9 @@ class Crop:
     ):
         """Grow each selected batch in a new process.
 
-        A new process applies thread, GPU, and CPU settings before numeric
-        libraries load. It also isolates batch memory. Process startup adds
-        overhead.
+        A new process applies thread, GPU, CPU and memory settings before
+        numeric libraries load. It also isolates batch memory. Process startup
+        adds overhead.
 
         Parameters
         ----------
@@ -816,6 +817,12 @@ class Crop:
         affinities : int, str, or sequence of int, optional
             CPU core IDs for ``taskset``. Each process gets one entry. The pool
             also limits concurrency.
+        max_memory : int or str, optional
+            Memory limit for each process. This should be a number of bytes or
+            a size such as ``"100G"`` or ``"512MB"``. Units are powers of 1024.
+            Each process runs in its own cgroup via ``systemd-run --user
+            --scope``, with no swap. The kernel kills it if it goes over the
+            limit. Linux only.
         raise_errors : bool, optional
             Stop new batches and raise after active batches finish.
         log : bool, optional
@@ -850,6 +857,7 @@ class Crop:
             num_threads=num_threads,
             gpus=gpus,
             affinities=affinities,
+            max_memory=max_memory,
             log=log,
             verbosity_grow=verbosity_grow,
             raise_errors=raise_errors,
@@ -913,6 +921,7 @@ class Crop:
         num_threads=None,
         gpus=None,
         affinities=None,
+        max_memory=None,
         raise_errors=False,
         debugging=False,
         verbosity=1,
@@ -929,8 +938,8 @@ class Crop:
             Batches to grow. The default is all missing batches.
         subprocess : "auto" or bool, optional
             Use a new process for each batch. ``"auto"`` does this when
-            ``num_threads``, ``gpus``, ``affinities`` or ``log`` is set. See
-            :meth:`Crop.grow_subprocess`.
+            ``num_threads``, ``gpus``, ``affinities``, ``max_memory`` or
+            ``log`` is set. See :meth:`Crop.grow_subprocess`.
         num_workers : int, optional
             Maximum number of batches to run at once. Child-process mode uses
             1 by default. In-process mode passes this value to
@@ -948,6 +957,10 @@ class Crop:
         affinities : int, str, or sequence of int, optional
             CPU core IDs for ``taskset``. Each child process gets one entry.
             The pool also limits concurrency. With ``"auto"``, this enables
+            child-process mode. It cannot be used with ``subprocess=False``.
+        max_memory : int or str, optional
+            Memory limit for each child process, such as ``"100G"``. See
+            :meth:`Crop.grow_subprocess`. With ``"auto"``, this enables
             child-process mode. It cannot be used with ``subprocess=False``.
         raise_errors : bool, optional
             Raise after a batch fails.
@@ -978,6 +991,7 @@ class Crop:
                 num_threads is not None
                 or gpus is not None
                 or affinities is not None
+                or max_memory is not None
                 or bool(log)
             )
 
@@ -988,6 +1002,7 @@ class Crop:
                 num_threads=num_threads,
                 gpus=gpus,
                 affinities=affinities,
+                max_memory=max_memory,
                 raise_errors=raise_errors,
                 verbosity=verbosity,
                 verbosity_grow=verbosity_grow,
@@ -1001,6 +1016,7 @@ class Crop:
                     ("num_threads", num_threads is not None),
                     ("gpus", gpus is not None),
                     ("affinities", affinities is not None),
+                    ("max_memory", max_memory is not None),
                     ("log", bool(log)),
                 )
                 if given

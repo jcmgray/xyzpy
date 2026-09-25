@@ -40,7 +40,12 @@ class TestSubprocessAuto:
 
     @pytest.mark.parametrize(
         "options",
-        [["--gpus", "0"], ["--affinities", "0"], ["--log"]],
+        [
+            ["--gpus", "0"],
+            ["--affinities", "0"],
+            ["--max-memory", "1G"],
+            ["--log"],
+        ],
     )
     def test_child_only_options_imply_subprocess(
         self, tmp_path, monkeypatch, options
@@ -58,6 +63,7 @@ class TestSubprocessAuto:
         grow_kwargs = run_cli(["--subprocess"], tmp_path, monkeypatch)
         assert grow_kwargs["subprocess"] is True
         assert grow_kwargs["gpus"] is None
+        assert grow_kwargs["max_memory"] is None
 
     def test_explicitly_disabled(self, tmp_path, monkeypatch):
         grow_kwargs = run_cli(

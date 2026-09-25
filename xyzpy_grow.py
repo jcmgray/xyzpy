@@ -99,7 +99,7 @@ def main():
             "Run each batch in its own fresh subprocess. This is most robust "
             "in terms of memory, at the cost of the process startup overhead. "
             "Optional value: true/false/auto, default auto, which turns it on "
-            "if any of --gpus, --affinities or --log are given."
+            "if any of --gpus, --affinities, --max-memory or --log are given."
         ),
     )
     parser.add_argument(
@@ -135,6 +135,18 @@ def main():
             "An optional comma separated list of affinities to use, one for "
             "each process. This ensures a single cpu core is used for each "
             "batch, regardless of other environment variables. This implies "
+            "--subprocess."
+        ),
+    )
+    parser.add_argument(
+        "--max-memory",
+        type=str,
+        default=None,
+        help=(
+            "An optional memory limit for each batch, e.g. `100G` or `512MB`. "
+            "Units are powers of 1024. Each subprocess runs in its own cgroup "
+            "via `systemd-run --user --scope`, with no swap. The kernel kills "
+            "it if it goes over the limit. Linux only. This implies "
             "--subprocess."
         ),
     )
@@ -177,6 +189,7 @@ def main():
         for name, given in (
             ("--gpus", args.gpus is not None),
             ("--affinities", args.affinities is not None),
+            ("--max-memory", args.max_memory is not None),
             ("--log", args.log),
         )
         if given
@@ -227,6 +240,7 @@ def main():
         grow_kwargs["num_threads"] = args.num_threads
         grow_kwargs["affinities"] = args.affinities
         grow_kwargs["gpus"] = args.gpus
+        grow_kwargs["max_memory"] = args.max_memory
         grow_kwargs["log"] = args.log
 
     if args.ray:

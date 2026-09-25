@@ -1,7 +1,9 @@
 """Start and monitor crop batch processes."""
 
 import os
+import re
 import shutil
+import signal
 import sys
 import tempfile
 import time
@@ -30,6 +32,47 @@ def _parse_resource_ids(raw):
             return []
         raw = raw.split(",")
     return list(map(int, raw))
+
+
+_MEMORY_RE = re.compile(r"([0-9]*\.?[0-9]+)\s*([kmgt]?)(?:i?b)?")
+
+
+def _parse_memory(raw):
+    """Parse a memory size such as ``"100G"`` or ``"512mb"`` as bytes.
+
+    Units are powers of 1024, as for systemd. A plain number is bytes.
+    """
+    if raw is None:
+        return None
+    if isinstance(raw, bool):
+        raise ValueError("max_memory must be a size such as '100G'.")
+    if isinstance(raw, int):
+        nbytes = raw
+    else:
+        match = _MEMORY_RE.fullmatch(str(raw).strip().lower())
+        if match is None:
+            raise ValueError(f"Invalid memory size {raw!r}, use e.g. '100G'.")
+        number, unit = match.groups()
+        nbytes = int(float(number) * 1024 ** "_kmgt".index(unit or "_"))
+    if nbytes <= 0:
+        raise ValueError("max_memory must be greater than zero.")
+    return nbytes
+
+
+def _acquire_memory(max_memory, args):
+    """Add the command that runs the process in its own memory cgroup."""
+    args[0:0] = [
+        "systemd-run",
+        "--user",
+        "--scope",
+        "--quiet",
+        "--collect",
+        "-p",
+        f"MemoryMax={max_memory}",
+        "-p",
+        "MemorySwapMax=0",
+        "--",
+    ]
 
 
 def _acquire_affinity(resource_id, args, env):
@@ -91,6 +134,7 @@ class _ActiveBatch:
     started: float
     gpu: int | None
     affinity: int | None
+    max_memory: int | None
 
 
 class _SubprocessRunner:
@@ -103,6 +147,7 @@ class _SubprocessRunner:
         num_threads=1,
         gpus=None,
         affinities=None,
+        max_memory=None,
         log=False,
         verbosity_grow=0,
         append_logs=False,
@@ -114,6 +159,7 @@ class _SubprocessRunner:
             num_threads=num_threads,
             gpus=gpus,
             affinities=affinities,
+            max_memory=max_memory,
             log=log,
             verbosity_grow=verbosity_grow,
         )
@@ -127,6 +173,7 @@ class _SubprocessRunner:
         num_threads,
         gpus,
         affinities,
+        max_memory,
         log,
         verbosity_grow,
     ):
@@ -137,6 +184,9 @@ class _SubprocessRunner:
         self.affinities = _parse_resource_ids(affinities)
         if self.affinities and shutil.which("taskset") is None:
             raise ValueError("CPU affinity needs the Linux `taskset` command.")
+        self.max_memory = _parse_memory(max_memory)
+        if self.max_memory and shutil.which("systemd-run") is None:
+            raise ValueError("A memory limit needs the `systemd-run` command.")
         self.log = log
         self.verbosity_grow = verbosity_grow
 
@@ -207,6 +257,8 @@ class _SubprocessRunner:
             _acquire_gpu(gpu, args, env)
         if affinity is not None:
             _acquire_affinity(affinity, args, env)
+        if self.max_memory is not None:
+            _acquire_memory(self.max_memory, args)
 
         if self.log:
             task.log_file.parent.mkdir(exist_ok=True)
@@ -247,6 +299,7 @@ class _SubprocessRunner:
             started=time.monotonic(),
             gpu=gpu,
             affinity=affinity,
+            max_memory=self.max_memory,
         )
 
     def poll(self):
@@ -267,7 +320,13 @@ class _SubprocessRunner:
 
             result_exists = active.task.result_file.is_file()
             success = returncode == 0 and result_exists
-            if returncode != 0:
+            # n.b. check max_memory first, SIGKILL is missing on windows
+            if active.max_memory is not None and returncode == -signal.SIGKILL:
+                message = (
+                    "process was killed, probably for going over the memory "
+                    f"limit of {active.max_memory} bytes"
+                )
+            elif returncode != 0:
                 message = f"process exited with status {returncode}"
             elif not result_exists:
                 message = "process exited without writing a result"

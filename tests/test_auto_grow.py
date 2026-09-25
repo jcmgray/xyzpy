@@ -27,6 +27,7 @@ def make_settings(**overrides):
         "num_threads": 1,
         "gpus": None,
         "affinities": None,
+        "max_memory": None,
         "raise_errors": False,
         "log": True,
         "min_wait": 0.001,
@@ -77,6 +78,22 @@ class TestConfigFile:
             assert changed
             assert settings is None
             assert "num_workers" in error
+
+    def test_max_memory_is_checked_and_kept_as_given(self):
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "config.toml"
+            config = ConfigFile(path, make_settings())
+            config.read()
+
+            path.write_text('max_memory = "100G"\n')
+            changed, settings, error = config.read()
+            assert error is None
+            assert settings["max_memory"] == "100G"
+
+            path.write_text('max_memory = "a lot"\n')
+            changed, settings, error = config.read()
+            assert settings is None
+            assert "memory" in error
 
 
 class TestDirectoryLock:

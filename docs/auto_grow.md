@@ -33,6 +33,16 @@ Each GPU ID or CPU affinity is one worker slot. Repeat a GPU ID to let more
 than one worker use that device. Batch output goes to
 `.xyz-NAME/logs/batch-ID.log` by default.
 
+On Linux you can also limit the memory of each batch:
+
+```bash
+xyzpy-auto-grow --num-workers 8 --max-memory 100G
+```
+
+Each batch then runs in its own cgroup via `systemd-run --user --scope`, with
+no swap. If a batch goes over the limit, the kernel kills it and the watcher
+records it as failed. Units are powers of 1024.
+
 
 ## Sow from a notebook
 
@@ -163,7 +173,7 @@ log = true
 ```
 
 The file accepts these keys: `num_workers`, `num_threads`, `gpus`,
-`affinities`, `raise_errors`, `log`, `min_wait`, `max_wait`,
+`affinities`, `max_memory`, `raise_errors`, `log`, `min_wait`, `max_wait`,
 `verbosity`, `verbosity_grow`, `scan_interval`, `refresh_interval`, and
 `desc`.
 
