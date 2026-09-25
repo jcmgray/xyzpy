@@ -341,8 +341,36 @@ class TestHeatmap:
         with raises(ValueError, match="phinot"):
             dataset_5d.xyz.plot("x", "y", "c", col="phinot")
 
+    def test_fused_y(self, dataset_5d):
+        _fig, axs = dataset_5d.xyz.plot("x", ["phi", "A"], "c", aggregate=True)
+        ax = axs[0, 0]
+        assert ax.get_ylabel() == "phi, A"
+        (mesh,) = ax.collections
+        assert mesh.get_array().shape[:2] == (6, 11)
+        labels = {t.get_text() for t in ax.get_yticklabels()}
+        assert "0.5, 2" in labels
+
+    def test_fused_x_and_y(self, dataset_5d):
+        _fig, axs = dataset_5d.xyz.plot(("y", "A"), ["phi", "x"], "c")
+        (mesh,) = axs[0, 0].collections
+        assert mesh.get_array().shape[:2] == (33, 42)
+
+    def test_bad_fused_y_raises(self, dataset_5d):
+        with raises(ValueError, match="phinot"):
+            dataset_5d.xyz.plot("x", ["phinot", "A"], "c")
+
 
 class TestPlot:
+    def test_fused_x(self, dataset_5d):
+        _fig, axs = dataset_5d.xyz.plot(
+            ["y", "A"], "c", color="phi", aggregate=True
+        )
+        ax = axs[0, 0]
+        assert ax.get_xlabel() == "y, A"
+        assert ax.lines[0].get_xdata().tolist() == list(range(42))
+        labels = {t.get_text() for t in ax.get_xticklabels()}
+        assert "20.0, 1" in labels
+
     def test_y_data(self):
         ys = np.arange(5)
         _, axs = xyz.plot(ys, show_and_close=False)

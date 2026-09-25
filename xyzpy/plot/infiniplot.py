@@ -365,10 +365,12 @@ class Infiniplotter:
         **kwargs,
     ):
         import numpy as np
+        import pandas as pd
         from matplotlib import pyplot as plt
 
-        self.x = x
-        self.y = y
+        # dimension groups must be hashable for dataset lookups
+        self.x = tuple(x) if isinstance(x, list) else x
+        self.y = tuple(y) if isinstance(y, list) else y
         self.z = z
 
         self.is_histogram = self.y is None
@@ -446,10 +448,7 @@ class Infiniplotter:
         # the 'range' of each mapped dimension (e.g. marker or color)
         self.output_values = {}
         # how to label each mapped dimension
-        self.labels = {
-            self.x: self.x if self.xlabel is None else self.xlabel,
-            self.y: self.y if self.ylabel is None else self.ylabel,
-        }
+        self.labels = {}
         # how to name each point within each mapped dimension
         self.ticklabels = {}
 
@@ -494,6 +493,24 @@ class Infiniplotter:
         if self.z in ds.data_vars:
             possible_dims.update(ds[self.z].dims)
         self.ds = ds.drop_dims([k for k in ds.dims if k not in possible_dims])
+
+        self.x = self.fuse_dims("x", self.x)
+        if self.is_heatmap:
+            self.y = self.fuse_dims("y", self.y)
+        self.labels[self.x] = self.x if self.xlabel is None else self.xlabel
+        self.labels[self.y] = self.y if self.ylabel is None else self.ylabel
+
+        # use integer positions and value labels for fused dimensions
+        self.axis_ticklabels = {}
+        for name in ("x", "y"):
+            dim = getattr(self, name)
+            index = self.ds.indexes.get(dim)
+            if isinstance(index, pd.MultiIndex):
+                self.axis_ticklabels[name] = [
+                    ", ".join(map(str, v)) for v in index
+                ]
+                self.ds = self.ds.drop_vars([dim, *index.names])
+                self.ds = self.ds.assign_coords({dim: np.arange(len(index))})
 
         self.mapped = set()
 
@@ -775,37 +792,43 @@ class Infiniplotter:
         if (self.fig is not None) and (self.title is not None):
             self.fig.suptitle(self.title)
 
+    def fuse_dims(self, option_name, value):
+        """Combine a list or tuple of dimension names into one dimension.
+
+        Return the new dimension name. Return other values unchanged.
+        """
+        if isinstance(value, list):
+            value = tuple(value)
+
+        # other tuples can be fixed values such as RGB colors
+        if not (
+            isinstance(value, tuple)
+            and all(isinstance(item, str) for item in value)
+        ):
+            return value
+
+        fused_dim = ", ".join(value)
+        if fused_dim in self.ds.dims:
+            return fused_dim
+
+        missing_dims = [dim for dim in value if dim not in self.ds.dims]
+        if missing_dims:
+            raise ValueError(
+                f"Cannot combine {value} for `{option_name}`. "
+                f"Missing dimensions: {missing_dims}. Available dimensions: "
+                f"{sorted(self.ds.dims)}."
+            )
+
+        self.ds = self.ds.stack({fused_dim: value})
+        return fused_dim
+
     def init_mapped_dim(
         self,
         name,
         custom_values=None,
         default_values=None,
     ):
-        dim = getattr(self, name)
-
-        if isinstance(dim, list):
-            # make hashable
-            dim = tuple(dim)
-
-        # handle fused dimensions, only a tuple of strings can name dimensions,
-        # anything else is a constant property such as an (r, g, b) color
-        if isinstance(dim, tuple) and all(isinstance(x, str) for x in dim):
-            # fused named
-            new_dim = ", ".join(dim)
-            if new_dim in self.ds.dims:
-                # already fused -> nothing to do
-                dim = new_dim
-            elif all(x in self.ds.dims for x in dim):
-                # create a new fused dimension
-                self.ds = self.ds.stack({new_dim: dim})
-                dim = new_dim
-            else:
-                # fuse tuple[str] but not all are dims -> raise
-                missing = [x for x in dim if x not in self.ds.dims]
-                raise ValueError(
-                    f"Can't fuse {dim} for `{name}`: {missing} not in "
-                    f"dimensions {sorted(self.ds.dims)}."
-                )
+        dim = self.fuse_dims(name, getattr(self, name))
 
         if (dim is not None) and (dim not in self.ds.dims):
             if name in ("col", "row"):
@@ -1427,7 +1450,10 @@ class Infiniplotter:
         # perform axes level formatting
         from matplotlib.ticker import (
             AutoMinorLocator,
+            FuncFormatter,
             LogLocator,
+            MaxNLocator,
+            MultipleLocator,
             NullFormatter,
             ScalarFormatter,
             StrMethodFormatter,
@@ -1479,8 +1505,9 @@ class Infiniplotter:
             if self.yscale is not None:
                 ax.set_yscale(self.yscale)
 
-            for scale, base, ticks, ticklabels, axis in [
+            for axis_name, scale, base, ticks, ticklabels, axis in [
                 (
+                    "x",
                     self.xscale,
                     self.xbase,
                     self.xticks,
@@ -1488,6 +1515,7 @@ class Infiniplotter:
                     ax.xaxis,
                 ),
                 (
+                    "y",
                     self.yscale,
                     self.ybase,
                     self.yticks,
@@ -1495,7 +1523,22 @@ class Infiniplotter:
                     ax.yaxis,
                 ),
             ]:
-                if scale == "log":
+                if axis_name in self.axis_ticklabels:
+                    # label integer positions with the fused coordinate values
+                    labels = self.axis_ticklabels[axis_name]
+
+                    def format_fused_tick(value, _position, labels=labels):
+                        i = round(value)
+                        if (i != value) or not (0 <= i < len(labels)):
+                            return ""
+                        return labels[i]
+
+                    axis.set_major_locator(MaxNLocator(integer=True))
+                    axis.set_major_formatter(FuncFormatter(format_fused_tick))
+                    axis.set_minor_locator(MultipleLocator(1))
+                    if axis_name == "x":
+                        ax.tick_params(axis="x", labelrotation=90)
+                elif scale == "log":
                     axis.set_major_locator(LogLocator(base=base, numticks=6))
                     if base != 10:
                         if isinstance(base, int):
@@ -1579,14 +1622,16 @@ def infiniplot(
     ----------
     ds : xarray.Dataset
         Dataset to plot.
-    x : str
-        Name of the x coordinate.
-    y : str, optional
-        Name of the y coordinate. If not specified, histogram mode is activated
-        and the values of ``x`` are binned to produce a density or frequency to
-        use as the y-variable.
+    x : str or sequence of str
+        The x coordinate name. To combine dimensions, supply a sequence of
+        their names. The plot uses evenly spaced positions for the combined
+        values and shows them as tick labels.
+    y : str or sequence of str, optional
+        The y coordinate name. Omit it for histogram mode. The plot bins the
+        ``x`` values and uses their density or frequency on the y-axis. In
+        heatmap mode, supply a sequence of dimension names to combine them.
     z : str, optional
-        Name of the z coordinate. If specified this turns on the heatmap mode.
+        The z coordinate name. Supplying it enables heatmap mode.
     bins : int or array_like, optional
         If in histogram mode, specify either the number of bins to use or the
         bin edges. If not specified, a default number of bins is automatically
