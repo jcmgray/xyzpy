@@ -185,6 +185,33 @@ def to_colormap(c, **autohue_opts):
         return color_to_colormap(c, **autohue_opts)
 
 
+def set_log_ticks(axis, base):
+    """Set nice major and minor log ticks for ``axis`` in ``base``."""
+    from matplotlib.ticker import (
+        FuncFormatter,
+        LogLocator,
+        NullFormatter,
+        ScalarFormatter,
+    )
+
+    def format_log_tick(value, _position):
+        # whole numbers above 1, and fractions like 0.5 below
+        return f"{value:.0f}" if value >= 1 else f"{value:.3g}"
+
+    axis.set_major_locator(LogLocator(base=base, numticks=6))
+    if base != 10:
+        if isinstance(base, int):
+            axis.set_major_formatter(FuncFormatter(format_log_tick))
+        else:
+            axis.set_major_formatter(ScalarFormatter())
+    if base < 3:
+        subs = [1.5]
+    else:
+        subs = np.arange(2, base)
+    axis.set_minor_locator(LogLocator(base=base, subs=subs))
+    axis.set_minor_formatter(NullFormatter())
+
+
 def _make_bold(s):
     return r"$\bf{" + s.replace("_", r"\_") + r"}$"
 
@@ -315,6 +342,7 @@ INFINIPLOTTER_DEFAULTS = dict(
     zscale=None,
     xbase=10,
     ybase=10,
+    zbase=10,
     xticks=None,
     yticks=None,
     xticklabels=None,
@@ -1372,7 +1400,7 @@ class Infiniplotter:
             self.norm = mpl.colors.LogNorm(vmin=zmin, vmax=zmax)
         elif self.zscale == "symlog":
             self.norm = mpl.colors.SymLogNorm(
-                vmin=zmin, vmax=zmax, linthresh=1
+                vmin=zmin, vmax=zmax, linthresh=1, base=self.zbase
             )
         else:
             self.norm = mpl.colors.Normalize(vmin=zmin, vmax=zmax)
@@ -1442,6 +1470,8 @@ class Infiniplotter:
                     orientation="vertical",
                     label=_make_bold(self.z),
                 )
+                if self.zscale == "log":
+                    set_log_ticks(cax.yaxis, self.zbase)
 
     def do_axes_formatting(self):
         if (self.fig is None) and (not self.format_axs):
@@ -1451,12 +1481,8 @@ class Infiniplotter:
         from matplotlib.ticker import (
             AutoMinorLocator,
             FuncFormatter,
-            LogLocator,
             MaxNLocator,
             MultipleLocator,
-            NullFormatter,
-            ScalarFormatter,
-            StrMethodFormatter,
         )
 
         for (i, j), ax in np.ndenumerate(self.axs):
@@ -1539,20 +1565,7 @@ class Infiniplotter:
                     if axis_name == "x":
                         ax.tick_params(axis="x", labelrotation=90)
                 elif scale == "log":
-                    axis.set_major_locator(LogLocator(base=base, numticks=6))
-                    if base != 10:
-                        if isinstance(base, int):
-                            axis.set_major_formatter(
-                                StrMethodFormatter("{x:.0f}")
-                            )
-                        else:
-                            axis.set_major_formatter(ScalarFormatter())
-                    if base < 3:
-                        subs = [1.5]
-                    else:
-                        subs = np.arange(2, base)
-                    axis.set_minor_locator(LogLocator(base=base, subs=subs))
-                    axis.set_minor_formatter(NullFormatter())
+                    set_log_ticks(axis, base)
                 elif scale == "symlog":
                     # TODO: choose some nice defaults
                     pass
@@ -1859,6 +1872,9 @@ def infiniplot(
         If ``xscale=='log'``, the log base to use for the x-axis.
     ybase : float, optional
         If ``yscale=='log'``, the log base to use for the y-axis.
+    zbase : float, optional
+        If ``zscale`` is 'log' or 'symlog', the log base to use for the
+        heatmap colorbar.
     xticks : sequence[float], optional
         Manual sequence of x-values to use for ticks.
     yticks : sequence[float], optional

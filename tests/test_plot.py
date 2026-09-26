@@ -292,6 +292,21 @@ class TestHeatmap:
         assert text.get_text() == "origin"
         assert_allclose(actual, expected)
 
+    @mark.parametrize("zscale", ["log", "symlog"])
+    def test_zbase(self, zscale):
+        ds = xr.Dataset(
+            coords={"x": np.arange(4), "y": np.arange(3)},
+            data_vars={"c": (("x", "y"), 2.0 ** np.arange(12).reshape(4, 3))},
+        )
+        _fig, axs = ds.xyz.plot(
+            x="x", y="y", z="c", palette="viridis", zscale=zscale, zbase=2
+        )
+        (cax,) = axs[0, -1].child_axes
+        if zscale == "log":
+            assert cax.yaxis.get_major_locator()._base == 2
+        else:
+            assert cax.yaxis.get_transform().base == 2
+
     def test_unmapped_dims_warn(self, dataset_4d):
         with warns(UserWarning, match="aggregating over all unmapped"):
             dataset_4d.xyz.plot("x", "y", "c")
@@ -414,6 +429,21 @@ class TestPlot:
 
     def test_options(self):
         xyz.plot(np.arange(5), show_and_close=False, color="red", marker="o")
+
+    def test_log_base_tick_labels_below_one(self):
+        _, axs = xyz.plot(
+            2.0 ** np.arange(-4, 4),
+            yscale="log",
+            ybase=2,
+            show_and_close=False,
+        )
+        fmt = axs[0, 0].yaxis.get_major_formatter()
+        assert [fmt(v) for v in [0.125, 0.5, 1, 8]] == [
+            "0.125",
+            "0.5",
+            "1",
+            "8",
+        ]
 
 
 class TestStyleOverrides:
