@@ -1,7 +1,8 @@
-import shutil
+import os
 import signal
 import subprocess
 import sys
+import time
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -19,23 +20,8 @@ def allocate(nbytes):
     return len(b"x" * nbytes)
 
 
-def can_limit_memory():
-    if sys.platform != "linux" or shutil.which("systemd-run") is None:
-        return False
-    probe = subprocess.run(
-        [
-            "systemd-run",
-            "--user",
-            "--scope",
-            "--quiet",
-            "--collect",
-            "-p",
-            "MemoryMax=100M",
-            "true",
-        ],
-        capture_output=True,
-    )
-    return probe.returncode == 0
+def can_watch_memory():
+    return os.path.exists(f"/proc/self/task/{os.getpid()}/children")
 
 
 class TestParseMemory:
@@ -156,50 +142,78 @@ class TestSubprocessRunner:
 
 
 class TestSubprocessRunnerMemory:
-    def test_command_runs_in_memory_scope(self, tmp_path, monkeypatch):
+    def test_command_is_unchanged(self, tmp_path, monkeypatch):
         monkeypatch.setattr(growing.shutil, "which", lambda cmd: cmd)
+        monkeypatch.setattr(growing.os.path, "exists", lambda path: True)
         spawn = Mock()
         monkeypatch.setattr(growing, "Popen", spawn)
         runner = _SubprocessRunner(max_memory="1G", affinities=[3])
         runner.submit(growing._BatchTask("test", tmp_path, 1))
         args = spawn.call_args.args[0]
         runner.terminate()
-        assert args[:3] == ["systemd-run", "--user", "--scope"]
-        assert f"MemoryMax={1024**3}" in args
-        assert "MemorySwapMax=0" in args
-        split = args.index("--")
-        assert args[split + 1 : split + 4] == ["taskset", "-c", "3"]
+        assert args[:4] == ["taskset", "-c", "3", sys.executable]
 
-    def test_no_memory_limit_by_default(self, tmp_path, monkeypatch):
-        spawn = Mock()
-        monkeypatch.setattr(growing, "Popen", spawn)
-        runner = _SubprocessRunner()
-        runner.submit(growing._BatchTask("test", tmp_path, 1))
-        runner.terminate()
-        assert spawn.call_args.args[0][0] == sys.executable
-
-    def test_missing_systemd_run_is_rejected(self, monkeypatch):
-        monkeypatch.setattr(growing.shutil, "which", lambda cmd: None)
-        with pytest.raises(ValueError, match="systemd-run"):
+    def test_missing_proc_is_rejected(self, monkeypatch):
+        monkeypatch.setattr(growing.os.path, "exists", lambda path: False)
+        with pytest.raises(ValueError, match="Linux"):
             _SubprocessRunner(max_memory="1G")
 
-    @pytest.mark.skipif(
-        sys.platform == "win32", reason="SIGKILL is not available on Windows"
-    )
     def test_kill_reports_memory_limit(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(growing.shutil, "which", lambda cmd: cmd)
-        process = Mock()
-        process.poll.return_value = -signal.SIGKILL
+        monkeypatch.setattr(growing.os.path, "exists", lambda path: True)
+        monkeypatch.setattr(growing, "_process_tree", lambda pid: [pid])
+        monkeypatch.setattr(growing, "_memory_usage", lambda pids: 3 * 1024**3)
+        kill = Mock()
+        monkeypatch.setattr(growing.os, "kill", kill)
+        process = Mock(pid=123)
+        process.poll.return_value = -9
         monkeypatch.setattr(growing, "Popen", Mock(return_value=process))
         runner = _SubprocessRunner(max_memory="1G")
         runner.submit(growing._BatchTask("test", tmp_path, 1))
         (completion,) = runner.poll()
+        assert kill.call_args.args[0] == 123
         assert not completion.success
-        assert "memory limit" in completion.message
+        assert "3.0G, over the memory limit of 1.0G" in completion.message
 
-    @pytest.mark.skipif(
-        not can_limit_memory(), reason="needs systemd-run --user on Linux"
-    )
+    def test_under_limit_is_not_killed(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(growing.os.path, "exists", lambda path: True)
+        monkeypatch.setattr(growing, "_process_tree", lambda pid: [pid])
+        monkeypatch.setattr(growing, "_memory_usage", lambda pids: 1024)
+        kill = Mock()
+        monkeypatch.setattr(growing.os, "kill", kill)
+        process = Mock(pid=123)
+        process.poll.return_value = None
+        monkeypatch.setattr(growing, "Popen", Mock(return_value=process))
+        runner = _SubprocessRunner(max_memory="1G")
+        runner.submit(growing._BatchTask("test", tmp_path, 1))
+        completions = runner.poll()
+        runner.terminate()
+        assert completions == []
+        kill.assert_not_called()
+
+    @pytest.mark.skipif(not can_watch_memory(), reason="needs Linux /proc")
+    def test_process_tree_and_usage(self):
+        code = (
+            "import subprocess, sys, time; "
+            "subprocess.Popen([sys.executable, '-c', "
+            "'import time; time.sleep(30)']); "
+            "time.sleep(30)"
+        )
+        process = subprocess.Popen([sys.executable, "-c", code])
+        try:
+            for _ in range(100):
+                pids = growing._process_tree(process.pid)
+                if len(pids) == 2:
+                    break
+                time.sleep(0.05)
+            assert pids[0] == process.pid
+            assert len(pids) == 2
+            assert growing._memory_usage(pids) > 0
+        finally:
+            for pid in reversed(growing._process_tree(process.pid)):
+                os.kill(pid, signal.SIGKILL)
+            process.wait()
+
+    @pytest.mark.skipif(not can_watch_memory(), reason="needs Linux /proc")
     def test_batch_over_limit_is_killed(self, tmp_path):
         crop = xyz.Crop(fn=allocate, parent_dir=tmp_path)
         crop.sow_cases("nbytes", [1024, 2 * 1024**3], verbosity=0)

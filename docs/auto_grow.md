@@ -39,9 +39,10 @@ On Linux you can also limit the memory of each batch:
 xyzpy-auto-grow --num-workers 8 --max-memory 100G
 ```
 
-Each batch then runs in its own cgroup via `systemd-run --user --scope`, with
-no swap. If a batch goes over the limit, the kernel kills it and the watcher
-records it as failed. Units are powers of 1024.
+The watcher checks the resident memory of each batch process and its children
+at every poll. If a batch goes over the limit, the watcher kills it and records
+it as failed. Memory allocated quickly can overshoot the limit between checks.
+Units are powers of 1024.
 
 
 ## Sow from a notebook

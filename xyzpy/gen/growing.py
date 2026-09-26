@@ -40,7 +40,7 @@ _MEMORY_RE = re.compile(r"([0-9]*\.?[0-9]+)\s*([kmgt]?)(?:i?b)?")
 def _parse_memory(raw):
     """Parse a memory size such as ``"100G"`` or ``"512mb"`` as bytes.
 
-    Units are powers of 1024, as for systemd. A plain number is bytes.
+    Units are powers of 1024. A plain number is bytes.
     """
     if raw is None:
         return None
@@ -59,20 +59,42 @@ def _parse_memory(raw):
     return nbytes
 
 
-def _acquire_memory(max_memory, args):
-    """Add the command that runs the process in its own memory cgroup."""
-    args[0:0] = [
-        "systemd-run",
-        "--user",
-        "--scope",
-        "--quiet",
-        "--collect",
-        "-p",
-        f"MemoryMax={max_memory}",
-        "-p",
-        "MemorySwapMax=0",
-        "--",
-    ]
+def _format_memory(nbytes):
+    """Format a number of bytes with a unit, such as ``"1.5G"``."""
+    unit = ""
+    for next_unit in "KMGT":
+        if nbytes < 1024:
+            break
+        nbytes /= 1024
+        unit = next_unit
+    return f"{nbytes:.1f}{unit}"
+
+
+def _process_tree(pid):
+    """Return a process and all its descendants, read from Linux /proc."""
+    pids = [pid]
+    for parent in pids:
+        for children in Path(f"/proc/{parent}/task").glob("*/children"):
+            try:
+                pids.extend(map(int, children.read_text().split()))
+            except OSError:
+                # the thread or process has already exited
+                pass
+    return pids
+
+
+def _memory_usage(pids):
+    """Return the total resident memory of some processes, in bytes."""
+    # pages shared between processes are counted once for each
+    page_size = os.sysconf("SC_PAGE_SIZE")
+    nbytes = 0
+    for pid in pids:
+        try:
+            with open(f"/proc/{pid}/statm") as f:
+                nbytes += int(f.read().split()[1]) * page_size
+        except OSError:
+            pass
+    return nbytes
 
 
 def _acquire_affinity(resource_id, args, env):
@@ -135,6 +157,7 @@ class _ActiveBatch:
     gpu: int | None
     affinity: int | None
     max_memory: int | None
+    memory_used: int | None = None
 
 
 class _SubprocessRunner:
@@ -185,8 +208,12 @@ class _SubprocessRunner:
         if self.affinities and shutil.which("taskset") is None:
             raise ValueError("CPU affinity needs the Linux `taskset` command.")
         self.max_memory = _parse_memory(max_memory)
-        if self.max_memory and shutil.which("systemd-run") is None:
-            raise ValueError("A memory limit needs the `systemd-run` command.")
+        if self.max_memory and not os.path.exists(
+            f"/proc/self/task/{os.getpid()}/children"
+        ):
+            raise ValueError(
+                "A memory limit needs Linux, to read process memory from /proc."
+            )
         self.log = log
         self.verbosity_grow = verbosity_grow
 
@@ -257,8 +284,6 @@ class _SubprocessRunner:
             _acquire_gpu(gpu, args, env)
         if affinity is not None:
             _acquire_affinity(affinity, args, env)
-        if self.max_memory is not None:
-            _acquire_memory(self.max_memory, args)
 
         if self.log:
             task.log_file.parent.mkdir(exist_ok=True)
@@ -306,6 +331,17 @@ class _SubprocessRunner:
         """Return the batches that have finished."""
         completed = []
         for key, active in tuple(self.active.items()):
+            if active.max_memory is not None and active.memory_used is None:
+                pids = _process_tree(active.process.pid)
+                memory_used = _memory_usage(pids)
+                if memory_used > active.max_memory:
+                    active.memory_used = memory_used
+                    for pid in pids:
+                        try:
+                            os.kill(pid, signal.SIGKILL)
+                        except ProcessLookupError:
+                            pass
+
             returncode = active.process.poll()
             if returncode is None:
                 continue
@@ -320,11 +356,11 @@ class _SubprocessRunner:
 
             result_exists = active.task.result_file.is_file()
             success = returncode == 0 and result_exists
-            # n.b. check max_memory first, SIGKILL is missing on windows
-            if active.max_memory is not None and returncode == -signal.SIGKILL:
+            if active.memory_used is not None and not success:
                 message = (
-                    "process was killed, probably for going over the memory "
-                    f"limit of {active.max_memory} bytes"
+                    "process was killed for using "
+                    f"{_format_memory(active.memory_used)}, over the memory "
+                    f"limit of {_format_memory(active.max_memory)}"
                 )
             elif returncode != 0:
                 message = f"process exited with status {returncode}"

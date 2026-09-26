@@ -820,9 +820,10 @@ class Crop:
         max_memory : int or str, optional
             Memory limit for each process. This should be a number of bytes or
             a size such as ``"100G"`` or ``"512MB"``. Units are powers of 1024.
-            Each process runs in its own cgroup via ``systemd-run --user
-            --scope``, with no swap. The kernel kills it if it goes over the
-            limit. Linux only.
+            The resident memory of each process and its children is checked at
+            every poll, and the process is killed if it goes over the limit.
+            Memory allocated quickly can overshoot the limit between checks.
+            Linux only.
         raise_errors : bool, optional
             Stop new batches and raise after active batches finish.
         log : bool, optional

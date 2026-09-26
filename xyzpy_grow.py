@@ -144,9 +144,9 @@ def main():
         default=None,
         help=(
             "An optional memory limit for each batch, e.g. `100G` or `512MB`. "
-            "Units are powers of 1024. Each subprocess runs in its own cgroup "
-            "via `systemd-run --user --scope`, with no swap. The kernel kills "
-            "it if it goes over the limit. Linux only. This implies "
+            "Units are powers of 1024. The resident memory of each subprocess "
+            "and its children is checked at every poll, and the subprocess is "
+            "killed if it goes over the limit. Linux only. This implies "
             "--subprocess."
         ),
     )
