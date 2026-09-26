@@ -158,6 +158,7 @@ class TestSubprocessRunnerMemory:
         with pytest.raises(ValueError, match="Linux"):
             _SubprocessRunner(max_memory="1G")
 
+    @pytest.mark.skipif(not hasattr(signal, "SIGKILL"), reason="needs SIGKILL")
     def test_kill_reports_memory_limit(self, tmp_path, monkeypatch):
         monkeypatch.setattr(growing.os.path, "exists", lambda path: True)
         monkeypatch.setattr(growing, "_process_tree", lambda pid: [pid])
@@ -174,6 +175,7 @@ class TestSubprocessRunnerMemory:
         assert not completion.success
         assert "3.0G, over the memory limit of 1.0G" in completion.message
 
+    @pytest.mark.skipif(not hasattr(signal, "SIGKILL"), reason="needs SIGKILL")
     def test_under_limit_is_not_killed(self, tmp_path, monkeypatch):
         monkeypatch.setattr(growing.os.path, "exists", lambda path: True)
         monkeypatch.setattr(growing, "_process_tree", lambda pid: [pid])

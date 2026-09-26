@@ -1841,7 +1841,7 @@ _BASE = (
     "import os\n"
     "from xyzpy.gen.cropping import grow, Crop\n"
     "if __name__ == '__main__':\n"
-    "    crop = Crop(name='{name}', parent_dir='{parent_dir}')\n"
+    "    crop = Crop(name={name!r}, parent_dir={parent_dir!r})\n"
     "    print('Growing:', repr(crop))\n"
     "    grow_kwargs = dict(\n"
     "        num_workers={num_workers},\n"

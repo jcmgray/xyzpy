@@ -691,6 +691,15 @@ class TestGenClusterScript:
         compile(code, "<script>", "exec")
         assert "subprocess='auto'" in code
 
+    def test_path_with_backslash_and_quote(self, tmp_path):
+        # e.g. windows paths like 'C:\Users\...'
+        parent_dir = tmp_path / "it's \\Users"
+        parent_dir.mkdir()
+        crop = sown_crop(parent_dir)
+        script = crop.gen_cluster_script("slurm")
+        code = script.split("<< 'EOM'\n")[1].split("\nEOM\n")[0]
+        compile(code, "<script>", "exec")
+
     @pytest.mark.parametrize("scheduler", ["sge", "pbs", "slurm"])
     def test_no_blank_lines_in_header(self, tmp_path, scheduler):
         crop = sown_crop(tmp_path)
