@@ -19,6 +19,10 @@ Release notes for `xyzpy`.
 
 - {func}`~xyzpy.infiniplot`: the `hues`, `colors`, `markers`, `linestyles`, `markersizes`, `linewidths` and `markeredgecolors` options now also accept a dict, mapping only the given coordinate values, with every other value keeping its default style.
 - {func}`~xyzpy.benchmark`: add `torch_cuda_sync=True` for accurately timing asynchronous PyTorch CUDA work by synchronizing the current device at each timing boundary.
+- {meth}`~xyzpy.gen.cropping.Crop.grow_cluster`: with slurm, submit with `sbatch --parsable` and return the job id. Raise an error if submission fails.
+- {meth}`~xyzpy.gen.cropping.Crop.gen_cluster_script`: for slurm, underscores in extra header options become hyphens, e.g. `mail_type="END"` gives `--mail-type=END`. `cpus_per_task` and `nodes` are accepted in place of `num_procs` and `num_nodes`.
+- {meth}`~xyzpy.gen.cropping.Crop.gen_cluster_script`: for slurm, `--nodes`, `--cpus-per-task` and `--mem` are only written if given, including from {meth}`~xyzpy.gen.cropping.Crop.grow_cluster`. Without `num_procs`, the thread count is taken from `SLURM_CPUS_PER_TASK`.
+- {meth}`~xyzpy.gen.cropping.Crop.gen_cluster_script`: `conda_env` now defaults to `False`, since the script runs the current Python interpreter directly.
 
 **Bug fixes:**
 
@@ -26,6 +30,11 @@ Release notes for `xyzpy`.
 - {func}`~xyzpy.infiniplot`: fix a crash when `hue` is given as a constant while `color` is mapped to a dimension. The constant now sets the single colormap that `color` sweeps the intensity of.
 - {func}`~xyzpy.infiniplot`: `col` and `row` now raise an error if given name(s) which aren't valid dims
 - {func}`~xyzpy.infiniplot`: heatmaps no longer warn about aggregating over unmapped dimensions of size 1.
+- {meth}`~xyzpy.gen.cropping.Crop.gen_cluster_script`: fix `time` given as a `"H:M:S"` string or as fractional hours. `"D-H:M:S"` strings are now also accepted.
+- {meth}`~xyzpy.gen.cropping.Crop.grow_cluster`: fix `mem` and `mem_per_cpu` clashing with the default memory. Giving both `mem` and `mem_per_cpu` for slurm now raises an error.
+- {meth}`~xyzpy.gen.cropping.Crop.gen_cluster_script`: fix a syntax error in SGE scripts for growing missing batches, `None` values in SGE and PBS headers when options are left out, and `subprocess="auto"`.
+- {meth}`~xyzpy.gen.cropping.Crop.gen_cluster_script`: the `setup` code is no longer expanded by the shell.
+- `clean_slurm_outputs`: fix detecting finished tasks when growing missing batches, and when `directory` is not the current directory.
 
 **Other:**
 

@@ -11,6 +11,7 @@ from xyzpy import Harvester, Runner, combo_runner, combo_runner_to_ds, label
 from xyzpy.gen.cropping import (
     Crop,
     XYZError,
+    clean_slurm_outputs,
     grow,
     load_crops,
     parse_crop_details,
@@ -541,6 +542,248 @@ class TestSowerReaper:
             assert crop.parent_dir is not None
             assert crop.location is not None
             assert crop.fn is foo_add
+
+
+def sown_crop(tmp_path, grown=()):
+    crop = Crop(fn=foo_add, name="foo", parent_dir=tmp_path)
+    crop.sow_combos([("a", [1, 2, 3]), ("b", [4, 5])], constants={"c": 0})
+    if grown:
+        crop.grow(grown)
+    return crop
+
+
+class TestGenClusterScript:
+    @pytest.mark.parametrize(
+        "kwargs, expected",
+        [
+            ({}, "01:00:00"),
+            ({"time": "2:05:00"}, "02:05:00"),
+            ({"time": "1-2:03:04"}, "26:03:04"),
+            ({"time": 26.5}, "26:30:00"),
+            ({"time": 3}, "03:00:00"),
+            ({"hours": 1.5}, "01:30:00"),
+            ({"minutes": 90}, "01:30:00"),
+            ({"hours": 1, "seconds": 5}, "01:00:05"),
+        ],
+    )
+    def test_time(self, tmp_path, kwargs, expected):
+        crop = sown_crop(tmp_path)
+        script = crop.gen_cluster_script("slurm", **kwargs)
+        assert f"#SBATCH --time={expected}\n" in script
+
+    def test_time_and_hours_raises(self, tmp_path):
+        crop = sown_crop(tmp_path)
+        with pytest.raises(ValueError):
+            crop.gen_cluster_script("slurm", time=1, hours=1)
+
+    def test_slurm_array_missing(self, tmp_path):
+        crop = sown_crop(tmp_path, grown=(1, 2, 5))
+        script = crop.gen_cluster_script("slurm")
+        assert "#SBATCH --array=1-3\n" in script
+        assert "batch_ids = (3, 4, 6)\n" in script
+        assert (
+            "crop.grow(batch_ids[int(os.environ['SLURM_ARRAY_TASK_ID']) - 1],"
+            in script
+        )
+
+    def test_slurm_array_all(self, tmp_path):
+        crop = sown_crop(tmp_path)
+        script = crop.gen_cluster_script("slurm")
+        assert "#SBATCH --array=1-6\n" in script
+        assert "crop.grow(int(os.environ['SLURM_ARRAY_TASK_ID'])," in script
+
+    def test_slurm_array_given_ids(self, tmp_path):
+        crop = sown_crop(tmp_path)
+        script = crop.gen_cluster_script("slurm", batch_ids=[5, 1, 2])
+        assert "#SBATCH --array=1-3\n" in script
+        assert "batch_ids = (5, 1, 2)\n" in script
+
+    def test_slurm_defaults(self, tmp_path):
+        crop = sown_crop(tmp_path)
+        script = crop.gen_cluster_script("slurm")
+        assert "--cpus-per-task" not in script
+        assert "--mem" not in script
+        assert "export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK:-1}\n" in script
+
+    def test_slurm_workers_without_procs(self, tmp_path):
+        crop = sown_crop(tmp_path)
+        script = crop.gen_cluster_script("slurm", num_workers=4)
+        assert "export OMP_NUM_THREADS=1\n" in script
+
+    def test_slurm_mem(self, tmp_path):
+        crop = sown_crop(tmp_path)
+        script = crop.gen_cluster_script("slurm", mem=8)
+        assert "#SBATCH --mem=8G\n" in script
+        script = crop.gen_cluster_script("slurm", mem_per_cpu="500M")
+        assert "#SBATCH --mem-per-cpu=500M\n" in script
+
+    @pytest.mark.parametrize("kwargs", [{"mem": 8}, {"gigabytes": 8}])
+    def test_slurm_mem_and_mem_per_cpu_raises(self, tmp_path, kwargs):
+        crop = sown_crop(tmp_path)
+        with pytest.raises(ValueError):
+            crop.gen_cluster_script("slurm", mem_per_cpu=4, **kwargs)
+
+    @pytest.mark.parametrize("scheduler", ["sge", "pbs"])
+    def test_sge_pbs_defaults(self, tmp_path, scheduler):
+        crop = sown_crop(tmp_path)
+        script = crop.gen_cluster_script(scheduler)
+        header = script.split("read -r -d")[0]
+        assert "None" not in header
+        assert "export OMP_NUM_THREADS=1\n" in header
+
+    def test_slurm_extra_options(self, tmp_path):
+        crop = sown_crop(tmp_path)
+        script = crop.gen_cluster_script(
+            "slurm",
+            partition="gpu",
+            gres="gpu:h100:1",
+            mail_type="END",
+            requeue=None,
+        )
+        assert "#SBATCH --partition=gpu\n" in script
+        assert "#SBATCH --gres=gpu:h100:1\n" in script
+        assert "#SBATCH --mail-type=END\n" in script
+        assert "#SBATCH --requeue\n" in script
+
+    def test_sge_extra_options_keep_underscores(self, tmp_path):
+        crop = sown_crop(tmp_path)
+        script = crop.gen_cluster_script("sge", h_vmem="4G")
+        assert "#$ -l h_vmem=4G\n" in script
+
+    def test_slurm_cpus_per_task_alias(self, tmp_path):
+        crop = sown_crop(tmp_path)
+        script = crop.gen_cluster_script(
+            "slurm", cpus_per_task=8, nodes=1, num_workers=4
+        )
+        assert script.count("--cpus-per-task") == 1
+        assert "#SBATCH --cpus-per-task=8\n" in script
+        assert script.count("--nodes") == 1
+        assert "#SBATCH --nodes=1\n" in script
+        assert "export OMP_NUM_THREADS=2\n" in script
+
+    @pytest.mark.parametrize(
+        "kwargs",
+        [
+            {"num_procs": 4, "cpus_per_task": 8},
+            {"num_nodes": 1, "nodes": 2},
+        ],
+    )
+    def test_slurm_alias_conflict_raises(self, tmp_path, kwargs):
+        crop = sown_crop(tmp_path)
+        with pytest.raises(ValueError):
+            crop.gen_cluster_script("slurm", **kwargs)
+
+    def test_pbs_single_batch(self, tmp_path):
+        crop = sown_crop(tmp_path)
+        script = crop.gen_cluster_script("pbs", batch_ids=3)
+        assert "#PBS -J" not in script
+        assert "PBS_ARRAY_INDEX" not in script
+
+    @pytest.mark.parametrize("scheduler", ["sge", "pbs", "slurm"])
+    @pytest.mark.parametrize("grown", [(), (1, 2, 5)])
+    @pytest.mark.parametrize("mode", ["array", "single"])
+    def test_valid_python(self, tmp_path, scheduler, grown, mode):
+        crop = sown_crop(tmp_path, grown=grown)
+        script = crop.gen_cluster_script(
+            scheduler, mode=mode, subprocess="auto"
+        )
+        code = script.split("<< 'EOM'\n")[1].split("\nEOM\n")[0]
+        compile(code, "<script>", "exec")
+        assert "subprocess='auto'" in code
+
+    @pytest.mark.parametrize("scheduler", ["sge", "pbs", "slurm"])
+    def test_no_blank_lines_in_header(self, tmp_path, scheduler):
+        crop = sown_crop(tmp_path)
+        script = crop.gen_cluster_script(scheduler)
+        header = script.split("echo 'XYZPY script starting...'")[0]
+        assert "\n\n" not in header
+
+    def test_setup_not_shell_expanded(self, tmp_path):
+        crop = sown_crop(tmp_path)
+        script = crop.gen_cluster_script("slurm", setup="x = '$HOME'")
+        assert "read -r -d '' SCRIPT << 'EOM'\nx = '$HOME'\n" in script
+
+
+class TestGrowCluster:
+    def test_slurm_submit(self, tmp_path, monkeypatch):
+        import subprocess
+
+        calls = []
+
+        def fake_run(cmd, **kwargs):
+            with open(cmd[-1]) as f:
+                calls.append((cmd, f.read()))
+            return subprocess.CompletedProcess(cmd, 0, "1234;cluster\n", "")
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+        crop = sown_crop(tmp_path)
+        job_id = crop.grow_cluster("slurm", mem="8G")
+        assert job_id == "1234"
+        ((cmd, script),) = calls
+        assert cmd[:2] == ["sbatch", "--parsable"]
+        assert "#SBATCH --mem=8G\n" in script
+        assert not os.path.exists(cmd[-1])
+
+    def test_slurm_mem_per_cpu(self, tmp_path, monkeypatch):
+        import subprocess
+
+        scripts = []
+
+        def fake_run(cmd, **kwargs):
+            with open(cmd[-1]) as f:
+                scripts.append(f.read())
+            return subprocess.CompletedProcess(cmd, 0, "1234\n", "")
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+        crop = sown_crop(tmp_path)
+        crop.grow_cluster("slurm", mem_per_cpu=4)
+        (script,) = scripts
+        assert "#SBATCH --mem-per-cpu=4G\n" in script
+        assert "#SBATCH --mem=" not in script
+
+    def test_slurm_cpus_per_task(self, tmp_path, monkeypatch):
+        import subprocess
+
+        scripts = []
+
+        def fake_run(cmd, **kwargs):
+            with open(cmd[-1]) as f:
+                scripts.append(f.read())
+            return subprocess.CompletedProcess(cmd, 0, "1234\n", "")
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+        crop = sown_crop(tmp_path)
+        crop.grow_cluster("slurm", cpus_per_task=8)
+        (script,) = scripts
+        assert "#SBATCH --cpus-per-task=8\n" in script
+        assert "export OMP_NUM_THREADS=8\n" in script
+
+    def test_submit_failure_raises(self, tmp_path, monkeypatch):
+        import subprocess
+
+        def fake_run(cmd, **kwargs):
+            return subprocess.CompletedProcess(cmd, 1, "", "bad option")
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+        crop = sown_crop(tmp_path)
+        with pytest.raises(RuntimeError, match="bad option"):
+            crop.grow_cluster("slurm")
+        assert not os.path.exists(
+            os.path.join(crop.location, "__qsub_script__.sh")
+        )
+
+
+class TestCleanSlurmOutputs:
+    def test_any_batch_number_counts(self, tmp_path):
+        # array task 1 grew batch 7, task 2 is still running
+        done = tmp_path / "slurm-99_1.out"
+        done.write_text("xyzpy: success - batch 7 completed.\n")
+        running = tmp_path / "slurm-99_2.out"
+        running.write_text("Growing: ...\n")
+        n = clean_slurm_outputs(99, tmp_path, cancel_if_finished=False)
+        assert n == 2
+        assert not done.exists()
+        assert running.exists()
 
 
 class TestParseResourceIds:

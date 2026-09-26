@@ -1788,26 +1788,32 @@ _SGE_HEADER = (
     "mkdir -p {output_directory}\n"
     "#$ -wd {output_directory}\n"
     "#$ -pe {pe} {num_procs}\n"
-    "{header_options}\n"
+    "{header_options}"
 )
-_SGE_ARRAY_HEADER = "#$ -t {run_start}-{run_stop}\n"
+_SGE_ARRAY_HEADER = "#$ -t 1-{num_tasks}\n"
 
 _PBS_HEADER = (
     "#!/bin/bash -l\n"
     "#PBS -N {name}\n"
     "#PBS -lselect={num_nodes}:ncpus={num_procs}:mem={gigabytes}gb\n"
     "#PBS -lwalltime={hours:02}:{minutes:02}:{seconds:02}\n"
-    "{header_options}\n"
+    "{header_options}"
 )
-_PBS_ARRAY_HEADER = "#PBS -J {run_start}-{run_stop}\n"
+_PBS_ARRAY_HEADER = "#PBS -J 1-{num_tasks}\n"
 
 _SLURM_HEADER = (
     "#!/bin/bash -l\n"
     "#SBATCH --job-name={name}\n"
     "#SBATCH --time={hours:02}:{minutes:02}:{seconds:02}\n"
-    "{header_options}\n"
+    "{header_options}"
 )
-_SLURM_ARRAY_HEADER = "#SBATCH --array={run_start}-{run_stop}\n"
+_SLURM_ARRAY_HEADER = "#SBATCH --array=1-{num_tasks}\n"
+
+_ARRAY_TASK_IDS = {
+    "sge": "int(os.environ['SGE_TASK_ID'])",
+    "pbs": "int(os.environ['PBS_ARRAY_INDEX'])",
+    "slurm": "int(os.environ['SLURM_ARRAY_TASK_ID'])",
+}
 
 # _BASE = (
 #     "echo 'XYZPY script starting...'\n"
@@ -1830,43 +1836,26 @@ _BASE = (
     "export OPENBLAS_NUM_THREADS={num_threads}\n"
     "export NUMBA_NUM_THREADS={num_threads}\n"
     "{shell_setup}\n"
-    "read -r -d '' SCRIPT << EOM\n"
+    "read -r -d '' SCRIPT << 'EOM'\n"
     "{setup}\n"
+    "import os\n"
     "from xyzpy.gen.cropping import grow, Crop\n"
     "if __name__ == '__main__':\n"
     "    crop = Crop(name='{name}', parent_dir='{parent_dir}')\n"
     "    print('Growing:', repr(crop))\n"
     "    grow_kwargs = dict(\n"
     "        num_workers={num_workers},\n"
-    "        subprocess={subprocess},\n"
+    "        subprocess={subprocess!r},\n"
     "        debugging={debugging},\n"
     "        verbosity_grow=2,\n"
     "    )\n"
 )
 
-_CLUSTER_SGE_GROW_ALL_SCRIPT = "    crop.grow($SGE_TASK_ID, **grow_kwargs)\n"
+_CLUSTER_GROW_ARRAY_SCRIPT = "    crop.grow({task_id}, **grow_kwargs)\n"
 
-_CLUSTER_PBS_GROW_ALL_SCRIPT = (
-    "    crop.grow($PBS_ARRAY_INDEX, **grow_kwargs)\n"
-)
-
-_CLUSTER_SLURM_GROW_ALL_SCRIPT = (
-    "    crop.grow($SLURM_ARRAY_TASK_ID, **grow_kwargs)\n"
-)
-
-_CLUSTER_SGE_GROW_PARTIAL_SCRIPT = (
-    "    batch_ids = {batch_ids}]\n"
-    "    crop.grow(batch_ids[$SGE_TASK_ID - 1], **grow_kwargs)\n"
-)
-
-_CLUSTER_PBS_GROW_PARTIAL_SCRIPT = (
+_CLUSTER_GROW_ARRAY_INDEX_SCRIPT = (
     "    batch_ids = {batch_ids}\n"
-    "    crop.grow(batch_ids[$PBS_ARRAY_INDEX - 1], **grow_kwargs)\n"
-)
-
-_CLUSTER_SLURM_GROW_PARTIAL_SCRIPT = (
-    "    batch_ids = {batch_ids}\n"
-    "    crop.grow(batch_ids[$SLURM_ARRAY_TASK_ID - 1], **grow_kwargs)\n"
+    "    crop.grow(batch_ids[{task_id} - 1], **grow_kwargs)\n"
 )
 
 _BASE_CLUSTER_GROW_SINGLE = (
@@ -1898,7 +1887,7 @@ def gen_cluster_script(
     hours=None,
     minutes=None,
     seconds=None,
-    conda_env=True,
+    conda_env=False,
     launcher=None,
     setup="#",
     shell_setup="",
@@ -1921,31 +1910,47 @@ def gen_cluster_script(
     mode : {'array', 'single'}
         How to distribute the batches, either as an array job with a single
         batch per job, or as a single job processing batches in parallel.
-    hours : int
-        How many hours to request, default=0.
+    time : float or str, optional
+        How much time to request, either as a number of hours, or as a string
+        like ``"H:M:S"`` or ``"D-H:M:S"``. Cannot be used with ``hours``,
+        ``minutes`` or ``seconds``. If no time is given the default is 1 hour.
+    hours : int, optional
+        How many hours to request.
     minutes : int, optional
-        How many minutes to request, default=20.
+        How many minutes to request.
     seconds : int, optional
-        How many seconds to request, default=0.
+        How many seconds to request.
     gigabytes : int, optional
-        How much memory to request, default: 2.
+        How much memory to request. For SGE and PBS the default is 2. For
+        slurm no memory is requested by default, so the cluster default
+        applies.
+    mem : int or str, optional
+        Alias for ``gigabytes``. For slurm, a string like ``"500M"`` is passed
+        on as is.
+    mem_per_cpu : int or str, optional
+        How much memory to request per cpu, slurm only.
     num_procs : int, optional
-        How many processes to request (threaded cores or MPI), default: 1.
+        How many processes to request (threaded cores or MPI). For SGE and PBS
+        the default is 1. For slurm ``--cpus-per-task`` is left out by
+        default, and the thread count is read from ``SLURM_CPUS_PER_TASK``.
+        For slurm, ``cpus_per_task`` can be given instead.
     num_threads : int, optional
         How many threads to use per process. Will be computed automatically
         based on ``num_procs`` and ``num_workers`` if not specified.
     num_workers : int, optional
         How many workers to use for parallel growing, default is sequential. If
         specified, then generally ``num_workers * num_threads == num_procs``.
-    subprocess : bool, optional
+    subprocess : bool or "auto", optional
         Whether to use a fresh subprocess for each batch, default: False.
     num_nodes : int, optional
-        How many nodes to request, default: 1.
+        How many nodes to request. For SGE and PBS the default is 1. For
+        slurm, ``nodes`` can be given instead.
     conda_env : bool or str, optional
-        Whether to activate a conda environment before running the script.
-        If ``True``, the environment will be the same as the one used to
-        launch the script. If a string, the environment will be the one
-        specified by the string.
+        Whether to activate a conda environment before running the script,
+        default: False. This is usually not needed, since the script runs
+        the current Python interpreter directly. If ``True``, the environment
+        will be the same as the one used to launch the script. If a string,
+        the environment will be the one specified by the string.
     launcher : str, optional
         How to launch the script, default: the current Python interpreter. But
         could for example be ``'mpiexec python'`` for an MPI program.
@@ -1965,8 +1970,10 @@ def gen_cluster_script(
         Set the python log level to debugging.
     kwargs : dict, optional
         Extra keyword arguments are taken to be extra resources to request
-        in the header of the submission script, e.g. ``{'gpu': 1}`` will
-        add ``"#SBATCH --gpu=1"`` to the header if using slurm. If you supply
+        in the header of the submission script, e.g. ``gres="gpu:1"`` will
+        add ``"#SBATCH --gres=gpu:1"`` to the header if using slurm. For
+        slurm, underscores in names are replaced by hyphens, so
+        ``mail_type="END"`` adds ``"#SBATCH --mail-type=END"``. If you supply
         literal ``True`` or ``None`` as the value, then the key will be treated
         as a flag. E.g. ``{'requeue': None}`` will add ``"#SBATCH --requeue"``
         to the header.
@@ -1984,67 +1991,100 @@ def gen_cluster_script(
     if mode not in ("array", "single"):
         raise ValueError("mode must be one of 'array' or 'single'.")
 
-    # parse the number of threads
-    if num_threads is None:
-        if num_workers is None:
-            # default to 1 thread per core for no workers
-            num_threads = num_procs
-        else:
-            # default to 1 thread per worker
-            num_threads = round(num_procs / num_workers)
-
-    # parse the time requirement
-    if hours is minutes is seconds is None:
-        if time is not None:
-            if isinstance(time, (int, float)):
-                hours = time
-                minutes, seconds = 0, 0
-            elif isinstance(time, str):
-                hours, minutes, seconds = time.split(":")
-        else:
-            hours, minutes, seconds = 1, 0, 0
-    else:
-        if time is not None:
+    # parse the time requirement into total seconds
+    if time is not None:
+        if (hours, minutes, seconds) != (None, None, None):
             raise ValueError(
                 "Cannot specify both time and hours, minutes, seconds."
             )
-        hours = 0 if hours is None else int(hours)
-        minutes = 0 if minutes is None else int(minutes)
-        seconds = 0 if seconds is None else int(seconds)
+        if isinstance(time, str):
+            # 'H:M:S' or slurm style 'D-H:M:S'
+            days, _, hms = time.rpartition("-")
+            h, m, s = map(int, hms.split(":"))
+            total = int(days or 0) * 86400 + h * 3600 + m * 60 + s
+        else:
+            total = time * 3600
+    elif (hours, minutes, seconds) == (None, None, None):
+        total = 3600
+    else:
+        total = (hours or 0) * 3600 + (minutes or 0) * 60 + (seconds or 0)
+    hours, rem = divmod(round(total), 3600)
+    minutes, seconds = divmod(rem, 60)
+
+    if mem is not None:
+        if gigabytes is not None:
+            raise ValueError("Cannot specify both gigabytes and mem.")
+        gigabytes = mem
 
     if scheduler == "slurm":
-        # only supply specified header options
-        # TODO: same with PBS and SGE
+        # python names can't contain '-', so allow e.g. mail_type
+        kwargs = {k.replace("_", "-"): v for k, v in kwargs.items()}
 
+        # treat these as aliases, so the thread counts see them
+        if "nodes" in kwargs:
+            if num_nodes is not None:
+                raise ValueError("Cannot specify both num_nodes and nodes.")
+            num_nodes = kwargs.pop("nodes")
+        if "cpus-per-task" in kwargs:
+            if num_procs is not None:
+                raise ValueError(
+                    "Cannot specify both num_procs and cpus_per_task."
+                )
+            num_procs = int(kwargs.pop("cpus-per-task"))
+
+        # only supply specified header options
         if num_nodes is not None:
             kwargs["nodes"] = num_nodes
         if num_procs is not None:
             kwargs["cpus-per-task"] = num_procs
 
         if gigabytes is not None:
-            if mem is not None:
-                raise ValueError("Cannot specify both gigabytes and mem.")
-            mem = gigabytes
-
-        if mem is not None:
-            if isinstance(mem, int):
-                mem = f"{mem}G"
-            kwargs["mem"] = mem
+            if isinstance(gigabytes, int):
+                gigabytes = f"{gigabytes}G"
+            kwargs["mem"] = gigabytes
 
         if mem_per_cpu is not None:
+            if gigabytes is not None:
+                raise ValueError(
+                    "Cannot specify both mem and mem_per_cpu for slurm."
+                )
             if isinstance(mem_per_cpu, int):
                 mem_per_cpu = f"{mem_per_cpu}G"
             kwargs["mem-per-cpu"] = mem_per_cpu
 
     else:
-        # pbs, sge
-        # parse memory to gigabytes
-        if (gigabytes is not None) and (mem is not None):
-            raise ValueError("Cannot specify both gigabytes and mem.")
-
-        if mem is not None:
-            # take gigabytes from mem
+        # pbs and sge headers always need these
+        if num_procs is None:
+            num_procs = 1
+        if num_nodes is None:
+            num_nodes = 1
+        if gigabytes is None:
+            gigabytes = 2
+        elif mem is not None:
             gigabytes = int(mem)
+
+    # parse the number of threads
+    if num_threads is None:
+        if num_procs is None:
+            if num_workers is None:
+                # only reachable for slurm, use all allocated cores
+                num_threads = "${SLURM_CPUS_PER_TASK:-1}"
+            else:
+                num_threads = 1
+        elif num_workers is None:
+            # all threads in the single process
+            num_threads = num_procs
+        else:
+            # split cores evenly between workers
+            num_threads = max(1, num_procs // num_workers)
+
+    if (num_workers is not None) and (num_procs is not None):
+        if num_workers * num_threads != num_procs:
+            warnings.warn(
+                f"num_workers * num_threads ({num_workers} * {num_threads}) "
+                f"!= num_procs ({num_procs}), may not be computationally "
+                "efficient."
+            )
 
     if output_directory is None:
         output_directory = str(Path.home() / "Scratch" / "output")
@@ -2077,56 +2117,13 @@ def gen_cluster_script(
 
     crop.calc_progress()
 
-    if kwargs:
-        if scheduler == "slurm":
-            header_options = "\n".join(
-                [
-                    f"#SBATCH --{k}"
-                    if (v is None or v is True)
-                    else f"#SBATCH --{k}={v}"
-                    for k, v in kwargs.items()
-                ]
-            )
-        elif scheduler == "pbs":
-            header_options = "\n".join(
-                [
-                    f"#PBS -l {k}"
-                    if (v is None or v is True)
-                    else f"#PBS -l {k}={v}"
-                    for k, v in kwargs.items()
-                ]
-            )
-        elif scheduler == "sge":
-            header_options = "\n".join(
-                [
-                    f"#$ -l {k}"
-                    if (v is None or v is True)
-                    else f"#$ -l {k}={v}"
-                    for k, v in kwargs.items()
-                ]
-            )
-    else:
-        header_options = ""
-
-    if num_threads is None:
-        if mpi:
-            # assume single thread per rank
-            num_threads = 1
-        else:
-            if num_workers is None:
-                # assume all multithreading over all cores
-                num_threads = num_procs
-            else:
-                # assume each worker has equal number of threads
-                num_threads = max(1, num_procs // num_workers)
-
-    if num_workers is not None:
-        if num_workers * num_threads != num_procs:
-            warnings.warn(
-                f"num_workers * num_threads ({num_workers} * {num_threads}) "
-                f"!= num_procs ({num_procs}), may not be computationally "
-                "efficient."
-            )
+    prefix = {"slurm": "#SBATCH --", "pbs": "#PBS -l ", "sge": "#$ -l "}[
+        scheduler
+    ]
+    header_options = "".join(
+        f"{prefix}{k}\n" if (v is None or v is True) else f"{prefix}{k}={v}\n"
+        for k, v in kwargs.items()
+    )
 
     # get absolute path
     full_parent_dir = str(Path(crop.parent_dir).expanduser().resolve())
@@ -2152,10 +2149,13 @@ def gen_cluster_script(
         "working_directory": full_parent_dir,
         "header_options": header_options,
         "debugging": debugging,
+        "task_id": _ARRAY_TASK_IDS[scheduler],
     }
 
     if batch_ids is not None:
         # grow specific ids
+        if isinstance(batch_ids, int):
+            batch_ids = (batch_ids,)
         opts["batch_ids"] = tuple(batch_ids)
         array_mode = "partial"
     elif crop.num_results == 0:
@@ -2169,59 +2169,40 @@ def gen_cluster_script(
 
     # build the script!
 
-    if scheduler == "sge":
-        script = _SGE_HEADER
-        if mode == "array":
-            script += _SGE_ARRAY_HEADER
-    elif scheduler == "pbs":
-        script = _PBS_HEADER
-        if mode == "array":
-            script += _PBS_ARRAY_HEADER
-    elif scheduler == "slurm":
-        script = _SLURM_HEADER
-        if mode == "array":
-            script += _SLURM_ARRAY_HEADER
-
-    script += _BASE
+    script = {"sge": _SGE_HEADER, "pbs": _PBS_HEADER, "slurm": _SLURM_HEADER}[
+        scheduler
+    ]
 
     if mode == "array":
-        opts["run_start"] = 1
+        # array task ids always run from 1, since clusters limit the
+        # largest id, e.g. slurm's MaxArraySize
+        opts["num_tasks"] = len(opts["batch_ids"])
 
+        if (scheduler == "pbs") and (opts["num_tasks"] == 1):
+            # PBS can't handle arrays jobs of size 1...
+            opts["task_id"] = "1"
+        elif scheduler == "pbs":
+            script += _PBS_ARRAY_HEADER
+        elif scheduler == "sge":
+            script += _SGE_ARRAY_HEADER
+        else:
+            script += _SLURM_ARRAY_HEADER
+
+        script += _BASE
         if array_mode == "all":
-            opts["run_stop"] = crop.num_batches
-            if scheduler == "sge":
-                script += _CLUSTER_SGE_GROW_ALL_SCRIPT
-            elif scheduler == "pbs":
-                script += _CLUSTER_PBS_GROW_ALL_SCRIPT
-            elif scheduler == "slurm":
-                script += _CLUSTER_SLURM_GROW_ALL_SCRIPT
-
-        elif array_mode == "partial":
-            opts["run_stop"] = len(opts["batch_ids"])
-            if scheduler == "sge":
-                script += _CLUSTER_SGE_GROW_PARTIAL_SCRIPT
-            elif scheduler == "pbs":
-                script += _CLUSTER_PBS_GROW_PARTIAL_SCRIPT
-            elif scheduler == "slurm":
-                script += _CLUSTER_SLURM_GROW_PARTIAL_SCRIPT
+            script += _CLUSTER_GROW_ARRAY_SCRIPT
+        else:
+            script += _CLUSTER_GROW_ARRAY_INDEX_SCRIPT
 
     elif mode == "single":
         if batch_ids is None:
             # grow all missing, but compute the list dynamically
             # this allows the job to be restarted
             opts["batch_ids"] = "None"
-        script += _BASE_CLUSTER_GROW_SINGLE
+        script += _BASE + _BASE_CLUSTER_GROW_SINGLE
 
     script += _BASE_CLUSTER_SCRIPT_END
-    script = script.format(**opts)
-
-    if (scheduler == "pbs") and len(opts["batch_ids"]) == 1:
-        # PBS can't handle arrays jobs of size 1...
-        script = script.replace("#PBS -J 1-1\n", "").replace(
-            "$PBS_ARRAY_INDEX", "1"
-        )
-
-    return script
+    return script.format(**opts)
 
 
 def grow_cluster(
@@ -2232,13 +2213,13 @@ def grow_cluster(
     hours=None,
     minutes=None,
     seconds=None,
-    gigabytes=2,
-    num_nodes=1,
-    num_procs=1,
+    gigabytes=None,
+    num_nodes=None,
+    num_procs=None,
     num_threads=None,
     num_workers=None,
     subprocess=False,
-    conda_env=True,
+    conda_env=False,
     launcher=None,
     setup="#",
     shell_setup="",
@@ -2247,7 +2228,7 @@ def grow_cluster(
     output_directory=None,
     debugging=False,
     **kwargs,
-):  # pragma: no cover
+):
     """Automagically submit SGE, PBS, or slurm jobs to grow all missing
     results.
 
@@ -2259,31 +2240,36 @@ def grow_cluster(
         Whether to use a SGE, PBS or slurm submission script template.
     batch_ids : int or tuple[int]
         Which batch numbers to grow, defaults to all missing batches.
-    hours : int
-        How many hours to request, default=0.
+    hours : int, optional
+        How many hours to request. If no time is given the default is 1 hour.
     minutes : int, optional
-        How many minutes to request, default=20.
+        How many minutes to request.
     seconds : int, optional
-        How many seconds to request, default=0.
+        How many seconds to request.
     gigabytes : int, optional
-        How much memory to request, default: 2.
+        How much memory to request. For SGE and PBS the default is 2. For
+        slurm no memory is requested by default, so the cluster default
+        applies.
     num_nodes : int, optional
-        How many nodes to request, default: 1.
+        How many nodes to request. For SGE and PBS the default is 1.
     num_procs : int, optional
-        How many processes to request (threaded cores or MPI), default: 1.
+        How many processes to request (threaded cores or MPI). For SGE and PBS
+        the default is 1. For slurm ``--cpus-per-task`` is left out by
+        default, and the thread count is read from ``SLURM_CPUS_PER_TASK``.
     num_threads : int, optional
         How many threads to use per process. Will be computed automatically
         based on ``num_procs`` and ``num_workers`` if not specified.
     num_workers : int, optional
         How many workers to use for parallel growing, default is sequential. If
         specified, then generally ``num_workers * num_threads == num_procs``.
-    subprocess : bool, optional
+    subprocess : bool or "auto", optional
         Whether to use a fresh subprocess for each batch, default: False.
     conda_env : bool or str, optional
-        Whether to activate a conda environment before running the script.
-        If ``True``, the environment will be the same as the one used to
-        launch the script. If a string, the environment will be the one
-        specified by the string.
+        Whether to activate a conda environment before running the script,
+        default: False. This is usually not needed, since the script runs
+        the current Python interpreter directly. If ``True``, the environment
+        will be the same as the one used to launch the script. If a string,
+        the environment will be the one specified by the string.
     launcher : str, optional
         How to launch the script, default: the current Python interpreter. But
         could for example be ``'mpiexec python'`` for a MPI program.
@@ -2302,8 +2288,18 @@ def grow_cluster(
         What directory to write output to. Defaults to "$HOME/Scratch/output".
     debugging : bool, optional
         Set the python log level to debugging.
+    kwargs
+        See `gen_cluster_script` for all other options, such as ``time``,
+        ``mem``, ``mode`` and extra header resources.
+
+    Returns
+    -------
+    job_id : str or None
+        The slurm job id, if submitted with slurm.
     """
     from subprocess import run
+
+    scheduler = scheduler.lower()
 
     if crop.is_ready_to_reap():
         print("Crop ready to reap: nothing to submit.")
@@ -2338,15 +2334,29 @@ def grow_cluster(
     with open(script_file, mode="w") as f:
         f.write(script)
 
-    if scheduler in {"sge", "pbs"}:
-        result = run(["qsub", str(script_file)], capture_output=True)
-    elif scheduler == "slurm":
-        result = run(["sbatch", str(script_file)], capture_output=True)
+    if scheduler == "slurm":
+        cmd = ["sbatch", "--parsable", str(script_file)]
+    else:
+        cmd = ["qsub", str(script_file)]
 
-    print(result.stderr.decode())
-    print(result.stdout.decode())
+    try:
+        result = run(cmd, capture_output=True, text=True)
+    finally:
+        script_file.unlink()
 
-    script_file.unlink()
+    if result.returncode != 0:
+        raise RuntimeError(f"Job submission failed:\n{result.stderr}")
+
+    if result.stderr:
+        print(result.stderr)
+
+    if scheduler == "slurm":
+        # parsable output is 'job_id' or 'job_id;cluster'
+        job_id = result.stdout.strip().split(";")[0]
+        print(f"Submitted batch job {job_id}")
+        return job_id
+
+    print(result.stdout)
 
 
 def gen_qsub_script(
@@ -2430,7 +2440,7 @@ def clean_slurm_outputs(job, directory=".", cancel_if_finished=True):
     files = list(Path(directory).glob(f"slurm-{job}_*.out"))
 
     for file in files:
-        jobid = int(re.match(r"slurm-\d+_(\d+).out", str(file)).groups()[0])
+        jobid = int(re.match(r"slurm-\d+_(\d+).out", file.name).groups()[0])
 
         with open(file, "r") as f:
             contents = f.read()
@@ -2438,7 +2448,8 @@ def clean_slurm_outputs(job, directory=".", cancel_if_finished=True):
         jname = f"{job}_{jobid}"
         print(jname, end=" ")
 
-        if f"batch {jobid} completed" in contents:
+        # array task ids index into the batches, so match any batch number
+        if re.search(r"batch \d+ completed", contents):
             print("xyzpy finished!", end=" ")
 
             if cancel_if_finished:
