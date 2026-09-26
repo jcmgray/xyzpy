@@ -430,6 +430,25 @@ class TestPlot:
     def test_options(self):
         xyz.plot(np.arange(5), show_and_close=False, color="red", marker="o")
 
+    @mark.parametrize("width, shrinks", [(3, False), (0.5, True)])
+    def test_row_col_titles_fit(self, width, shrinks):
+        from matplotlib import pyplot as plt
+
+        ds = xr.Dataset(
+            coords={"x": [0, 1], "a": [1, 2], "b": [3, 4]},
+            data_vars={"y": (("x", "a", "b"), np.zeros((2, 2, 2)))},
+        )
+        # the template backend doesn't measure text
+        plt.switch_backend("Agg")
+        try:
+            _, axs = ds.xyz.plot("x", "y", col="a", row="b", width=width)
+        finally:
+            plt.switch_backend("Template")
+        for ax in axs.flat:
+            (title,) = ax.texts
+            assert title.get_window_extent().width <= ax.bbox.width + 1
+            assert (title.get_fontsize() < 10) == shrinks
+
     def test_log_base_tick_labels_below_one(self):
         _, axs = xyz.plot(
             2.0 ** np.arange(-4, 4),

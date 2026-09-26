@@ -1497,15 +1497,20 @@ class Infiniplotter:
                     f"{self.labels[self.row]}={self.input_values['row'][i]}"
                 )
             if title:
-                title = ", ".join(title)
-                ax.text(
+                title = ax.text(
                     0.5,
                     1.0,
-                    title,
+                    ", ".join(title),
                     transform=ax.transAxes,
                     horizontalalignment="center",
                     verticalalignment="bottom",
                 )
+                # shrink long titles, or those above thin axes, to fit
+                title_width = title.get_window_extent().width
+                if title_width > ax.bbox.width:
+                    title.set_fontsize(
+                        title.get_fontsize() * ax.bbox.width / title_width
+                    )
 
             # only label outermost plot axes
             if i + 1 == self.sizes["row"]:
