@@ -504,6 +504,19 @@ class Infiniplotter:
             self.autohue_opts.setdefault("hue_shift", 0.5 / N)
             return [to_colormap(h, **self.autohue_opts) for h in hs]
 
+        # check names now, before unused variables are dropped
+        for option_name, name in (("x", self.x), ("y", self.y), ("z", self.z)):
+            if (
+                isinstance(name, str)
+                and (name not in ds.variables)
+                and (name not in ds.dims)
+            ):
+                raise ValueError(
+                    f"No variable or dimension named '{name}' for "
+                    f"`{option_name}`. Available variables: {sorted(ds)}, "
+                    f"dimensions: {sorted(ds.dims)}."
+                )
+
         # drop irrelevant data variables
         ds = ds.drop_vars(
             [

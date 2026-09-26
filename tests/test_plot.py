@@ -449,6 +449,33 @@ class TestPlot:
             assert title.get_window_extent().width <= ax.bbox.width + 1
             assert (title.get_fontsize() < 10) == shrinks
 
+    def test_float_noise_dropped_from_titles_and_legend(self):
+        t = np.array([0.1, 0.1 + 0.2])
+        ds = xr.Dataset(
+            coords={"x": [0, 1], "t": t, "c": t},
+            data_vars={"y": (("x", "t", "c"), np.zeros((2, 2, 2)))},
+        )
+        _, axs = ds.xyz.plot("x", "y", col="t", color="c")
+        assert axs[0, 1].texts[0].get_text().endswith("=0.3")
+        labels = [h.get_label() for h in axs[0, 0].lines]
+        assert labels == ["0.1", "0.3"]
+
+    def test_titles_use_ticklabels(self):
+        ds = xr.Dataset(
+            coords={"x": [0, 1], "t": [1, 2]},
+            data_vars={"y": (("x", "t"), np.zeros((2, 2)))},
+        )
+        _, axs = ds.xyz.plot("x", "y", col="t", col_ticklabels=["a", "b"])
+        assert axs[0, 1].texts[0].get_text().endswith("=b")
+
+    @mark.parametrize(
+        "x, y, missing", [("D", "energy", "energy"), ("d", "E", "d")]
+    )
+    def test_missing_name_error(self, x, y, missing):
+        ds = xr.Dataset({"E": ("D", np.arange(3.0))}, coords={"D": [1, 2, 3]})
+        with raises(ValueError, match=f"named '{missing}'"):
+            ds.xyz.plot(x=x, y=y)
+
     def test_log_base_tick_labels_below_one(self):
         _, axs = xyz.plot(
             2.0 ** np.arange(-4, 4),
