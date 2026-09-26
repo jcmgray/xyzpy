@@ -212,6 +212,14 @@ def set_log_ticks(axis, base):
     axis.set_minor_formatter(NullFormatter())
 
 
+def _format_value(value):
+    # drop float noise like 0.30000000000000004, but keep real digits
+    if isinstance(value, (float, np.floating)):
+        digits = np.finfo(type(value)).precision
+        return str(float(f"{value:.{digits}g}"))
+    return str(value)
+
+
 def _make_bold(s):
     return r"$\bf{" + s.replace("_", r"\_") + r"}$"
 
@@ -1010,7 +1018,9 @@ class Infiniplotter:
                     legend_in = color_in
                 else:
                     legend_dim = ", ".join((self.hue, self.color))
-                    legend_in = ", ".join(map(str, (hue_in, color_in)))
+                    legend_in = ", ".join(
+                        map(_format_value, (hue_in, color_in))
+                    )
 
                 self.handles_split[legend_dim][legend_in]["color"] = color_out
             else:
@@ -1128,7 +1138,7 @@ class Infiniplotter:
             else:
                 # label = ", ".join(map(str, sub_key.values()))
                 label = ", ".join(
-                    self.ticklabels[dim].get(val, str(val))
+                    self.ticklabels[dim].get(val, _format_value(val))
                     for dim, val in sub_key.items()
                 )
 
@@ -1334,8 +1344,9 @@ class Infiniplotter:
                 dimval_styles.reverse()
 
             for dimval, style in dimval_styles:
-                # XXX: maybe pretty print float values etc here?
-                label = self.ticklabels[legend_dim].get(dimval, str(dimval))
+                label = self.ticklabels[legend_dim].get(
+                    dimval, _format_value(dimval)
+                )
 
                 if any("marker" in prop for prop in style):
                     style.setdefault("marker", "o")
@@ -1488,14 +1499,12 @@ class Infiniplotter:
         for (i, j), ax in np.ndenumerate(self.axs):
             # only change this stuff if we created the figure
             title = []
-            if self.col is not None:
-                title.append(
-                    f"{self.labels[self.col]}={self.input_values['col'][j]}"
-                )
-            if self.row is not None:
-                title.append(
-                    f"{self.labels[self.row]}={self.input_values['row'][i]}"
-                )
+            for name, k in (("col", j), ("row", i)):
+                dim = getattr(self, name)
+                if dim is not None:
+                    val = self.input_values[name][k]
+                    val = self.ticklabels[dim].get(val, _format_value(val))
+                    title.append(f"{self.labels[dim]}={val}")
             if title:
                 title = ax.text(
                     0.5,
