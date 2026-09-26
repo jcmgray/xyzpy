@@ -692,8 +692,10 @@ class TestGenClusterScript:
         assert "subprocess='auto'" in code
 
     def test_path_with_backslash_and_quote(self, tmp_path):
-        # e.g. windows paths like 'C:\Users\...'
-        parent_dir = tmp_path / "it's \\Users"
+        # e.g. windows paths like 'C:\Users\...', which already contain
+        # backslashes, but on posix a backslash is a plain name character
+        name = "it's" if sys.platform == "win32" else "it's\\Users"
+        parent_dir = tmp_path / name
         parent_dir.mkdir()
         crop = sown_crop(parent_dir)
         script = crop.gen_cluster_script("slurm")
