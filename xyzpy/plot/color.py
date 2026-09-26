@@ -370,6 +370,10 @@ def cmoke(
 
 doublerainbow = cmoke((1.8, -0.1), val1=0.2)
 doublerainbow_r = doublerainbow.reversed()
+sunset = cmoke(-0.1, +0.8, sat1=0.2, sat2=0.5, val1=0.3)
+sunset_r = sunset.reversed()
 
 mpl.colormaps.register(cmap=doublerainbow, name="doublerainbow")
 mpl.colormaps.register(cmap=doublerainbow_r, name="doublerainbow_r")
+mpl.colormaps.register(cmap=sunset, name="sunset")
+mpl.colormaps.register(cmap=sunset_r, name="sunset_r")
