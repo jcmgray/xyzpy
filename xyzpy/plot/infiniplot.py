@@ -337,6 +337,7 @@ INFINIPLOTTER_DEFAULTS = dict(
     row_label=None,
     row_ticklabels=None,
     alpha=1.0,
+    zorder=None,
     join_across_missing=False,
     err_band_alpha=0.1,
     err_bar_capsize=1,
@@ -987,6 +988,16 @@ class Infiniplotter:
             # current coordinates
             loc = dict(zip(self.remaining_dims, iloc))
 
+            if callable(self.zorder):
+                coords = {
+                    dim: self.ds[dim].values[i] for dim, i in loc.items()
+                }
+                zorder_opts = {"zorder": self.zorder(coords)}
+            elif self.zorder is not None:
+                zorder_opts = {"zorder": self.zorder}
+            else:
+                zorder_opts = {}
+
             # get the correct axes to plot on
             if self.row is not None:
                 i_ax = loc[self.row]
@@ -1109,6 +1120,7 @@ class Infiniplotter:
                         **{
                             **self.base_style,
                             **specific_style,
+                            **zorder_opts,
                             **self.err_kws,
                         },
                     )
@@ -1121,7 +1133,7 @@ class Infiniplotter:
                             "color", self.base_style["color"]
                         ),
                         alpha=self.err_band_alpha,
-                        **self.err_kws,
+                        **{**zorder_opts, **self.err_kws},
                     )
 
             if self.is_histogram:
@@ -1141,6 +1153,7 @@ class Infiniplotter:
                         specific_style.get("color", self.base_style["color"])
                     ),
                     alpha=self.err_band_alpha,
+                    **zorder_opts,
                 )
 
             plot_opts = {**self.base_style, **specific_style}
@@ -1161,6 +1174,7 @@ class Infiniplotter:
                 ymdata,
                 label=label,
                 **plot_opts,
+                **zorder_opts,
                 **self.kwargs,
             )
 
@@ -1171,7 +1185,11 @@ class Infiniplotter:
                 for txx, txy, txs in zip(
                     xdata[mask], ds_loc[self.y].values[mask], smdata
                 ):
-                    specific_text_opts = {}
+                    specific_text_opts = {
+                        k: v
+                        for k, v in zorder_opts.items()
+                        if k not in self.text_opts
+                    }
                     if "color" not in self.text_opts:
                         # default to line color
                         specific_text_opts["color"] = plot_opts["color"]
@@ -1875,6 +1893,12 @@ def infiniplot(
         dimension.
     alpha : float, optional
         Global alpha value to use for all lines.
+    zorder : float or callable, optional
+        The drawing order of each line, along with its error bars or band
+        and text labels. Either a single value for all lines, or a function
+        ``zorder(coords) -> float``, where ``coords`` is a dict mapping each
+        iterated dimension to this line's coordinate value, e.g.
+        ``zorder=lambda c: 3 if c["method"] == "best" else 2``.
     join_across_missing : bool, optional
         If True, join lines across missing (NaN) data. Default is False.
     err_band_alpha : float, optional

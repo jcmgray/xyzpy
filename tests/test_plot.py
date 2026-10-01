@@ -622,6 +622,55 @@ class TestConstantStyles:
         assert len(set(colors)) == 6
 
 
+class TestZorder:
+    @staticmethod
+    def make_ds():
+        return xr.Dataset(
+            coords={"Z": ["a", "b", "c"], "w": [0, 1], "x": np.arange(5)},
+            data_vars={"y": (("Z", "w", "x"), np.random.rand(3, 2, 5))},
+        )
+
+    def test_constant(self):
+        ds = self.make_ds()
+        _, axs = xyz.infiniplot(ds, "x", "y", zorder=5, show_and_close=False)
+        lines = axs[0, 0].lines
+        assert len(lines) == 6
+        assert all(line.get_zorder() == 5 for line in lines)
+
+    def test_callable(self):
+        ds = self.make_ds()
+        seen = []
+
+        def zorder(coords):
+            seen.append(coords)
+            return 10 if coords["Z"] == "b" else 1
+
+        _, axs = xyz.infiniplot(
+            ds, "x", "y", hue="Z", zorder=zorder, show_and_close=False
+        )
+        zorders = [line.get_zorder() for line in axs[0, 0].lines]
+        # lines are ordered (a, 0), (a, 1), (b, 0), (b, 1), (c, 0), (c, 1)
+        assert zorders == [1, 1, 10, 10, 1, 1]
+        assert all(set(c) == {"Z", "w"} for c in seen)
+
+    def test_band_follows_line(self):
+        ds = self.make_ds()
+        _, axs = xyz.infiniplot(
+            ds,
+            "x",
+            "y",
+            hue="Z",
+            aggregate="w",
+            zorder=lambda c: {"a": 3, "b": 7, "c": 5}[c["Z"]],
+            show_and_close=False,
+        )
+        ax = axs[0, 0]
+        line_zorders = [line.get_zorder() for line in ax.lines]
+        band_zorders = [band.get_zorder() for band in ax.collections]
+        assert line_zorders == [3, 7, 5]
+        assert band_zorders == line_zorders
+
+
 class TestIHeatmap:
     def test_simple(self, dataset_heatmap):
         dataset_heatmap.xyz.iheatmap("x", "y", "c", return_fig=True)

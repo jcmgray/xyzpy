@@ -18,6 +18,9 @@ Release notes for `xyzpy`.
 - `xyzpy-grow`: `--subprocess` now defaults to `auto`, which turns subprocess mode on if any of `--gpus`, `--affinities` or `--log` are given, and errors if they are given alongside `--subprocess false`. `--num-threads` is not a trigger, since the CLI applies it to its own process. {meth}`~xyzpy.gen.cropping.Crop.grow` likewise now treats `log` as a trigger for `subprocess="auto"`.
 
 - {func}`~xyzpy.infiniplot`: the `hues`, `colors`, `markers`, `linestyles`, `markersizes`, `linewidths` and `markeredgecolors` options now also accept a dict, mapping only the given coordinate values, with every other value keeping its default style.
+- {func}`~xyzpy.infiniplot`: add `zbase`, the log base for the heatmap colorbar when `zscale` is `"log"` or `"symlog"`, like `xbase` and `ybase`.
+- {func}`~xyzpy.infiniplot`: `row` and `col` panel titles shrink to fit above their axes, so long titles or thin panels no longer overlap.
+- {func}`~xyzpy.infiniplot`: float values in panel titles and legends no longer show rounding noise, e.g. `0.30000000000000004` shows as `0.3`.
 - {func}`~xyzpy.benchmark`: add `torch_cuda_sync=True` for accurately timing asynchronous PyTorch CUDA work by synchronizing the current device at each timing boundary.
 - {meth}`~xyzpy.gen.cropping.Crop.grow_cluster`: with slurm, submit with `sbatch --parsable` and return the job id. Raise an error if submission fails.
 - {meth}`~xyzpy.gen.cropping.Crop.gen_cluster_script`: for slurm, underscores in extra header options become hyphens, e.g. `mail_type="END"` gives `--mail-type=END`. `cpus_per_task` and `nodes` are accepted in place of `num_procs` and `num_nodes`.
@@ -30,6 +33,9 @@ Release notes for `xyzpy`.
 - {func}`~xyzpy.infiniplot`: fix a crash when `hue` is given as a constant while `color` is mapped to a dimension. The constant now sets the single colormap that `color` sweeps the intensity of.
 - {func}`~xyzpy.infiniplot`: `col` and `row` now raise an error if given name(s) which aren't valid dims
 - {func}`~xyzpy.infiniplot`: heatmaps no longer warn about aggregating over unmapped dimensions of size 1.
+- {func}`~xyzpy.infiniplot`: a missing `x`, `y` or `z` variable now raises an error specifying it.
+- {func}`~xyzpy.infiniplot`: panel titles now use `row_ticklabels` and `col_ticklabels`.
+- {func}`~xyzpy.infiniplot`: fix log axis tick labels below 1 showing as `0` for whole number bases other than 10, e.g. `xbase=2`.
 - {meth}`~xyzpy.gen.cropping.Crop.gen_cluster_script`: fix `time` given as a `"H:M:S"` string or as fractional hours. `"D-H:M:S"` strings are now also accepted.
 - {meth}`~xyzpy.gen.cropping.Crop.grow_cluster`: fix `mem` and `mem_per_cpu` clashing with the default memory. Giving both `mem` and `mem_per_cpu` for slurm now raises an error.
 - {meth}`~xyzpy.gen.cropping.Crop.gen_cluster_script`: fix a syntax error in SGE scripts for growing missing batches, `None` values in SGE and PBS headers when options are left out, and `subprocess="auto"`.
