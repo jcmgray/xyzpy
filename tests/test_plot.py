@@ -468,6 +468,32 @@ class TestPlot:
         _, axs = ds.xyz.plot("x", "y", col="t", col_ticklabels=["a", "b"])
         assert axs[0, 1].texts[0].get_text().endswith("=b")
 
+    def test_subtitle_constant(self):
+        ds = xr.Dataset(
+            coords={"x": [0, 1], "t": [1, 2]},
+            data_vars={"y": (("x", "t"), np.zeros((2, 2)))},
+        )
+        _, axs = ds.xyz.plot("x", "y", col="t", subtitle="panel")
+        assert [ax.texts[0].get_text() for ax in axs.flat] == [
+            "panel",
+            "panel",
+        ]
+
+    def test_subtitle_callable(self):
+        ds = xr.Dataset(
+            coords={"x": [0, 1], "t": [1, 2], "s": ["a", "b"]},
+            data_vars={"y": (("x", "t", "s"), np.zeros((2, 2, 2)))},
+        )
+        _, axs = ds.xyz.plot(
+            "x",
+            "y",
+            col="t",
+            row="s",
+            subtitle=lambda c: f"{c['s']}{c['t']}" if c["t"] == 2 else None,
+        )
+        assert [len(ax.texts) for ax in axs[:, 0]] == [0, 0]
+        assert [ax.texts[0].get_text() for ax in axs[:, 1]] == ["a2", "b2"]
+
     @mark.parametrize(
         "x, y, missing", [("D", "energy", "energy"), ("d", "E", "d")]
     )

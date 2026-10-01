@@ -375,6 +375,7 @@ INFINIPLOTTER_DEFAULTS = dict(
     legend_opts=None,
     label=None,
     title=None,
+    subtitle=None,
     ax=None,
     axs=None,
     format_axs=None,
@@ -1529,18 +1530,25 @@ class Infiniplotter:
 
         for (i, j), ax in np.ndenumerate(self.axs):
             # only change this stuff if we created the figure
+            coords = {}
             title = []
             for name, k in (("col", j), ("row", i)):
                 dim = getattr(self, name)
                 if dim is not None:
                     val = self.input_values[name][k]
+                    coords[dim] = val
                     val = self.ticklabels[dim].get(val, _format_value(val))
                     title.append(f"{self.labels[dim]}={val}")
+            title = ", ".join(title)
+            if callable(self.subtitle):
+                title = self.subtitle(coords)
+            elif self.subtitle is not None:
+                title = self.subtitle
             if title:
                 title = ax.text(
                     0.5,
                     1.0,
-                    ", ".join(title),
+                    title,
                     transform=ax.transAxes,
                     horizontalalignment="center",
                     verticalalignment="bottom",
@@ -1973,6 +1981,13 @@ def infiniplot(
         Additional keyword arguments to pass to the legend plotting function.
     title : str, optional
         A title to use for the plot.
+    subtitle : str or callable, optional
+        The title above each panel. By default it lists the ``col`` and
+        ``row`` values, e.g. ``"t=1, b=2"``. Either a single string for all
+        panels, or a function ``subtitle(coords) -> str``, where ``coords``
+        is a dict mapping the ``col`` and ``row`` dimensions to this panel's
+        coordinate value, e.g. ``subtitle=lambda c: f"$t={c['t']}$"``. An
+        empty string or ``None`` from the function shows no subtitle.
     axs : sequence[sequence[matplotlib.Axes]], optional
         An explicit array of axes to use for the plot, it should have at least
         as many rows and columns as there are mapped dimensions.
