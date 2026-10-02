@@ -384,6 +384,9 @@ class AutoGrower:
             if completion.success:
                 self._event(f"completed {label}")
                 continue
+            if completion.crop_removed:
+                self._event(f"stopped {label}, its crop was removed")
+                continue
 
             self.failed[key] = _failure_stamp(completion.task)
             message = f"failed {label}: {completion.message}"

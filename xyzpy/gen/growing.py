@@ -83,6 +83,24 @@ def _process_tree(pid):
     return pids
 
 
+def _kill_tree(root):
+    """Kill a process and, on Linux, all its descendants."""
+    for pid in _process_tree(root):
+        try:
+            os.kill(pid, getattr(signal, "SIGKILL", signal.SIGTERM))
+        except ProcessLookupError:
+            pass
+
+
+def _dir_id(path):
+    """Return the device and inode of a directory, or None if missing."""
+    try:
+        stat = os.stat(path)
+    except FileNotFoundError:
+        return None
+    return (stat.st_dev, stat.st_ino)
+
+
 def _memory_usage(pids):
     """Return the total resident memory of some processes, in bytes."""
     # pages shared between processes are counted once for each
@@ -145,6 +163,7 @@ class _BatchCompletion:
     returncode: int
     message: str
     log_path: Path | None
+    crop_removed: bool = False
 
 
 @dataclass
@@ -157,7 +176,10 @@ class _ActiveBatch:
     gpu: int | None
     affinity: int | None
     max_memory: int | None
+    crop_id: tuple[int, int] | None
+    crop_fd: int | None
     memory_used: int | None = None
+    crop_removed: bool = False
 
 
 class _SubprocessRunner:
@@ -304,6 +326,14 @@ class _SubprocessRunner:
             stderr = output_file
             log_path = None
 
+        # a new crop at the same path gets a new inode, holding the
+        # directory open stops the old inode being reused (POSIX only)
+        crop_id = _dir_id(task.crop_dir)
+        try:
+            crop_fd = os.open(task.crop_dir, os.O_RDONLY | os.O_DIRECTORY)
+        except (AttributeError, OSError):
+            crop_fd = None
+
         try:
             process = Popen(
                 args,
@@ -314,6 +344,8 @@ class _SubprocessRunner:
             )
         except BaseException:
             output_file.close()
+            if crop_fd is not None:
+                os.close(crop_fd)
             raise
 
         self.active[task.key] = _ActiveBatch(
@@ -325,22 +357,26 @@ class _SubprocessRunner:
             gpu=gpu,
             affinity=affinity,
             max_memory=self.max_memory,
+            crop_id=crop_id,
+            crop_fd=crop_fd,
         )
 
     def poll(self):
         """Return the batches that have finished."""
         completed = []
         for key, active in tuple(self.active.items()):
+            if not active.crop_removed and (
+                _dir_id(active.task.crop_dir) != active.crop_id
+            ):
+                # the crop was deleted or replaced, so drop its batch
+                active.crop_removed = True
+                _kill_tree(active.process.pid)
+
             if active.max_memory is not None and active.memory_used is None:
-                pids = _process_tree(active.process.pid)
-                memory_used = _memory_usage(pids)
+                memory_used = _memory_usage(_process_tree(active.process.pid))
                 if memory_used > active.max_memory:
                     active.memory_used = memory_used
-                    for pid in pids:
-                        try:
-                            os.kill(pid, signal.SIGKILL)
-                        except ProcessLookupError:
-                            pass
+                    _kill_tree(active.process.pid)
 
             returncode = active.process.poll()
             if returncode is None:
@@ -353,10 +389,16 @@ class _SubprocessRunner:
             else:
                 stderr = ""
             active.output_file.close()
+            if active.crop_fd is not None:
+                os.close(active.crop_fd)
 
             result_exists = active.task.result_file.is_file()
-            success = returncode == 0 and result_exists
-            if active.memory_used is not None and not success:
+            success = (
+                returncode == 0 and result_exists and not active.crop_removed
+            )
+            if active.crop_removed:
+                message = "crop directory was removed"
+            elif active.memory_used is not None and not success:
                 message = (
                     "process was killed for using "
                     f"{_format_memory(active.memory_used)}, over the memory "
@@ -378,6 +420,7 @@ class _SubprocessRunner:
                     returncode=returncode,
                     message=message,
                     log_path=active.log_path,
+                    crop_removed=active.crop_removed,
                 )
             )
         return completed
@@ -393,4 +436,6 @@ class _SubprocessRunner:
                 active.process.kill()
                 active.process.wait()
             active.output_file.close()
+            if active.crop_fd is not None:
+                os.close(active.crop_fd)
         self.active.clear()

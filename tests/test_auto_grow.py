@@ -1,3 +1,4 @@
+import time
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import Mock
@@ -19,6 +20,39 @@ def fail_if_negative(x):
     if x < 0:
         raise ValueError("negative value")
     return x + 1
+
+
+def wait_for_release(x, signal_dir):
+    signal_dir = Path(signal_dir)
+    (signal_dir / f"started-{x}").touch()
+    deadline = time.monotonic() + 60
+    while not (signal_dir / "release").exists():
+        if time.monotonic() > deadline:
+            raise TimeoutError("never released")
+        time.sleep(0.01)
+    return x + 1
+
+
+def add_two(x):
+    return x + 2
+
+
+def wait_for(condition, timeout=30):
+    deadline = time.monotonic() + timeout
+    while not condition():
+        if time.monotonic() > deadline:
+            raise TimeoutError("condition not met")
+        time.sleep(0.01)
+
+
+def step_until_idle(grower, timeout=30):
+    def step():
+        grower._handle_completions()
+        grower.scan()
+        grower._launch_available()
+        return not grower.runner.active and not grower.has_pending()
+
+    wait_for(step, timeout)
 
 
 def make_settings(**overrides):
@@ -305,3 +339,73 @@ class TestAutoGrowerScheduling:
         watcher.scan()
         assert watcher.crops[0].batch_ids == (1, 2)
         assert watcher.crops[0].name == crop.name
+
+
+class TestAutoGrowerCropChanges:
+    def test_resow_updates_queued_batches_only(self, tmp_path):
+        signals = tmp_path / "signals"
+        signals.mkdir()
+        crop = Crop(
+            fn=wait_for_release, name="resow", parent_dir=tmp_path, batchsize=1
+        )
+        crop.sow_cases(
+            "x", [1, 2], constants={"signal_dir": str(signals)}, verbosity=0
+        )
+        grower = AutoGrower(
+            tmp_path, make_settings(log=False), tmp_path / "config.toml"
+        )
+        try:
+            grower.scan()
+            grower._launch_available()
+            wait_for((signals / "started-1").exists)
+
+            resown = Crop(
+                fn=add_two, name="resow", parent_dir=tmp_path, batchsize=1
+            )
+            resown.sow_cases("x", [1, 2], verbosity=0)
+            (signals / "release").touch()
+            step_until_idle(grower)
+        finally:
+            grower.runner.terminate()
+
+        assert not grower.failed
+        # the running batch keeps the old function
+        assert crop.load_result(1) == (2,)
+        assert crop.load_result(2) == (4,)
+
+    @pytest.mark.parametrize("resow", [False, True])
+    def test_removing_crop_kills_its_batches(self, tmp_path, resow):
+        signals = tmp_path / "signals"
+        signals.mkdir()
+        crop = Crop(
+            fn=wait_for_release, name="gone", parent_dir=tmp_path, batchsize=1
+        )
+        crop.sow_cases(
+            "x", [1], constants={"signal_dir": str(signals)}, verbosity=0
+        )
+        grower = AutoGrower(
+            tmp_path, make_settings(log=False), tmp_path / "config.toml"
+        )
+        try:
+            grower.scan()
+            grower._launch_available()
+            wait_for((signals / "started-1").exists)
+            (process,) = (a.process for a in grower.runner.active.values())
+
+            crop.delete_all()
+            if resow:
+                new = Crop(
+                    fn=add_two, name="gone", parent_dir=tmp_path, batchsize=1
+                )
+                new.sow_cases("x", [1], verbosity=0)
+            step_until_idle(grower)
+        finally:
+            grower.runner.terminate()
+
+        assert process.returncode != 0
+        assert not grower.failed
+        assert not grower.recent_failures
+        if resow:
+            assert new.load_result(1) == (3,)
+        else:
+            assert not Path(crop.location).exists()

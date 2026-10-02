@@ -9,6 +9,7 @@ Release notes for `xyzpy`.
 **Enhancements:**
 
 - Add the `xyzpy-auto-grow` CLI. It watches all crops in a directory and takes one batch from each Crop in turn. A TOML file can change worker, thread, GPU, and CPU affinity settings while it runs.
+- `xyzpy-auto-grow` and {meth}`~xyzpy.gen.cropping.Crop.grow_subprocess` kill running batches whose crop directory is deleted or replaced. Re-sowing in place leaves running batches alone.
 - Add {func}`~xyzpy.gen.farming.sow` and {meth}`~xyzpy.gen.farming.Harvester.sow`. They write missing cases for later growth. Stable coordinate keys reuse matching crops. Re-sowing updates the function and constants in batches without results while keeping existing results.
 - Reload disk-backed {class}`~xyzpy.gen.farming.Harvester` datasets when their files or Zarr stores change. A reused in-memory sow submission reaps into the calling Harvester and keeps its saved output metadata.
 - Write crop files atomically, so watchers only read complete files.

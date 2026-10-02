@@ -147,8 +147,8 @@ and simply want missing results to be generated with this new implementation.
 
 Note for a disk-backed [`Harvester`](#farming.Harvester), the file on disk is
 the source of truth. Accessing [`Harvester.full_ds`](#Harvester.full_ds)
-reloads it after its file or Zarr store changes. A reload discards unsaved
-in-memory edits. Normal harvest operations save their changes. Calling
+reloads it after its file or Zarr store changes. Reloading thus discards
+unsaved in-memory edits (normal harvest operations save their changes). Calling
 [`Harvester.add_ds`](#Harvester.add_ds) with `sync=False` makes a temporary
 in-memory change.
 
@@ -215,3 +215,10 @@ Stop the watcher and wait for active batches before
 Use `--once` to grow all work that can start now, then exit. If launches are
 paused or no configured resource slot is available, it exits without removing
 queued batches.
+
+```{hint}
+If *you* want to cancel the running batches for a specific crop (and don't care
+about the results), you can simply delete the crop directory from disk. The
+watcher will detect this and kill all running batches for that crop (these are
+not counted as failures).
+```
