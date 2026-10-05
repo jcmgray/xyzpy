@@ -4,7 +4,7 @@ import matplotlib
 import numpy as np
 import xarray as xr
 from numpy.testing import assert_allclose
-from pytest import fixture, mark, raises, warns
+from pytest import approx, fixture, mark, raises, warns
 
 import xyzpy as xyz
 from xyzpy.plot.color import convert_colors
@@ -516,6 +516,24 @@ class TestPlot:
             "1",
             "8",
         ]
+
+    def test_symlog_base_ticks(self):
+        x = np.linspace(-300, 300, 11)
+        _, axs = xyz.plot(
+            x,
+            x,
+            xscale="symlog",
+            xbase=2,
+            show_and_close=False,
+        )
+        axis = axs[0, 0].xaxis
+        assert axis.get_transform().base == 2
+        ticks = axis.get_major_locator().tick_values(-300, 300)
+        assert 0.0 in ticks
+        nonzero = np.abs(ticks[ticks != 0])
+        assert np.log2(nonzero) == approx(np.round(np.log2(nonzero)))
+        fmt = axis.get_major_formatter()
+        assert [fmt(v) for v in [-8, 0, 0.5, 128]] == ["-8", "0", "0.5", "128"]
 
 
 class TestStyleOverrides:

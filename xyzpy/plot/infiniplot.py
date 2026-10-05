@@ -185,6 +185,11 @@ def to_colormap(c, **autohue_opts):
         return color_to_colormap(c, **autohue_opts)
 
 
+def format_log_tick(value, _position):
+    # whole numbers above 1, and fractions like 0.5 below
+    return f"{value:.0f}" if abs(value) >= 1 else f"{value:.3g}"
+
+
 def set_log_ticks(axis, base):
     """Set nice major and minor log ticks for ``axis`` in ``base``."""
     from matplotlib.ticker import (
@@ -193,10 +198,6 @@ def set_log_ticks(axis, base):
         NullFormatter,
         ScalarFormatter,
     )
-
-    def format_log_tick(value, _position):
-        # whole numbers above 1, and fractions like 0.5 below
-        return f"{value:.0f}" if value >= 1 else f"{value:.3g}"
 
     axis.set_major_locator(LogLocator(base=base, numticks=6))
     if base != 10:
@@ -209,6 +210,35 @@ def set_log_ticks(axis, base):
     else:
         subs = np.arange(2, base)
     axis.set_minor_locator(LogLocator(base=base, subs=subs))
+    axis.set_minor_formatter(NullFormatter())
+
+
+def set_symlog_ticks(axis, base):
+    """Set nice major and minor symlog ticks for ``axis`` in ``base``, which
+    should match the base of the axis scale.
+    """
+    from matplotlib.ticker import (
+        FuncFormatter,
+        NullFormatter,
+        ScalarFormatter,
+        SymmetricalLogLocator,
+    )
+
+    transform = axis.get_transform()
+    major_locator = SymmetricalLogLocator(transform)
+    major_locator.set_params(numticks=6)
+    axis.set_major_locator(major_locator)
+    if base != 10:
+        if isinstance(base, int):
+            axis.set_major_formatter(FuncFormatter(format_log_tick))
+        else:
+            axis.set_major_formatter(ScalarFormatter())
+    # include 1 so that powers skipped by the major stride get minor ticks
+    if base < 3:
+        subs = [1.0, 1.5]
+    else:
+        subs = np.arange(1, base)
+    axis.set_minor_locator(SymmetricalLogLocator(transform, subs=subs))
     axis.set_minor_formatter(NullFormatter())
 
 
@@ -1579,10 +1609,15 @@ class Infiniplotter:
             if self.ylim is not None:
                 ax.set_ylim(self.ylim)
 
-            if self.xscale is not None:
-                ax.set_xscale(self.xscale)
-            if self.yscale is not None:
-                ax.set_yscale(self.yscale)
+            for scale, base, set_scale in (
+                (self.xscale, self.xbase, ax.set_xscale),
+                (self.yscale, self.ybase, ax.set_yscale),
+            ):
+                if scale == "symlog":
+                    # the symlog transform itself depends on the base
+                    set_scale(scale, base=base)
+                elif scale is not None:
+                    set_scale(scale)
 
             for axis_name, scale, base, ticks, ticklabels, axis in [
                 (
@@ -1620,8 +1655,7 @@ class Infiniplotter:
                 elif scale == "log":
                     set_log_ticks(axis, base)
                 elif scale == "symlog":
-                    # TODO: choose some nice defaults
-                    pass
+                    set_symlog_ticks(axis, base)
                 else:
                     axis.set_minor_locator(AutoMinorLocator(5))
 
@@ -1928,9 +1962,11 @@ def infiniplot(
     zscale : str, optional
         Scale to use for a heatmap color dimension, e.g. 'log'.
     xbase : float, optional
-        If ``xscale=='log'``, the log base to use for the x-axis.
+        If ``xscale`` is 'log' or 'symlog', the log base to use for the
+        x-axis.
     ybase : float, optional
-        If ``yscale=='log'``, the log base to use for the y-axis.
+        If ``yscale`` is 'log' or 'symlog', the log base to use for the
+        y-axis.
     zbase : float, optional
         If ``zscale`` is 'log' or 'symlog', the log base to use for the
         heatmap colorbar.
