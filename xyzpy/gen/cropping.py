@@ -26,7 +26,7 @@ from .combo_runner import (
     nan_like_result,
 )
 from .farming import Harvester, Runner, Sampler, XYZError
-from .growing import _BatchTask, _SubprocessRunner
+from .growing import _THREAD_ENV_VARS, _BatchTask, _SubprocessRunner
 from .prepare import (
     parse_attrs,
     parse_cases,
@@ -790,6 +790,8 @@ class Crop:
         max_memory=None,
         raise_errors=False,
         log=False,
+        append_logs=False,
+        debugging=False,
         min_wait=1e-6,
         max_wait=1e-1,
         verbosity=1,
@@ -830,6 +832,11 @@ class Crop:
             Save stdout and stderr to ``logs/batch-{batch_id}.log``. The
             default is False. Without a log, stdout is discarded and stderr is
             shown only after an error.
+        append_logs : bool, optional
+            Add to existing log files, with a header for each attempt, rather
+            than replacing them.
+        debugging : bool, optional
+            Set the logging level to debug in each process.
         min_wait : float, optional
             Minimum polling interval in seconds.
         max_wait : float, optional
@@ -861,7 +868,9 @@ class Crop:
             max_memory=max_memory,
             log=log,
             verbosity_grow=verbosity_grow,
+            append_logs=append_logs,
             raise_errors=raise_errors,
+            debugging=debugging,
         )
         tasks = {
             batch_id: _BatchTask(
@@ -1005,6 +1014,7 @@ class Crop:
                 affinities=affinities,
                 max_memory=max_memory,
                 raise_errors=raise_errors,
+                debugging=debugging,
                 verbosity=verbosity,
                 verbosity_grow=verbosity_grow,
                 log=log,
@@ -1785,7 +1795,6 @@ _SGE_HEADER = (
     "#$ -N {name}\n"
     "#$ -l h_rt={hours}:{minutes}:{seconds},mem={gigabytes}G\n"
     "#$ -l tmpfs={temp_gigabytes}G\n"
-    "mkdir -p {output_directory}\n"
     "#$ -wd {output_directory}\n"
     "#$ -pe {pe} {num_procs}\n"
     "{header_options}"
@@ -1831,12 +1840,10 @@ _ARRAY_TASK_IDS = {
 _BASE = (
     "echo 'XYZPY script starting...'\n"
     "cd {working_directory}\n"
-    "export OMP_NUM_THREADS={num_threads}\n"
-    "export MKL_NUM_THREADS={num_threads}\n"
-    "export OPENBLAS_NUM_THREADS={num_threads}\n"
-    "export NUMBA_NUM_THREADS={num_threads}\n"
+    "{thread_exports}"
     "{shell_setup}\n"
-    "read -r -d '' SCRIPT << 'EOM'\n"
+    # read exits with status 1 at the end of input, so allow ``set -e``
+    "read -r -d '' SCRIPT << 'EOM' || true\n"
     "{setup}\n"
     "import os\n"
     "from xyzpy.gen.cropping import grow, Crop\n"
@@ -1844,24 +1851,26 @@ _BASE = (
     "    crop = Crop(name={name!r}, parent_dir={parent_dir!r})\n"
     "    print('Growing:', repr(crop))\n"
     "    grow_kwargs = dict(\n"
-    "        num_workers={num_workers},\n"
-    "        subprocess={subprocess!r},\n"
-    "        debugging={debugging},\n"
-    "        verbosity_grow=2,\n"
+    "{grow_kwargs}"
     "    )\n"
 )
 
-_CLUSTER_GROW_ARRAY_SCRIPT = "    crop.grow({task_id}, **grow_kwargs)\n"
+# the printed batch id lets `clean_slurm_outputs` match tasks to results
+_CLUSTER_GROW_ARRAY_SCRIPT = (
+    "    batch_id = {task_id}\n"
+    "    print('xyzpy: growing batch', batch_id)\n"
+    "    crop.grow(batch_id, **grow_kwargs)\n"
+)
 
 _CLUSTER_GROW_ARRAY_INDEX_SCRIPT = (
     "    batch_ids = {batch_ids}\n"
-    "    crop.grow(batch_ids[{task_id} - 1], **grow_kwargs)\n"
+    "    batch_id = batch_ids[{task_id} - 1]\n"
+    "    print('xyzpy: growing batch', batch_id)\n"
+    "    crop.grow(batch_id, **grow_kwargs)\n"
 )
 
 _BASE_CLUSTER_GROW_SINGLE = (
-    "    grow_kwargs['verbosity_grow'] = 0\n"
-    "    batch_ids = {batch_ids}\n"
-    "    crop.grow(batch_ids, **grow_kwargs)\n"
+    "    batch_ids = {batch_ids}\n    crop.grow(batch_ids, **grow_kwargs)\n"
 )
 
 _BASE_CLUSTER_SCRIPT_END = (
@@ -1879,7 +1888,12 @@ def gen_cluster_script(
     num_threads=None,
     num_nodes=None,
     num_workers=None,
-    subprocess=False,
+    subprocess="auto",
+    log=None,
+    raise_errors=None,
+    max_memory=None,
+    gpus=None,
+    affinities=None,
     mem=None,
     mem_per_cpu=None,
     gigabytes=None,
@@ -1906,7 +1920,12 @@ def gen_cluster_script(
     scheduler : {'sge', 'pbs', 'slurm'}
         Whether to use a SGE, PBS or slurm submission script template.
     batch_ids : int or tuple[int]
-        Which batch numbers to grow, defaults to all missing batches.
+        Which batch numbers to grow, defaults to all missing batches. In
+        ``'array'`` mode the missing batches are found when the script is
+        made, and array task ``i`` grows the ``i``-th of them. If no batch
+        has a result yet, task ``i`` simply grows batch ``i``. In
+        ``'single'`` mode the missing batches are found when the job starts,
+        so the same job can be resubmitted to resume.
     mode : {'array', 'single'}
         How to distribute the batches, either as an array job with a single
         batch per job, or as a single job processing batches in parallel.
@@ -1926,7 +1945,7 @@ def gen_cluster_script(
         applies.
     mem : int or str, optional
         Alias for ``gigabytes``. For slurm, a string like ``"500M"`` is passed
-        on as is.
+        on as is. For SGE and PBS it must be a number of gigabytes.
     mem_per_cpu : int or str, optional
         How much memory to request per cpu, slurm only.
     num_procs : int, optional
@@ -1941,7 +1960,29 @@ def gen_cluster_script(
         How many workers to use for parallel growing, default is sequential. If
         specified, then generally ``num_workers * num_threads == num_procs``.
     subprocess : bool or "auto", optional
-        Whether to use a fresh subprocess for each batch, default: False.
+        Whether to grow each batch in a fresh process, see
+        :meth:`Crop.grow_subprocess`. ``"auto"``, the default, does this if
+        ``log``, ``max_memory``, ``gpus`` or ``affinities`` is set, (note
+        ``log`` is set by default).
+    log : bool, optional
+        Save the output of each batch to ``logs/batch-{batch_id}.log`` in the
+        crop directory, adding to any log from an earlier attempt. The default
+        is True, unless ``subprocess=False``. ``setup`` and ``launcher`` then
+        only apply to the parent process, not to the process growing each
+        batch.
+    raise_errors : bool, optional
+        Whether a failed batch raises an error. The default is True in
+        ``'array'`` mode, so the array task is marked as failed, and False in
+        ``'single'`` mode, so the other batches carry on.
+    max_memory : int or str, optional
+        Memory limit for each batch process, such as ``"100G"``. See
+        :meth:`Crop.grow_subprocess`.
+    gpus : int, str, or sequence of int, optional
+        GPU IDs to share between batch processes. See
+        :meth:`Crop.grow_subprocess`.
+    affinities : int, str, or sequence of int, optional
+        CPU core IDs to share between batch processes. See
+        :meth:`Crop.grow_subprocess`.
     num_nodes : int, optional
         How many nodes to request. For SGE and PBS the default is 1. For
         slurm, ``nodes`` can be given instead.
@@ -1965,7 +2006,11 @@ def gen_cluster_script(
     temp_gigabytes : int, optional
         How much temporary on-disk memory.
     output_directory : str, optional
-        What directory to write output to. Defaults to "$HOME/Scratch/output".
+        Directory for the scheduler's own output files, such as
+        ``slurm-{job}_{task}.out``. The default is the crop directory. For
+        SGE this sets ``-wd``. For slurm and PBS the files are written where
+        the job is submitted from, which :func:`grow_cluster` sets to this
+        directory.
     debugging : bool, optional
         Set the python log level to debugging.
     kwargs : dict, optional
@@ -1990,6 +2035,31 @@ def gen_cluster_script(
 
     if mode not in ("array", "single"):
         raise ValueError("mode must be one of 'array' or 'single'.")
+
+    process_options = {
+        "max_memory": max_memory,
+        "gpus": gpus,
+        "affinities": affinities,
+    }
+    if log is None:
+        log = subprocess is not False
+    if subprocess == "auto":
+        subprocess = log or any(
+            v is not None for v in process_options.values()
+        )
+    if not subprocess:
+        given = [
+            name
+            for name, value in (("log", log), *process_options.items())
+            if value not in (None, False)
+        ]
+        if given:
+            raise ValueError(
+                f"{', '.join(repr(n) for n in given)} can only be used with "
+                "subprocess=True."
+            )
+    if raise_errors is None:
+        raise_errors = mode == "array"
 
     # parse the time requirement into total seconds
     if time is not None:
@@ -2060,8 +2130,11 @@ def gen_cluster_script(
             num_nodes = 1
         if gigabytes is None:
             gigabytes = 2
-        elif mem is not None:
-            gigabytes = int(mem)
+        elif isinstance(gigabytes, str):
+            raise ValueError(
+                f"For {scheduler}, memory should be a number of gigabytes, "
+                f"not {gigabytes!r}."
+            )
 
     # parse the number of threads
     if num_threads is None:
@@ -2078,16 +2151,18 @@ def gen_cluster_script(
             # split cores evenly between workers
             num_threads = max(1, num_procs // num_workers)
 
-    if (num_workers is not None) and (num_procs is not None):
-        if num_workers * num_threads != num_procs:
-            warnings.warn(
-                f"num_workers * num_threads ({num_workers} * {num_threads}) "
-                f"!= num_procs ({num_procs}), may not be computationally "
-                "efficient."
-            )
+    if (
+        (num_workers is not None)
+        and (num_procs is not None)
+        and (num_workers * num_threads != num_procs)
+    ):
+        warnings.warn(
+            f"num_workers * num_threads ({num_workers} * {num_threads}) !="
+            f" num_procs ({num_procs}), may not be computationally efficient."
+        )
 
     if output_directory is None:
-        output_directory = str(Path.home() / "Scratch" / "output")
+        output_directory = str(Path(crop.location).expanduser().resolve())
 
     if launcher is None:
         launcher = sys.executable
@@ -2096,15 +2171,17 @@ def gen_cluster_script(
         # automatically set conda environment to be the
         # same as the one that's running this function
         conda_env = os.environ.get("CONDA_DEFAULT_ENV", False)
-        if conda_env:
+        if (
+            conda_env
             # but only if we are in a conda environment
-            if (
+            and (
                 ("conda activate" in shell_setup)
                 or ("mamba activate" in shell_setup)
                 or ("micromamba activate" in shell_setup)
-            ):
-                # and user is not already explicitly activating
-                conda_env = False
+            )
+        ):
+            # and user is not already explicitly activating
+            conda_env = False
 
     if isinstance(conda_env, str):
         # should now be a string
@@ -2128,6 +2205,26 @@ def gen_cluster_script(
     # get absolute path
     full_parent_dir = str(Path(crop.parent_dir).expanduser().resolve())
 
+    # source code for each option passed to `Crop.grow` in the job
+    grow_kwargs = {
+        "num_workers": num_workers,
+        "subprocess": subprocess,
+        "raise_errors": raise_errors,
+        "debugging": debugging,
+        # batches in a single job would print over each other without logs
+        "verbosity_grow": 2 if (mode == "array" or log) else 0,
+    }
+    if subprocess:
+        grow_kwargs["log"] = log
+        grow_kwargs["append_logs"] = log
+        grow_kwargs.update(
+            (k, v) for k, v in process_options.items() if v is not None
+        )
+    grow_kwargs = {k: repr(v) for k, v in grow_kwargs.items()}
+    if subprocess:
+        # match the thread limit exported by the shell
+        grow_kwargs["num_threads"] = "int(os.environ['OMP_NUM_THREADS'])"
+
     opts = {
         "hours": hours,
         "minutes": minutes,
@@ -2138,8 +2235,12 @@ def gen_cluster_script(
         "num_procs": num_procs,
         "num_threads": num_threads,
         "num_nodes": num_nodes,
-        "num_workers": num_workers,
-        "subprocess": subprocess,
+        "thread_exports": "".join(
+            f"export {name}={num_threads}\n" for name in _THREAD_ENV_VARS
+        ),
+        "grow_kwargs": "".join(
+            f"        {k}={v},\n" for k, v in grow_kwargs.items()
+        ),
         "launcher": launcher,
         "setup": setup,
         "shell_setup": shell_setup,
@@ -2148,7 +2249,6 @@ def gen_cluster_script(
         "output_directory": output_directory,
         "working_directory": full_parent_dir,
         "header_options": header_options,
-        "debugging": debugging,
         "task_id": _ARRAY_TASK_IDS[scheduler],
     }
 
@@ -2218,7 +2318,8 @@ def grow_cluster(
     num_procs=None,
     num_threads=None,
     num_workers=None,
-    subprocess=False,
+    subprocess="auto",
+    log=None,
     conda_env=False,
     launcher=None,
     setup="#",
@@ -2263,7 +2364,11 @@ def grow_cluster(
         How many workers to use for parallel growing, default is sequential. If
         specified, then generally ``num_workers * num_threads == num_procs``.
     subprocess : bool or "auto", optional
-        Whether to use a fresh subprocess for each batch, default: False.
+        Whether to grow each batch in a fresh process. ``"auto"``, the
+        default, does this if ``log`` or another process option is set.
+    log : bool, optional
+        Save the output of each batch to ``logs/batch-{batch_id}.log`` in the
+        crop directory. The default is True, unless ``subprocess=False``.
     conda_env : bool or str, optional
         Whether to activate a conda environment before running the script,
         default: False. This is usually not needed, since the script runs
@@ -2285,12 +2390,15 @@ def grow_cluster(
     temp_gigabytes : int, optional
         How much temporary on-disk memory.
     output_directory : str, optional
-        What directory to write output to. Defaults to "$HOME/Scratch/output".
+        Directory for the scheduler's own output files. The job is submitted
+        from here, and it is created if needed. The default is the crop
+        directory.
     debugging : bool, optional
         Set the python log level to debugging.
     kwargs
         See `gen_cluster_script` for all other options, such as ``time``,
-        ``mem``, ``mode`` and extra header resources.
+        ``mem``, ``mode``, ``raise_errors``, ``max_memory`` and extra header
+        resources.
 
     Returns
     -------
@@ -2305,6 +2413,10 @@ def grow_cluster(
         print("Crop ready to reap: nothing to submit.")
         return
 
+    if output_directory is None:
+        output_directory = crop.location
+    output_directory = Path(output_directory).expanduser().resolve()
+
     script = gen_cluster_script(
         crop,
         scheduler,
@@ -2314,12 +2426,13 @@ def grow_cluster(
         seconds=seconds,
         gigabytes=gigabytes,
         temp_gigabytes=temp_gigabytes,
-        output_directory=output_directory,
+        output_directory=str(output_directory),
         num_procs=num_procs,
         num_threads=num_threads,
         num_nodes=num_nodes,
         num_workers=num_workers,
         subprocess=subprocess,
+        log=log,
         conda_env=conda_env,
         launcher=launcher,
         setup=setup,
@@ -2329,7 +2442,10 @@ def grow_cluster(
         **kwargs,
     )
 
-    script_file = Path(crop.location) / "__qsub_script__.sh"
+    output_directory.mkdir(parents=True, exist_ok=True)
+
+    # keep the script next to the crop, to see what was last submitted
+    script_file = Path(crop.location) / "__cluster_script__.sh"
 
     with open(script_file, mode="w") as f:
         f.write(script)
@@ -2339,10 +2455,10 @@ def grow_cluster(
     else:
         cmd = ["qsub", str(script_file)]
 
-    try:
-        result = run(cmd, capture_output=True, text=True)
-    finally:
-        script_file.unlink()
+    # slurm and PBS write output files where the job is submitted from
+    result = run(
+        cmd, capture_output=True, text=True, cwd=output_directory, check=False
+    )
 
     if result.returncode != 0:
         raise RuntimeError(f"Job submission failed:\n{result.stderr}")
@@ -2430,46 +2546,81 @@ Crop.gen_slurm_script = functools.partialmethod(
 Crop.grow_slurm = functools.partialmethod(Crop.grow_cluster, scheduler="slurm")
 
 
-def clean_slurm_outputs(job, directory=".", cancel_if_finished=True):
-    """ """
-    import re
+def clean_slurm_outputs(crop, job, directory=None, cancel_if_finished=True):
+    """Check and tidy the output files of a slurm array job growing ``crop``.
+
+    Each array task prints which batch it grows. A task is finished once that
+    batch has a result, and its output file is then deleted. The output of
+    each batch itself is in ``logs/batch-{batch_id}.log`` by default.
+
+    Parameters
+    ----------
+    crop : Crop
+        The crop being grown.
+    job : int or str
+        The slurm job id.
+    directory : str, optional
+        Where the output files are, by default the crop directory.
+    cancel_if_finished : bool, optional
+        Cancel finished tasks that slurm still reports as running.
+
+    Returns
+    -------
+    int
+        The number of output files found.
+    """
     import subprocess
 
     job = str(job)
+    if directory is None:
+        directory = crop.location
 
-    files = list(Path(directory).glob(f"slurm-{job}_*.out"))
+    files = sorted(Path(directory).glob(f"slurm-{job}_*.out"))
 
     for file in files:
-        jobid = int(re.match(r"slurm-\d+_(\d+).out", file.name).groups()[0])
+        task = int(re.fullmatch(r"slurm-\d+_(\d+)\.out", file.name).group(1))
+        contents = file.read_text()
 
-        with open(file, "r") as f:
-            contents = f.read()
-
-        jname = f"{job}_{jobid}"
+        jname = f"{job}_{task}"
         print(jname, end=" ")
 
-        # array task ids index into the batches, so match any batch number
-        if re.search(r"batch \d+ completed", contents):
+        match = re.search(r"xyzpy: growing batch (\d+)", contents)
+        if match is None:
+            print("starting...")
+            continue
+
+        batch_id = int(match.group(1))
+        print(f"batch {batch_id}", end=" ")
+        result_file = (
+            Path(crop.location) / "results" / RSLT_NM.format(batch_id)
+        )
+
+        if result_file.is_file():
             print("xyzpy finished!", end=" ")
 
             if cancel_if_finished:
                 # check if job queued still
+                # fails once slurm has forgotten the job, i.e. not running
                 status = subprocess.run(
-                    ["scontrol", "show", "job", jname], capture_output=True
+                    ["scontrol", "show", "job", jname],
+                    capture_output=True,
+                    check=False,
                 ).stdout.decode()
 
                 running = "JobState=RUNNING" in status
                 if running:
                     print("slurm cancelling,", end=" ")
-                    subprocess.run(["scancel", jname])
+                    # the task may have just finished, so ignore failure
+                    subprocess.run(["scancel", jname], check=False)
                 else:
                     print("slurm finished,", end=" ")
 
             # delete the output file
             print("deleting output.", end=" ")
             file.unlink()
-        elif "error" in contents.lower():
-            # check if any captilization of 'error' in file
+        elif re.search(
+            r"batch \d+ failed|Traceback|slurmstepd: error", contents
+        ):
             print("appears to have an error!", end=" ")
         else:
             print("xyzpy running...", end=" ")
@@ -2479,7 +2630,10 @@ def clean_slurm_outputs(job, directory=".", cancel_if_finished=True):
     return len(files)
 
 
-def manage_slurm_outputs(crop, job, wait_time=60):
+def manage_slurm_outputs(crop, job, directory=None, wait_time=60):
+    """Repeatedly check the output files of a slurm array job growing
+    ``crop``, until it is ready to reap. See :func:`clean_slurm_outputs`.
+    """
     import time
 
     from IPython.display import clear_output
@@ -2488,7 +2642,7 @@ def manage_slurm_outputs(crop, job, wait_time=60):
         while True:
             clear_output(wait=True)
             print(crop)
-            clean_slurm_outputs(job)
+            clean_slurm_outputs(crop, job, directory=directory)
 
             if crop.is_ready_to_reap():
                 break

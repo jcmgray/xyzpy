@@ -3,49 +3,83 @@
 Release notes for `xyzpy`.
 
 
-(whats-new-1-3-6)=
-## v1.3.6 (unreleased)
+(whats-new-1-4-0)=
+## v1.4.0 (unreleased)
+
+**Breaking changes:**
+
+- Require Python 3.11 or newer.
+- {meth}`~xyzpy.gen.cropping.Crop.grow_cluster` now grows each batch in its own process and logs its output by default, see {ref}`cluster jobs <cluster-jobs-1-3-6>`. Pass `subprocess=False` for the old behavior.
+- `clean_slurm_outputs` and `manage_slurm_outputs` now take the crop as their first argument.
+
+### Growing crops
 
 **Enhancements:**
 
-- Add the `xyzpy-auto-grow` CLI. It watches all crops in a directory and takes one batch from each Crop in turn. A TOML file can change worker, thread, GPU, and CPU affinity settings while it runs.
+- Add the `xyzpy-auto-grow` CLI. It watches all crops in a directory and takes one batch from each crop in turn. A TOML file can change worker, thread, GPU and CPU affinity settings while it runs.
 - `xyzpy-auto-grow` and {meth}`~xyzpy.gen.cropping.Crop.grow_subprocess` kill running batches whose crop directory is deleted or replaced. Re-sowing in place leaves running batches alone.
-- Add {func}`~xyzpy.gen.farming.sow` and {meth}`~xyzpy.gen.farming.Harvester.sow`. They write missing cases for later growth. Stable coordinate keys reuse matching crops. Re-sowing updates the function and constants in batches without results while keeping existing results.
-- Reload disk-backed {class}`~xyzpy.gen.farming.Harvester` datasets when their files or Zarr stores change. A reused in-memory sow submission reaps into the calling Harvester and keeps its saved output metadata.
-- Write crop files atomically, so watchers only read complete files.
-- Stop saving cached datasets into crop settings files.
-- Make {meth}`~xyzpy.gen.cropping.Crop.is_prepared` require a saved function.
-- Require Python 3.11 or newer.
-- `xyzpy-grow`: `--subprocess` now defaults to `auto`, which turns subprocess mode on if any of `--gpus`, `--affinities` or `--log` are given, and errors if they are given alongside `--subprocess false`. `--num-threads` is not a trigger, since the CLI applies it to its own process. {meth}`~xyzpy.gen.cropping.Crop.grow` likewise now treats `log` as a trigger for `subprocess="auto"`.
+- Add {func}`~xyzpy.gen.farming.sow` and {meth}`~xyzpy.gen.farming.Harvester.sow`, which write missing cases to grow later. Stable coordinate keys reuse matching crops. Re-sowing updates the function and constants of batches without results, and keeps existing results.
+- Disk-backed {class}`~xyzpy.gen.farming.Harvester` datasets reload when their files or Zarr stores change. A reused in-memory sow submission reaps into the calling Harvester and keeps its saved output metadata.
+- `xyzpy-grow`: `--subprocess` now defaults to `auto`, which turns subprocess mode on if `--gpus`, `--affinities` or `--log` is given, and errors if any of them is given with `--subprocess false`. `--num-threads` doesn't count, since the CLI applies it to its own process. {meth}`~xyzpy.gen.cropping.Crop.grow` also treats `log` as a trigger for `subprocess="auto"`.
+- {meth}`~xyzpy.gen.cropping.Crop.grow_subprocess`: add `append_logs` and `debugging`. `xyzpy-grow` gains a matching `--debugging` flag.
+- Crop files are written atomically, so watchers only read complete files.
+- Cached datasets are no longer saved into crop settings files.
+- {meth}`~xyzpy.gen.cropping.Crop.is_prepared` now requires a saved function.
 
-- {func}`~xyzpy.infiniplot`: the `hues`, `colors`, `markers`, `linestyles`, `markersizes`, `linewidths` and `markeredgecolors` options now also accept a dict, mapping only the given coordinate values, with every other value keeping its default style.
-- {func}`~xyzpy.infiniplot`: add `zbase`, the log base for the heatmap colorbar when `zscale` is `"log"` or `"symlog"`, like `xbase` and `ybase`.
-- {func}`~xyzpy.infiniplot`: `row` and `col` panel titles shrink to fit above their axes, so long titles or thin panels no longer overlap.
-- {func}`~xyzpy.infiniplot`: float values in panel titles and legends no longer show rounding noise, e.g. `0.30000000000000004` shows as `0.3`.
-- {func}`~xyzpy.benchmark`: add `torch_cuda_sync=True` for accurately timing asynchronous PyTorch CUDA work by synchronizing the current device at each timing boundary.
-- {meth}`~xyzpy.gen.cropping.Crop.grow_cluster`: with slurm, submit with `sbatch --parsable` and return the job id. Raise an error if submission fails.
-- {meth}`~xyzpy.gen.cropping.Crop.gen_cluster_script`: for slurm, underscores in extra header options become hyphens, e.g. `mail_type="END"` gives `--mail-type=END`. `cpus_per_task` and `nodes` are accepted in place of `num_procs` and `num_nodes`.
-- {meth}`~xyzpy.gen.cropping.Crop.gen_cluster_script`: for slurm, `--nodes`, `--cpus-per-task` and `--mem` are only written if given, including from {meth}`~xyzpy.gen.cropping.Crop.grow_cluster`. Without `num_procs`, the thread count is taken from `SLURM_CPUS_PER_TASK`.
-- {meth}`~xyzpy.gen.cropping.Crop.gen_cluster_script`: `conda_env` now defaults to `False`, since the script runs the current Python interpreter directly.
+(cluster-jobs-1-3-6)=
+### Cluster jobs
+
+These are for {meth}`~xyzpy.gen.cropping.Crop.grow_cluster` and {meth}`~xyzpy.gen.cropping.Crop.gen_cluster_script`.
+
+**Enhancements:**
+
+- Each batch now runs in its own process by default, saving its output to `logs/batch-{batch_id}.log` in the crop directory, and adding to the log of any earlier attempt.
+- Add `log`, `raise_errors`, `max_memory`, `gpus` and `affinities`, which are passed to {meth}`~xyzpy.gen.cropping.Crop.grow` rather than written as header options. `raise_errors` defaults to `True` in `'array'` mode, so a failed batch shows as a failed task.
+- Jobs are submitted from `output_directory`, which now defaults to the crop directory, so the scheduler's output files land there. The submitted script is kept there as `__cluster_script__.sh`.
+- With slurm, jobs are submitted with `sbatch --parsable` and the job id is returned. A failed submission raises an error.
+- Slurm header options: underscores become hyphens, e.g. `mail_type="END"` gives `--mail-type=END`, and `cpus_per_task` and `nodes` can be given in place of `num_procs` and `num_nodes`. `--nodes`, `--cpus-per-task` and `--mem` are only written if given. Without `num_procs`, the thread count comes from `SLURM_CPUS_PER_TASK`.
+- `conda_env` now defaults to `False`, since the script runs the current Python interpreter directly.
+- `clean_slurm_outputs` counts a task as finished once its batch has a result.
 
 **Bug fixes:**
 
-- {func}`~xyzpy.infiniplot`: fix a crash when `hue`, `color` or any other style property is given as a constant `(r, g, b)` or `(r, g, b, a)` tuple, which was being mistaken for a sequence of dimension names to fuse.
-- {func}`~xyzpy.infiniplot`: fix a crash when `hue` is given as a constant while `color` is mapped to a dimension. The constant now sets the single colormap that `color` sweeps the intensity of.
-- {func}`~xyzpy.infiniplot`: `col` and `row` now raise an error if given name(s) which aren't valid dims
-- {func}`~xyzpy.infiniplot`: heatmaps no longer warn about aggregating over unmapped dimensions of size 1.
-- {func}`~xyzpy.infiniplot`: a missing `x`, `y` or `z` variable now raises an error specifying it.
-- {func}`~xyzpy.infiniplot`: panel titles now use `row_ticklabels` and `col_ticklabels`.
-- {func}`~xyzpy.infiniplot`: fix log axis tick labels below 1 showing as `0` for whole number bases other than 10, e.g. `xbase=2`.
-- {meth}`~xyzpy.gen.cropping.Crop.gen_cluster_script`: fix `time` given as a `"H:M:S"` string or as fractional hours. `"D-H:M:S"` strings are now also accepted.
-- {meth}`~xyzpy.gen.cropping.Crop.grow_cluster`: fix `mem` and `mem_per_cpu` clashing with the default memory. Giving both `mem` and `mem_per_cpu` for slurm now raises an error.
-- {meth}`~xyzpy.gen.cropping.Crop.gen_cluster_script`: fix a syntax error in SGE scripts for growing missing batches, `None` values in SGE and PBS headers when options are left out, and `subprocess="auto"`.
-- {meth}`~xyzpy.gen.cropping.Crop.gen_cluster_script`: the `setup` code is no longer expanded by the shell.
-- `clean_slurm_outputs`: fix detecting finished tasks when growing missing batches, and when `directory` is not the current directory.
+- With `subprocess=True`, each batch process now uses `num_threads` threads rather than 1.
+- `set -e` in `shell_setup` no longer stops the job before Python starts.
+- `setup` code is no longer expanded by the shell.
+- `VECLIB_MAXIMUM_THREADS` and `NUMEXPR_NUM_THREADS` are now also set, matching `xyzpy-grow`.
+- Fix `time` given as a `"H:M:S"` string or as fractional hours. `"D-H:M:S"` strings are now also accepted.
+- Fix `mem` and `mem_per_cpu` clashing with the default memory. Giving both for slurm now raises an error.
+- Fix `subprocess="auto"`.
+- SGE and PBS: fix `None` values in headers when options are left out. A string `mem` such as `"8G"` now raises a clear error, since these need a number of gigabytes.
+- SGE: fix a syntax error in scripts for growing missing batches. The script no longer tries to create `output_directory` after `-wd` needs it, {meth}`~xyzpy.gen.cropping.Crop.grow_cluster` creates it before submitting instead.
+- `clean_slurm_outputs`: fix detecting finished tasks when growing missing batches, or when `directory` is not the current directory. The word "error" in a task's output, e.g. from a setting named `error_rate`, no longer marks the task as failed.
 
-**Other:**
+### Plotting
 
-- Pass `compat` and other combine options explicitly to `xarray.merge` and `xarray.concat`, so that behavior is unchanged when xarray switches to its new defaults.
+These are for {func}`~xyzpy.infiniplot`, which also backs `ds.xyz.plot`.
+
+**Enhancements:**
+
+- The `hues`, `colors`, `markers`, `linestyles`, `markersizes`, `linewidths` and `markeredgecolors` options now also accept a dict, mapping only the given coordinate values. Every other value keeps its default style.
+- `xscale="symlog"` and `yscale="symlog"` now use `xbase` and `ybase`, with ticks at powers of the base.
+- Add `zbase`, the log base for the heatmap colorbar when `zscale` is `"log"` or `"symlog"`, like `xbase` and `ybase`.
+- `row` and `col` panel titles shrink to fit above their axes, so long titles or thin panels no longer overlap.
+- Float values in panel titles and legends no longer show rounding noise, e.g. `0.30000000000000004` shows as `0.3`.
+
+**Bug fixes:**
+
+- Fix a crash when `hue`, `color` or another style property is given as a constant `(r, g, b)` or `(r, g, b, a)` tuple, which was mistaken for a sequence of dimension names to fuse.
+- Fix a crash when `hue` is given as a constant while `color` is mapped to a dimension. The constant now sets the single colormap that `color` sweeps the intensity of.
+- Fix log axis tick labels below 1 showing as `0` for whole number bases other than 10, e.g. `xbase=2`.
+- `row` and `col` now raise an error for names that aren't dimensions.
+- A missing `x`, `y` or `z` variable now raises an error naming it.
+- Heatmaps no longer warn about aggregating over unmapped dimensions of size 1.
+- Panel titles now use `row_ticklabels` and `col_ticklabels`.
+
+### Other
+
+- {func}`~xyzpy.benchmark`: add `torch_cuda_sync=True`, which synchronizes the current CUDA device at each timing boundary, for accurately timing asynchronous PyTorch work.
+- Pass `compat` and other combine options explicitly to `xarray.merge` and `xarray.concat`, so behavior doesn't change when xarray switches to its new defaults.
 
 
 (whats-new-1-3-5)=

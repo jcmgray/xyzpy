@@ -169,6 +169,11 @@ def main():
         ),
     )
     parser.add_argument(
+        "--debugging",
+        action="store_true",
+        help="Set the python log level to debug.",
+    )
+    parser.add_argument(
         "--verbosity",
         type=int,
         default=1,
@@ -231,6 +236,7 @@ def main():
         "num_workers": args.num_workers,
         "subprocess": subprocess,
         "raise_errors": args.raise_errors,
+        "debugging": args.debugging,
         "verbosity": args.verbosity,
         "verbosity_grow": args.verbosity_grow,
     }

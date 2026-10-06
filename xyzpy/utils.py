@@ -926,6 +926,7 @@ def report_memory_gpu():
                 "--format=csv,noheader,nounits",
             ],
             capture_output=True,
+            check=False,
         )
         stdout = process.stdout.decode()
 
@@ -960,6 +961,7 @@ def report_memory_gpu():
                 f"--id={gpu_uuid}",
             ],
             capture_output=True,
+            check=False,
         )
         stdout = process.stdout.decode().strip()
         gpu_memory_used, gpu_memory_total = map(int, stdout.split(", "))

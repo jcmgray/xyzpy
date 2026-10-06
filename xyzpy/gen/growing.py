@@ -197,6 +197,7 @@ class _SubprocessRunner:
         verbosity_grow=0,
         append_logs=False,
         raise_errors=True,
+        debugging=False,
     ):
         self.active = {}
         self.configure(
@@ -210,6 +211,7 @@ class _SubprocessRunner:
         )
         self.append_logs = append_logs
         self.raise_errors = raise_errors
+        self.debugging = debugging
 
     def configure(
         self,
@@ -299,6 +301,8 @@ class _SubprocessRunner:
         ]
         if self.raise_errors:
             args.append("--raise-errors")
+        if self.debugging:
+            args.append("--debugging")
         env = os.environ.copy()
         for name in _THREAD_ENV_VARS:
             env[name] = str(self.num_threads)

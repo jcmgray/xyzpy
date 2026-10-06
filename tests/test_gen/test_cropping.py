@@ -1,5 +1,8 @@
 import os
+import shutil
+import subprocess
 import sys
+from pathlib import Path
 from tempfile import TemporaryDirectory
 
 import numpy as np
@@ -582,7 +585,7 @@ class TestGenClusterScript:
         assert "#SBATCH --array=1-3\n" in script
         assert "batch_ids = (3, 4, 6)\n" in script
         assert (
-            "crop.grow(batch_ids[int(os.environ['SLURM_ARRAY_TASK_ID']) - 1],"
+            "batch_id = batch_ids[int(os.environ['SLURM_ARRAY_TASK_ID']) - 1]"
             in script
         )
 
@@ -590,7 +593,7 @@ class TestGenClusterScript:
         crop = sown_crop(tmp_path)
         script = crop.gen_cluster_script("slurm")
         assert "#SBATCH --array=1-6\n" in script
-        assert "crop.grow(int(os.environ['SLURM_ARRAY_TASK_ID'])," in script
+        assert "batch_id = int(os.environ['SLURM_ARRAY_TASK_ID'])\n" in script
 
     def test_slurm_array_given_ids(self, tmp_path):
         crop = sown_crop(tmp_path)
@@ -687,9 +690,9 @@ class TestGenClusterScript:
         script = crop.gen_cluster_script(
             scheduler, mode=mode, subprocess="auto"
         )
-        code = script.split("<< 'EOM'\n")[1].split("\nEOM\n")[0]
+        code = script.split("<< 'EOM' || true\n")[1].split("\nEOM\n")[0]
         compile(code, "<script>", "exec")
-        assert "subprocess='auto'" in code
+        assert "subprocess=True" in code
 
     def test_path_with_backslash_and_quote(self, tmp_path):
         # e.g. windows paths like 'C:\Users\...', which already contain
@@ -699,7 +702,7 @@ class TestGenClusterScript:
         parent_dir.mkdir()
         crop = sown_crop(parent_dir)
         script = crop.gen_cluster_script("slurm")
-        code = script.split("<< 'EOM'\n")[1].split("\nEOM\n")[0]
+        code = script.split("<< 'EOM' || true\n")[1].split("\nEOM\n")[0]
         compile(code, "<script>", "exec")
 
     @pytest.mark.parametrize("scheduler", ["sge", "pbs", "slurm"])
@@ -712,7 +715,116 @@ class TestGenClusterScript:
     def test_setup_not_shell_expanded(self, tmp_path):
         crop = sown_crop(tmp_path)
         script = crop.gen_cluster_script("slurm", setup="x = '$HOME'")
-        assert "read -r -d '' SCRIPT << 'EOM'\nx = '$HOME'\n" in script
+        assert "SCRIPT << 'EOM' || true\nx = '$HOME'\n" in script
+
+    def test_subprocess_gets_num_threads(self, tmp_path):
+        crop = sown_crop(tmp_path)
+        script = crop.gen_cluster_script(
+            "slurm", num_procs=8, num_workers=2, num_threads=4
+        )
+        assert "export OMP_NUM_THREADS=4\n" in script
+        assert "num_threads=int(os.environ['OMP_NUM_THREADS'])," in script
+
+    def test_all_thread_vars_exported(self, tmp_path):
+        crop = sown_crop(tmp_path)
+        script = crop.gen_cluster_script("slurm", num_threads=3)
+        for name in ("VECLIB_MAXIMUM_THREADS", "NUMEXPR_NUM_THREADS"):
+            assert f"export {name}=3\n" in script
+
+    def test_log_by_default(self, tmp_path):
+        crop = sown_crop(tmp_path)
+        script = crop.gen_cluster_script("slurm")
+        assert "subprocess=True," in script
+        assert "log=True," in script
+        assert "append_logs=True," in script
+
+    def test_no_subprocess_no_log(self, tmp_path):
+        crop = sown_crop(tmp_path)
+        script = crop.gen_cluster_script("slurm", subprocess=False)
+        assert "subprocess=False," in script
+        assert "log=" not in script
+        assert "num_threads=" not in script
+
+    @pytest.mark.parametrize(
+        "kwargs", [{"log": True}, {"max_memory": "4G"}, {"gpus": [0, 1]}]
+    )
+    def test_process_options_need_subprocess(self, tmp_path, kwargs):
+        crop = sown_crop(tmp_path)
+        with pytest.raises(ValueError, match="subprocess=True"):
+            crop.gen_cluster_script("slurm", subprocess=False, **kwargs)
+
+    def test_process_options_passed_to_grow(self, tmp_path):
+        crop = sown_crop(tmp_path)
+        script = crop.gen_cluster_script(
+            "slurm", log=False, max_memory="4G", gpus=[0, 1]
+        )
+        assert "subprocess=True," in script
+        assert "log=False," in script
+        assert "max_memory='4G'," in script
+        assert "gpus=[0, 1]," in script
+        assert "--max-memory" not in script
+        assert "--gpus" not in script
+
+    @pytest.mark.parametrize(
+        "mode, expected", [("array", True), ("single", False)]
+    )
+    def test_raise_errors_default(self, tmp_path, mode, expected):
+        crop = sown_crop(tmp_path)
+        script = crop.gen_cluster_script("slurm", mode=mode)
+        assert f"raise_errors={expected}," in script
+
+    def test_single_quiet_without_log(self, tmp_path):
+        crop = sown_crop(tmp_path)
+        script = crop.gen_cluster_script(
+            "slurm", mode="single", subprocess=False
+        )
+        assert "verbosity_grow=0," in script
+        script = crop.gen_cluster_script("slurm", mode="single")
+        assert "verbosity_grow=2," in script
+
+    def test_sge_output_directory(self, tmp_path):
+        crop = sown_crop(tmp_path)
+        script = crop.gen_cluster_script("sge")
+        assert "mkdir" not in script
+        assert f"#$ -wd {Path(crop.location).resolve()}\n" in script
+        script = crop.gen_cluster_script("sge", output_directory="/out")
+        assert "#$ -wd /out\n" in script
+
+    @pytest.mark.parametrize("scheduler", ["sge", "pbs"])
+    def test_sge_pbs_mem_string_raises(self, tmp_path, scheduler):
+        crop = sown_crop(tmp_path)
+        with pytest.raises(ValueError, match="number of gigabytes"):
+            crop.gen_cluster_script(scheduler, mem="8G")
+
+    @pytest.mark.skipif(
+        sys.platform == "win32" or shutil.which("bash") is None,
+        reason="needs bash",
+    )
+    @pytest.mark.parametrize("mode", ["array", "single"])
+    def test_run_script_logs_batches(self, tmp_path, mode):
+        crop = sown_crop(tmp_path)
+        script = crop.gen_cluster_script(
+            "slurm", mode=mode, shell_setup="set -euo pipefail"
+        )
+        script_file = tmp_path / "job.sh"
+        script_file.write_text(script)
+        tasks = range(1, crop.num_batches + 1) if mode == "array" else [1]
+        for task in tasks:
+            env = dict(os.environ, SLURM_ARRAY_TASK_ID=str(task))
+            result = subprocess.run(
+                ["bash", str(script_file)],
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            assert result.returncode == 0, result.stderr
+            assert "XYZPY script finished" in result.stdout
+        assert crop.is_ready_to_reap()
+        logs = sorted(os.listdir(os.path.join(crop.location, "logs")))
+        assert logs == [
+            f"batch-{i}.log" for i in range(1, crop.num_batches + 1)
+        ]
 
 
 class TestGrowCluster:
@@ -733,7 +845,24 @@ class TestGrowCluster:
         ((cmd, script),) = calls
         assert cmd[:2] == ["sbatch", "--parsable"]
         assert "#SBATCH --mem=8G\n" in script
-        assert not os.path.exists(cmd[-1])
+        assert os.path.exists(cmd[-1])
+
+    def test_submits_from_output_directory(self, tmp_path, monkeypatch):
+        import subprocess
+
+        cwds = []
+
+        def fake_run(cmd, **kwargs):
+            cwds.append(kwargs["cwd"])
+            return subprocess.CompletedProcess(cmd, 0, "1234\n", "")
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+        crop = sown_crop(tmp_path)
+        crop.grow_cluster("slurm")
+        out = tmp_path / "out" / "new"
+        crop.grow_cluster("slurm", output_directory=out)
+        assert cwds == [Path(crop.location).resolve(), out.resolve()]
+        assert out.is_dir()
 
     def test_slurm_mem_per_cpu(self, tmp_path, monkeypatch):
         import subprocess
@@ -779,22 +908,56 @@ class TestGrowCluster:
         crop = sown_crop(tmp_path)
         with pytest.raises(RuntimeError, match="bad option"):
             crop.grow_cluster("slurm")
-        assert not os.path.exists(
-            os.path.join(crop.location, "__qsub_script__.sh")
+        # the script is kept, to help debug the failure
+        assert os.path.exists(
+            os.path.join(crop.location, "__cluster_script__.sh")
         )
 
 
 class TestCleanSlurmOutputs:
-    def test_any_batch_number_counts(self, tmp_path):
-        # array task 1 grew batch 7, task 2 is still running
-        done = tmp_path / "slurm-99_1.out"
-        done.write_text("xyzpy: success - batch 7 completed.\n")
-        running = tmp_path / "slurm-99_2.out"
-        running.write_text("Growing: ...\n")
-        n = clean_slurm_outputs(99, tmp_path, cancel_if_finished=False)
-        assert n == 2
+    def test_finished_means_result_exists(self, tmp_path, capsys):
+        # task 1 grew batch 5, task 2 is growing batch 6, task 3 failed
+        crop = sown_crop(tmp_path, grown=(5,))
+        out_dir = Path(crop.location)
+        done = out_dir / "slurm-99_1.out"
+        done.write_text("xyzpy: growing batch 5\n")
+        running = out_dir / "slurm-99_2.out"
+        running.write_text("xyzpy: growing batch 6\n")
+        failed = out_dir / "slurm-99_3.out"
+        failed.write_text(
+            "xyzpy: growing batch 1\nRuntimeError: batch 1 failed: ...\n"
+        )
+        starting = out_dir / "slurm-99_4.out"
+        starting.write_text("XYZPY script starting...\n")
+        n = clean_slurm_outputs(crop, 99, cancel_if_finished=False)
+        assert n == 4
         assert not done.exists()
-        assert running.exists()
+        assert running.exists() and failed.exists() and starting.exists()
+        out = capsys.readouterr().out
+        assert "99_2 batch 6 xyzpy running..." in out
+        assert "99_3 batch 1 appears to have an error!" in out
+        assert "99_4 starting..." in out
+
+    def test_error_word_in_settings_is_not_an_error(self, tmp_path, capsys):
+        crop = sown_crop(tmp_path)
+        out_dir = Path(crop.location)
+        (out_dir / "slurm-99_1.out").write_text(
+            "xyzpy: growing batch 1\n{'error_rate': 0.1}\n"
+        )
+        clean_slurm_outputs(crop, 99, cancel_if_finished=False)
+        assert "running" in capsys.readouterr().out
+
+    def test_directory(self, tmp_path):
+        crop = sown_crop(tmp_path, grown=(2,))
+        out_dir = tmp_path / "out"
+        out_dir.mkdir()
+        done = out_dir / "slurm-99_1.out"
+        done.write_text("xyzpy: growing batch 2\n")
+        n = clean_slurm_outputs(
+            crop, 99, directory=out_dir, cancel_if_finished=False
+        )
+        assert n == 1
+        assert not done.exists()
 
 
 class TestParseResourceIds:
