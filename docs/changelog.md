@@ -65,6 +65,7 @@ These are for {func}`~xyzpy.infiniplot`, which also backs `ds.xyz.plot`.
 - Add `zbase`, the log base for the heatmap colorbar when `zscale` is `"log"` or `"symlog"`, like `xbase` and `ybase`.
 - `row` and `col` panel titles shrink to fit above their axes, so long titles or thin panels no longer overlap.
 - Float values in panel titles and legends no longer show rounding noise, e.g. `0.30000000000000004` shows as `0.3`.
+- Add `legend_colorgrid`, which shows the `hue` and `color` combinations as a grid of colored cells, in place of one legend entry for each. By default it turns on for more than 10 combinations.
 
 **Bug fixes:**
 
@@ -75,6 +76,7 @@ These are for {func}`~xyzpy.infiniplot`, which also backs `ds.xyz.plot`.
 - A missing `x`, `y` or `z` variable now raises an error naming it.
 - Heatmaps no longer warn about aggregating over unmapped dimensions of size 1.
 - Panel titles now use `row_ticklabels` and `col_ticklabels`.
+- `legend_ncol` now works when the legend is split by style, keeping each dimension's entries together in one column.
 
 ### Other
 

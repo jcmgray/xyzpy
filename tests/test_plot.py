@@ -613,6 +613,197 @@ class TestStyleOverrides:
         assert [line.get_color() for line in axs[0, 0].lines] == default
 
 
+class TestLegendColorgrid:
+    @staticmethod
+    def make_ds(nh=5, nc=4):
+        return xr.Dataset(
+            coords={
+                "h": [f"h{i}" for i in range(nh)],
+                "c": np.arange(nc),
+                "x": np.arange(5),
+            },
+            data_vars={"y": (("h", "c", "x"), np.random.rand(nh, nc, 5))},
+        )
+
+    @mark.parametrize(
+        "nh, nc, legend_colorgrid, expected",
+        [
+            (4, 3, "auto", True),
+            (5, 2, "auto", False),
+            (2, 2, True, True),
+            (5, 4, False, False),
+        ],
+    )
+    def test_enabled(self, nh, nc, legend_colorgrid, expected):
+        _, axs = xyz.infiniplot(
+            self.make_ds(nh, nc),
+            "x",
+            "y",
+            hue="h",
+            color="c",
+            legend_colorgrid=legend_colorgrid,
+            show_and_close=False,
+        )
+        assert (len(axs[0, 0].figure.axes) == 2) == expected
+
+    def test_needs_hue_and_color(self):
+        _, axs = xyz.infiniplot(
+            self.make_ds(),
+            "x",
+            "y",
+            color="h",
+            marker="c",
+            legend_colorgrid=True,
+            show_and_close=False,
+        )
+        assert len(axs[0, 0].figure.axes) == 1
+
+    def test_cells_match_lines(self):
+        ds = self.make_ds()
+        _, axs = xyz.infiniplot(
+            ds, "x", "y", hue="h", color="c", show_and_close=False
+        )
+        gax = axs[0, 0].figure.axes[-1]
+        cells = gax.images[0].get_array()
+        assert cells.shape == (4, 5, 4)
+        # lines are ordered with hue outer, color inner
+        for k, line in enumerate(axs[0, 0].lines):
+            ihue, icolor = divmod(k, 4)
+            assert tuple(cells[icolor, ihue]) == approx(
+                matplotlib.colors.to_rgba(line.get_color())
+            )
+        assert [t.get_text() for t in gax.get_xticklabels()] == list(
+            ds.h.values
+        )
+        # no legend entries for the combinations
+        assert axs[0, 0].get_legend() is None
+
+    def test_other_style_on_hue_gets_own_entries(self):
+        _, axs = xyz.infiniplot(
+            self.make_ds(),
+            "x",
+            "y",
+            hue="h",
+            color="c",
+            marker="h",
+            show_and_close=False,
+        )
+        texts = [t.get_text() for t in axs[0, 0].get_legend().get_texts()]
+        assert texts[:6] == [r"$\bf{h}$", "h0", "h1", "h2", "h3", "h4"]
+
+    def test_legend_entries_and_reverse(self):
+        _, axs = xyz.infiniplot(
+            self.make_ds(),
+            "x",
+            "y",
+            hue="h",
+            color="c",
+            legend_entries={"h": ["h1", "h3"], "c": [0, 1, 2]},
+            legend_reverse=True,
+            show_and_close=False,
+        )
+        gax = axs[0, 0].figure.axes[-1]
+        assert gax.images[0].get_array().shape == (3, 2, 4)
+        assert [t.get_text() for t in gax.get_yticklabels()] == ["2", "1", "0"]
+
+    @mark.parametrize("mode", ["first", "manual", "below"])
+    def test_placement(self, mode):
+        from matplotlib import pyplot as plt
+
+        # the template backend doesn't measure text
+        plt.switch_backend("Agg")
+        try:
+            fig, axs = xyz.infiniplot(
+                self.make_ds(),
+                "x",
+                "y",
+                hue="h",
+                color="c",
+                marker="h",
+                legend_opts=(
+                    {"loc": "upper left", "bbox_to_anchor": (1.0, 1.0)}
+                    if mode == "manual"
+                    else None
+                ),
+                legend_ncol=1 if mode == "below" else None,
+                show_and_close=False,
+            )
+            fig.canvas.draw()
+            leg = axs[0, 0].get_legend()
+            leg_bbox = leg.get_window_extent()
+            gax = fig.axes[-1]
+            grid_bbox = gax.get_tightbbox()
+            if mode == "below":
+                # single legend column goes under the grid
+                assert grid_bbox.y0 > leg_bbox.y1
+                assert grid_bbox.y1 < axs[0, 0].bbox.y1
+            else:
+                if mode == "manual":
+                    # a manually placed legend stays put, grid goes after it
+                    assert grid_bbox.x0 > leg_bbox.x1
+                else:
+                    # grid goes first, legend after it
+                    assert grid_bbox.x0 > axs[0, 0].bbox.x1
+                    assert grid_bbox.x1 < leg_bbox.x0
+                # grid title lines up with the first legend subtitle
+                subtitle = leg.get_texts()[0].get_window_extent()
+                assert grid_bbox.y1 == approx(subtitle.y1)
+        finally:
+            plt.switch_backend("Template")
+
+
+class TestLegendColumns:
+    @mark.parametrize(
+        "legend_ncol, expected",
+        [
+            # each dimension in its own column
+            (
+                None,
+                ["A", "a0", "a1", "a2"]
+                + ["B", "b0", "b1", ""]
+                + ["C", "c0", "c1", ""],
+            ),
+            # whole blocks only, in the fewest rows
+            (
+                2,
+                ["A", "a0", "a1", "a2", "", "", ""]
+                + ["B", "b0", "b1", "", "C", "c0", "c1"],
+            ),
+            (
+                1,
+                ["A", "a0", "a1", "a2", ""]
+                + ["B", "b0", "b1", ""]
+                + ["C", "c0", "c1"],
+            ),
+        ],
+    )
+    def test_split_blocks(self, legend_ncol, expected):
+        ds = xr.Dataset(
+            coords={
+                "x": [0, 1],
+                "a": ["a0", "a1", "a2"],
+                "b": ["b0", "b1"],
+                "c": ["c0", "c1"],
+            },
+            data_vars={"y": (("x", "a", "b", "c"), np.zeros((2, 3, 2, 2)))},
+        )
+        _, axs = xyz.infiniplot(
+            ds,
+            "x",
+            "y",
+            marker="a",
+            linestyle="b",
+            markersize="c",
+            marker_label="A",
+            linestyle_label="B",
+            markersize_label="C",
+            legend_ncol=legend_ncol,
+            show_and_close=False,
+        )
+        texts = [t.get_text() for t in axs[0, 0].get_legend().get_texts()]
+        assert texts == expected
+
+
 class TestConstantStyles:
     """Style properties supplied as constants rather than dimension names."""
 

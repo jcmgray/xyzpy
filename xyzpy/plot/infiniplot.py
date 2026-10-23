@@ -138,7 +138,7 @@ def color_to_colormap(c, **autohue_opts):
     import matplotlib as mpl
 
     rgb = mpl.colors.to_rgb(c)
-    h, s, v = mpl.colors.rgb_to_hsv(rgb)
+    h, _s, _v = mpl.colors.rgb_to_hsv(rgb)
 
     return cmoke(h, **autohue_opts)
 
@@ -304,121 +304,122 @@ _STYLE_SORT_ORDER = (
     "linewidth",
 )
 
-INFINIPLOTTER_DEFAULTS = dict(
-    bins=None,
-    bins_density=False,
-    aggregate=None,
-    aggregate_method="median",
-    aggregate_err_range=0.5,
-    err=None,
-    err_style=None,
-    err_kws=None,
-    xlink=None,
-    color=None,
-    colors=None,
-    color_order=None,
-    color_label=None,
-    color_ticklabels=None,
-    colormap_start=0.0,
-    colormap_stop=1.0,
-    hue=None,
-    hues=None,
-    hue_order=None,
-    hue_label=None,
-    hue_ticklabels=None,
-    palette=None,
-    autohue_start=0.25,
-    autohue_sweep=1.0,
-    autohue_opts=None,
-    marker=None,
-    markers=None,
-    marker_order=None,
-    marker_label=None,
-    marker_ticklabels=None,
-    markersize=None,
-    markersizes=None,
-    markersize_order=None,
-    markersize_label=None,
-    markersize_ticklabels=None,
-    markeredgecolor="white",
-    markeredgecolors=None,
-    markeredgecolor_order=None,
-    markeredgecolor_label=None,
-    markeredgecolor_ticklabels=None,
-    linewidth=None,
-    linewidths=None,
-    linewidth_order=None,
-    linewidth_label=None,
-    linewidth_ticklabels=None,
-    linestyle=None,
-    linestyles=None,
-    linestyle_order=None,
-    linestyle_label=None,
-    linestyle_ticklabels=None,
-    text=None,
-    text_formatter=str,
-    text_opts=None,
-    col=None,
-    col_order=None,
-    col_label=None,
-    col_ticklabels=None,
-    row=None,
-    row_order=None,
-    row_label=None,
-    row_ticklabels=None,
-    alpha=1.0,
-    zorder=None,
-    join_across_missing=False,
-    err_band_alpha=0.1,
-    err_bar_capsize=1,
-    xlabel=None,
-    ylabel=None,
-    xlim=None,
-    ylim=None,
-    zlim=None,
-    xscale=None,
-    yscale=None,
-    zscale=None,
-    xbase=10,
-    ybase=10,
-    zbase=10,
-    xticks=None,
-    yticks=None,
-    xticklabels=None,
-    yticklabels=None,
-    vspans=(),
-    hspans=(),
-    span_color=(0.5, 0.5, 0.5),
-    span_alpha=0.5,
-    span_linewidth=1,
-    span_linestyle=":",
-    grid=True,
-    grid_which="major",
-    grid_alpha=0.1,
-    legend=True,
-    legend_ncol=None,
-    legend_merge="auto",
-    legend_reverse=False,
-    legend_entries=None,
-    legend_labels=None,
-    legend_extras=None,
-    legend_opts=None,
-    label=None,
-    title=None,
-    subtitle=None,
-    ax=None,
-    axs=None,
-    format_axs=None,
-    figsize=None,
-    background_color=None,
-    height=3,
-    width=None,
-    hspace=0.12,
-    wspace=0.12,
-    sharex=True,
-    sharey=True,
-    kwargs=None,
-)
+INFINIPLOTTER_DEFAULTS = {
+    "bins": None,
+    "bins_density": False,
+    "aggregate": None,
+    "aggregate_method": "median",
+    "aggregate_err_range": 0.5,
+    "err": None,
+    "err_style": None,
+    "err_kws": None,
+    "xlink": None,
+    "color": None,
+    "colors": None,
+    "color_order": None,
+    "color_label": None,
+    "color_ticklabels": None,
+    "colormap_start": 0.0,
+    "colormap_stop": 1.0,
+    "hue": None,
+    "hues": None,
+    "hue_order": None,
+    "hue_label": None,
+    "hue_ticklabels": None,
+    "palette": None,
+    "autohue_start": 0.25,
+    "autohue_sweep": 1.0,
+    "autohue_opts": None,
+    "marker": None,
+    "markers": None,
+    "marker_order": None,
+    "marker_label": None,
+    "marker_ticklabels": None,
+    "markersize": None,
+    "markersizes": None,
+    "markersize_order": None,
+    "markersize_label": None,
+    "markersize_ticklabels": None,
+    "markeredgecolor": "white",
+    "markeredgecolors": None,
+    "markeredgecolor_order": None,
+    "markeredgecolor_label": None,
+    "markeredgecolor_ticklabels": None,
+    "linewidth": None,
+    "linewidths": None,
+    "linewidth_order": None,
+    "linewidth_label": None,
+    "linewidth_ticklabels": None,
+    "linestyle": None,
+    "linestyles": None,
+    "linestyle_order": None,
+    "linestyle_label": None,
+    "linestyle_ticklabels": None,
+    "text": None,
+    "text_formatter": str,
+    "text_opts": None,
+    "col": None,
+    "col_order": None,
+    "col_label": None,
+    "col_ticklabels": None,
+    "row": None,
+    "row_order": None,
+    "row_label": None,
+    "row_ticklabels": None,
+    "alpha": 1.0,
+    "zorder": None,
+    "join_across_missing": False,
+    "err_band_alpha": 0.1,
+    "err_bar_capsize": 1,
+    "xlabel": None,
+    "ylabel": None,
+    "xlim": None,
+    "ylim": None,
+    "zlim": None,
+    "xscale": None,
+    "yscale": None,
+    "zscale": None,
+    "xbase": 10,
+    "ybase": 10,
+    "zbase": 10,
+    "xticks": None,
+    "yticks": None,
+    "xticklabels": None,
+    "yticklabels": None,
+    "vspans": (),
+    "hspans": (),
+    "span_color": (0.5, 0.5, 0.5),
+    "span_alpha": 0.5,
+    "span_linewidth": 1,
+    "span_linestyle": ":",
+    "grid": True,
+    "grid_which": "major",
+    "grid_alpha": 0.1,
+    "legend": True,
+    "legend_ncol": None,
+    "legend_merge": "auto",
+    "legend_reverse": False,
+    "legend_entries": None,
+    "legend_labels": None,
+    "legend_extras": None,
+    "legend_opts": None,
+    "legend_colorgrid": "auto",
+    "label": None,
+    "title": None,
+    "subtitle": None,
+    "ax": None,
+    "axs": None,
+    "format_axs": None,
+    "figsize": None,
+    "background_color": None,
+    "height": 3,
+    "width": None,
+    "hspace": 0.12,
+    "wspace": 0.12,
+    "sharex": True,
+    "sharey": True,
+    "kwargs": None,
+}
 
 _PLOTTER_OPTS = tuple(INFINIPLOTTER_DEFAULTS.keys())
 
@@ -459,8 +460,9 @@ class Infiniplotter:
                 for opt in wrong_opts
             ]
 
-            msg = "Option(s) {} not valid.\n Did you mean: {}?".format(
-                wrong_opts, right_opts
+            msg = (
+                f"Option(s) {wrong_opts} not valid.\n "
+                f"Did you mean: {right_opts}?"
             )
             print(msg)
             raise ValueError(msg)
@@ -625,6 +627,18 @@ class Infiniplotter:
                 f"{self.labels[self.hue]}, {self.labels[self.color]}"
             )
             self.ticklabels[dim] = {}
+
+        if self.legend_colorgrid == "auto":
+            # use a colorgrid when there are many combinations
+            self.legend_colorgrid = (
+                self.sizes["hue"] * self.sizes["color"] > 10
+            )
+        self.legend_colorgrid = (
+            self.legend_colorgrid
+            and self.legend
+            and (self.hue is not None)
+            and (self.color is not None)
+        )
 
         if (self.hue is None) and (self.color is not None):
             # set a global colormap or sequence
@@ -1008,6 +1022,11 @@ class Infiniplotter:
         self.handles_split = collections.defaultdict(
             lambda: collections.defaultdict(dict)
         )
+        if self.legend_colorgrid:
+            # rgba of each (color, hue) combination, blank if never plotted
+            self.colorgrid = np.zeros(
+                (self.sizes["color"], self.sizes["hue"], 4)
+            )
 
         x_is_constant = self.x not in self.ds.data_vars
         if x_is_constant:
@@ -1072,12 +1091,19 @@ class Infiniplotter:
                     legend_dim = self.color
                     legend_in = color_in
                 else:
-                    legend_dim = ", ".join((self.hue, self.color))
+                    legend_dim = f"{self.hue}, {self.color}"
                     legend_in = ", ".join(
                         map(_format_value, (hue_in, color_in))
                     )
 
-                self.handles_split[legend_dim][legend_in]["color"] = color_out
+                if self.legend_colorgrid:
+                    self.colorgrid[icolor, ihue] = mpl.colors.to_rgba(
+                        color_out
+                    )
+                else:
+                    self.handles_split[legend_dim][legend_in]["color"] = (
+                        color_out
+                    )
             else:
                 legend_dim = None
 
@@ -1096,7 +1122,9 @@ class Infiniplotter:
                     sub_key[dim] = prop_in
                     specific_style[prop] = prop_out
 
-                    if dim in (self.color, self.hue):
+                    if (dim in (self.color, self.hue)) and (
+                        not self.legend_colorgrid
+                    ):
                         self.handles_split[legend_dim][legend_in][prop] = (
                             prop_out
                         )
@@ -1264,8 +1292,11 @@ class Infiniplotter:
         from matplotlib.lines import Line2D
 
         legend_opts = {} if self.legend_opts is None else self.legend_opts
+        manual_placement = ("bbox_to_anchor" in legend_opts) or (
+            "loc" in legend_opts
+        )
 
-        if ("bbox_to_anchor" in legend_opts) or ("loc" in legend_opts):
+        if manual_placement:
             # we are manually placing legend, assume its a new one, rather
             # than trying to extend
             try:
@@ -1287,7 +1318,10 @@ class Infiniplotter:
             except AttributeError:
                 legend_handles = []
 
-        if self.legend_merge == "auto":
+        if self.legend_colorgrid:
+            # the grid replaces the merged hue and color entries
+            self.legend_merge = False
+        elif self.legend_merge == "auto":
             self.legend_merge = (
                 # all mapped style correspond to same dimension
                 (len(self.mapped) <= 1)
@@ -1332,6 +1366,159 @@ class Infiniplotter:
             legend_opts.setdefault("framealpha", 0.0)
             lax.legend(handles=legend_handles, **legend_opts)
 
+        if self.legend_colorgrid:
+            # leave a manually placed legend where it is
+            self._create_legend_colorgrid(first=not manual_placement)
+
+    def _create_legend_colorgrid(self, first=True):
+        """Show hue and color combinations as a grid of colored cells. If
+        ``first``, the grid takes the usual legend position and the legend
+        moves to its right, otherwise the grid goes to the right of the
+        legend.
+        """
+        from matplotlib import rcParams
+        from matplotlib.font_manager import FontProperties
+        from matplotlib.transforms import Bbox
+
+        lax = self.axs[0, -1]
+        fig = lax.figure
+
+        ihues = range(self.sizes["hue"])
+        icolors = range(self.sizes["color"])
+        if self.legend_entries:
+            # only keep manually specified legend entries
+            if self.hue in self.legend_entries:
+                ihues = [
+                    i
+                    for i in ihues
+                    if self.input_values["hue"][i]
+                    in self.legend_entries[self.hue]
+                ]
+            if self.color in self.legend_entries:
+                icolors = [
+                    i
+                    for i in icolors
+                    if self.input_values["color"][i]
+                    in self.legend_entries[self.color]
+                ]
+        if self.legend_reverse:
+            icolors = icolors[::-1]
+
+        fontsize = FontProperties(
+            size=rcParams["legend.fontsize"]
+        ).get_size_in_points()
+
+        def locator(gax, renderer):
+            # positions are in display units, sizes are fixed in points
+            pts = renderer.points_to_pixels
+            width = pts(fontsize) * len(ihues)
+            height = pts(fontsize) * len(icolors)
+            gap = pts(0.5 * fontsize)
+
+            leg = lax.get_legend()
+            # with a single legend column, put the legend under the grid
+            below = first and (leg is not None) and (self.legend_ncol == 1)
+
+            if (leg is None) or first:
+                x0 = lax.bbox.x1 + 2 * gap
+            else:
+                x0 = leg.get_window_extent(renderer).x1 + 2 * gap
+
+            # line up the title with the first line of the legend, the
+            # legend texts only get placed when drawn, so use its border
+            if (leg is not None) and (not below):
+                title_y1 = leg.get_window_extent(renderer).y1 - pts(
+                    leg.borderpad * leg.prop.get_size_in_points()
+                )
+            else:
+                title_y1 = lax.bbox.y1 - pts(
+                    fontsize
+                    * (
+                        rcParams["legend.borderaxespad"]
+                        + rcParams["legend.borderpad"]
+                    )
+                )
+            title_height = title.get_window_extent(renderer).height
+            y1 = title_y1 - title_height - gap
+            title.set_y(1 + gap / height)
+
+            # anchor the legend in axes units, which a tight save keeps valid
+            if below:
+                # move the legend under the tick labels
+                labels_y0 = (
+                    y1
+                    - height
+                    - pts(2)
+                    - max(
+                        t.get_window_extent(renderer).height
+                        for t in gax.get_xticklabels()
+                    )
+                )
+                ya = lax.transAxes.inverted().transform((0.0, labels_y0))[1]
+                leg.set_bbox_to_anchor((1.0, ya), transform=lax.transAxes)
+            elif (leg is not None) and first:
+                # move the legend past the tick labels and title
+                labels_x1 = (
+                    x0
+                    + width
+                    + pts(2)
+                    + max(
+                        t.get_window_extent(renderer).width
+                        for t in gax.get_yticklabels()
+                    )
+                )
+                title_x1 = x0 + title.get_window_extent(renderer).width
+                xa = lax.transAxes.inverted().transform(
+                    (max(labels_x1, title_x1), 0.0)
+                )[0]
+                leg.set_bbox_to_anchor((xa, 1.0), transform=lax.transAxes)
+
+            bbox = Bbox([[x0, y1 - height], [x0 + width, y1]])
+            return fig.transSubfigure.inverted().transform_bbox(bbox)
+
+        gax = fig.add_axes((0.0, 0.0, 1.0, 1.0))
+        gax.set_axes_locator(locator)
+        gax.imshow(
+            self.colorgrid[np.ix_(icolors, ihues)],
+            aspect="auto",
+            interpolation="nearest",
+        )
+
+        def ticklabels(name, idxs):
+            dim = getattr(self, name)
+            return [
+                self.ticklabels[dim].get(v, _format_value(v))
+                for v in (self.input_values[name][i] for i in idxs)
+            ]
+
+        hue_labels = ticklabels("hue", ihues)
+        gax.set_xticks(
+            range(len(ihues)),
+            hue_labels,
+            fontsize=fontsize,
+            rotation=90 if max(map(len, hue_labels)) > 1 else 0,
+        )
+        gax.set_yticks(
+            range(len(icolors)),
+            ticklabels("color", icolors),
+            fontsize=fontsize,
+        )
+        gax.yaxis.tick_right()
+        gax.grid(False)
+        gax.minorticks_off()
+        gax.tick_params(which="both", length=0, pad=2)
+        for spine in gax.spines.values():
+            spine.set_visible(False)
+        title = gax.set_title(
+            self.labels[f"{self.hue}, {self.color}"],
+            fontsize=fontsize,
+            loc="left",
+            y=1.0,
+            pad=0,
+            verticalalignment="bottom",
+        )
+        self.colorgrid_ax = gax
+
     def _create_legend_merged(self, legend_handles, legend_opts):
         """Entry for every unique style combination."""
 
@@ -1340,9 +1527,11 @@ class Infiniplotter:
             remove = set()
             for k in self.handles_merged:
                 for dim, val in k:
-                    if dim in self.legend_entries:
-                        if val not in self.legend_entries[dim]:
-                            remove.add(k)
+                    if (
+                        dim in self.legend_entries
+                        and val not in self.legend_entries[dim]
+                    ):
+                        remove.add(k)
             for k in remove:
                 del self.handles_merged[k]
 
@@ -1386,12 +1575,13 @@ class Infiniplotter:
         self.base_style["marker"] = ""
         self.base_style["linestyle"] = ""
 
-        ncol = len(self.handles_split)
-        nrow = max(map(len, self.handles_split.values()))
+        def spacer():
+            return Line2D([0], [0], markersize=0, linewidth=0, label="")
 
+        # a subtitle then entries for each dimension
+        blocks = []
         for legend_dim, dimval_to_style in self.handles_split.items():
-            # add sub title in legend
-            legend_handles.append(
+            block = [
                 Line2D(
                     [0],
                     [0],
@@ -1399,7 +1589,7 @@ class Infiniplotter:
                     linewidth=0,
                     label=self.labels[legend_dim],
                 )
-            )
+            ]
 
             dimval_styles = list(dimval_to_style.items())
             if self.legend_reverse:
@@ -1418,7 +1608,7 @@ class Infiniplotter:
                     style.setdefault("marker", ".")
                     style.setdefault("linestyle", "-")
 
-                legend_handles.append(
+                block.append(
                     Line2D(
                         [0],
                         [0],
@@ -1426,19 +1616,34 @@ class Infiniplotter:
                         label=label,
                     )
                 )
-
-            if self.legend_ncol is None:
-                npad = nrow - len(dimval_styles)
-            else:
-                npad = 1
-            for _ in range(npad):
-                # spacing
-                legend_handles.append(
-                    Line2D([0], [0], markersize=0, linewidth=0, label="")
-                )
+            blocks.append(block)
 
         if self.legend_ncol is None:
-            legend_opts.setdefault("ncol", ncol)
+            # each dimension in its own column
+            columns = blocks
+        else:
+            # find the fewest rows that fit whole blocks into the columns
+            nrow = max(map(len, blocks))
+            while True:
+                columns = [[]]
+                for block in blocks:
+                    if not columns[-1]:
+                        pass
+                    elif len(columns[-1]) + 1 + len(block) <= nrow:
+                        columns[-1].append(spacer())
+                    else:
+                        columns.append([])
+                    columns[-1].extend(block)
+                if len(columns) <= self.legend_ncol:
+                    break
+                nrow += 1
+
+        # matplotlib fills columns in turn, so pad them to the same height
+        nrow = max(map(len, columns))
+        for column in columns:
+            legend_handles.extend(column)
+            legend_handles.extend(spacer() for _ in range(nrow - len(column)))
+        legend_opts.setdefault("ncol", len(columns))
 
         if self.legend_extras is not None:
             for extra in self.legend_extras:
@@ -1669,7 +1874,7 @@ class Infiniplotter:
                 if not isinstance(_spans, str):
                     for line in _spans:
                         if isinstance(_spans, dict):
-                            import matplotlib.transforms as transforms
+                            from matplotlib import transforms
 
                             # label each span using key from dict
                             spanlabel = line
@@ -2015,6 +2220,17 @@ def infiniplot(
         An explicit sequence of extra legend items to add.
     legend_opts : dict, optional
         Additional keyword arguments to pass to the legend plotting function.
+    legend_colorgrid : bool or "auto", optional
+        When both ``hue`` and ``color`` are mapped, show their combinations as
+        a grid of colored cells next to the legend, with ``hue`` along the
+        x-axis and ``color`` along the y-axis, instead of one legend entry
+        for each combination. The grid goes where the legend would, with the
+        legend to its right, or under it if ``legend_ncol=1``. If
+        ``legend_opts`` places the legend, the grid goes to the right of the
+        legend instead. Any other style
+        mapped to the ``hue`` or ``color`` dimension gets its own legend
+        entries. ``"auto"``, the default, uses the grid when there are more
+        than 10 combinations.
     title : str, optional
         A title to use for the plot.
     subtitle : str or callable, optional
