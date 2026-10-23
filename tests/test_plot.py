@@ -723,6 +723,8 @@ class TestLegendColorgrid:
                     hue="h",
                     color="c",
                     marker="h",
+                    # short letters only, so "lp" sets the row height
+                    marker_label=r"$\bf{m}$",
                     legend_opts=(
                         {"loc": "upper left", "bbox_to_anchor": (1.0, 1.0)}
                         if mode == "manual"
@@ -748,9 +750,13 @@ class TestLegendColorgrid:
                     # grid goes first, legend after it
                     assert grid_bbox.x0 > axs[0, 0].bbox.x1
                     assert grid_bbox.x1 < leg_bbox.x0
-                # grid title lines up with the first legend subtitle
-                subtitle = leg.get_texts()[0].get_window_extent()
-                assert grid_bbox.y1 == approx(subtitle.y1)
+                # grid title shares a baseline with the first legend subtitle
+                # (tops can differ, by font rendering, for different text)
+                baselines = [
+                    t.get_transform().transform(t.get_position())[1]
+                    for t in (gax.title, leg.get_texts()[0])
+                ]
+                assert baselines[0] == approx(baselines[1])
         finally:
             plt.switch_backend("Template")
 

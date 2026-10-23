@@ -1424,28 +1424,46 @@ class Infiniplotter:
             else:
                 x0 = leg.get_window_extent(renderer).x1 + 2 * gap
 
-            # line up the title with the first line of the legend, the
-            # legend texts only get placed when drawn, so use its border
-            # the title's extent above and below its baseline
-            title_bbox = title.get_window_extent(renderer)
-            title_baseline = title.get_transform().transform(
-                title.get_position()
-            )[1]
-            ascent = title_bbox.y1 - title_baseline
-            descent = title_baseline - title_bbox.y0
+            def extent_about_baseline(text):
+                # the bbox and baseline come from the same transform, so
+                # these are right even before the text is placed
+                bbox = text.get_window_extent(renderer)
+                _, baseline = text.get_transform().transform(
+                    text.get_position()
+                )
+                return bbox.y1 - baseline, baseline - bbox.y0
 
+            ascent, descent = extent_about_baseline(title)
+
+            # line up the title baseline with the first line of the legend
             if (leg is not None) and (not below):
                 leg_fontsize = leg.prop.get_size_in_points()
                 row_y1 = leg.get_window_extent(renderer).y1 - pts(
                     leg.borderpad * leg_fontsize
                 )
-                # the row is as tall as the text or the handle box, which
-                # extends this far above the baseline
-                handle_ascent = pts(
-                    leg_fontsize
-                    * (leg.handleheight - 0.7 * (leg.handleheight - 0.7))
+                if leg.get_title().get_text():
+                    row_text = leg.get_title()
+                    # the title row has no handle
+                    handle_ascent = 0.0
+                else:
+                    row_text = leg.get_texts()[0]
+                    # the handle box extends this far above the baseline
+                    handle_ascent = pts(
+                        leg_fontsize
+                        * (leg.handleheight - 0.7 * (leg.handleheight - 0.7))
+                    )
+                # legend text boxes reach at least as high as plain "lp"
+                _, lp_height, lp_descent = (
+                    renderer.get_text_width_height_descent(
+                        "lp",
+                        row_text.get_fontproperties(),
+                        ismath="TeX" if row_text.get_usetex() else False,
+                    )
                 )
-                baseline = row_y1 - max(ascent, handle_ascent)
+                text_ascent, _ = extent_about_baseline(row_text)
+                baseline = row_y1 - max(
+                    text_ascent, lp_height - lp_descent, handle_ascent
+                )
             else:
                 baseline = (
                     lax.bbox.y1
@@ -1531,9 +1549,10 @@ class Infiniplotter:
         title = gax.set_title(
             self.labels[f"{self.hue}, {self.color}"],
             fontsize=fontsize,
-            loc="left",
+            x=0.0,
             y=1.0,
             pad=0,
+            horizontalalignment="left",
         )
         self.colorgrid_ax = gax
 
