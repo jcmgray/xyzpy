@@ -706,29 +706,32 @@ class TestLegendColorgrid:
         assert gax.images[0].get_array().shape == (3, 2, 4)
         assert [t.get_text() for t in gax.get_yticklabels()] == ["2", "1", "0"]
 
+    # a handle box taller than the text, as with some fonts, lowers the text
+    @mark.parametrize("handleheight", [0.7, 1.5])
     @mark.parametrize("mode", ["first", "manual", "below"])
-    def test_placement(self, mode):
+    def test_placement(self, mode, handleheight):
         from matplotlib import pyplot as plt
 
         # the template backend doesn't measure text
         plt.switch_backend("Agg")
         try:
-            fig, axs = xyz.infiniplot(
-                self.make_ds(),
-                "x",
-                "y",
-                hue="h",
-                color="c",
-                marker="h",
-                legend_opts=(
-                    {"loc": "upper left", "bbox_to_anchor": (1.0, 1.0)}
-                    if mode == "manual"
-                    else None
-                ),
-                legend_ncol=1 if mode == "below" else None,
-                show_and_close=False,
-            )
-            fig.canvas.draw()
+            with matplotlib.rc_context({"legend.handleheight": handleheight}):
+                fig, axs = xyz.infiniplot(
+                    self.make_ds(),
+                    "x",
+                    "y",
+                    hue="h",
+                    color="c",
+                    marker="h",
+                    legend_opts=(
+                        {"loc": "upper left", "bbox_to_anchor": (1.0, 1.0)}
+                        if mode == "manual"
+                        else None
+                    ),
+                    legend_ncol=1 if mode == "below" else None,
+                    show_and_close=False,
+                )
+                fig.canvas.draw()
             leg = axs[0, 0].get_legend()
             leg_bbox = leg.get_window_extent()
             gax = fig.axes[-1]

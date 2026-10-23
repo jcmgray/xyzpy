@@ -1426,21 +1426,40 @@ class Infiniplotter:
 
             # line up the title with the first line of the legend, the
             # legend texts only get placed when drawn, so use its border
+            # the title's extent above and below its baseline
+            title_bbox = title.get_window_extent(renderer)
+            title_baseline = title.get_transform().transform(
+                title.get_position()
+            )[1]
+            ascent = title_bbox.y1 - title_baseline
+            descent = title_baseline - title_bbox.y0
+
             if (leg is not None) and (not below):
-                title_y1 = leg.get_window_extent(renderer).y1 - pts(
-                    leg.borderpad * leg.prop.get_size_in_points()
+                leg_fontsize = leg.prop.get_size_in_points()
+                row_y1 = leg.get_window_extent(renderer).y1 - pts(
+                    leg.borderpad * leg_fontsize
                 )
+                # the row is as tall as the text or the handle box, which
+                # extends this far above the baseline
+                handle_ascent = pts(
+                    leg_fontsize
+                    * (leg.handleheight - 0.7 * (leg.handleheight - 0.7))
+                )
+                baseline = row_y1 - max(ascent, handle_ascent)
             else:
-                title_y1 = lax.bbox.y1 - pts(
-                    fontsize
-                    * (
-                        rcParams["legend.borderaxespad"]
-                        + rcParams["legend.borderpad"]
+                baseline = (
+                    lax.bbox.y1
+                    - pts(
+                        fontsize
+                        * (
+                            rcParams["legend.borderaxespad"]
+                            + rcParams["legend.borderpad"]
+                        )
                     )
+                    - ascent
                 )
-            title_height = title.get_window_extent(renderer).height
-            y1 = title_y1 - title_height - gap
-            title.set_y(1 + gap / height)
+            y1 = baseline - descent - gap
+            title.set_y(1 + (descent + gap) / height)
 
             # anchor the legend in axes units, which a tight save keeps valid
             if below:
@@ -1515,7 +1534,6 @@ class Infiniplotter:
             loc="left",
             y=1.0,
             pad=0,
-            verticalalignment="bottom",
         )
         self.colorgrid_ax = gax
 
