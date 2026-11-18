@@ -62,3 +62,11 @@ and the optional plotting functionality is provided by:
 
 - [matplotlib](https://matplotlib.org/) - *plotting*
 - [bokeh](https://bokeh.pydata.org/en/latest/) - *interactive plotting*
+
+### GPU memory monitoring
+
+- {class}`~xyzpy.utils.MemoryMonitorGpu` requires an NVIDIA driver with NVML and
+  [nvidia-ml-py](https://pypi.org/project/nvidia-ml-py/) in the environment.
+- {class}`~xyzpy.utils.MemoryMonitorGpuTorch` requires a
+  [PyTorch](https://pytorch.org/get-started/locally/) install with a device
+  available through `torch.cuda`.

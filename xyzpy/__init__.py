@@ -110,6 +110,8 @@ from .plot.plotter_matplotlib import (
 from .utils import (
     Benchmarker,
     MemoryMonitor,
+    MemoryMonitorGpu,
+    MemoryMonitorGpuTorch,
     RunningCovariance,
     RunningCovarianceMatrix,
     RunningStatistics,
@@ -169,6 +171,8 @@ __all__ = [
     "Histogram",
     "LinePlot",
     "MemoryMonitor",
+    "MemoryMonitorGpu",
+    "MemoryMonitorGpuTorch",
     "RayExecutor",
     "RayGPUExecutor",
     "Runner",

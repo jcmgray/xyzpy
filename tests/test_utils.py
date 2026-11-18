@@ -1,5 +1,7 @@
 import functools
+import os
 import sys
+from threading import Event
 from types import SimpleNamespace
 
 import numpy as np
@@ -50,6 +52,162 @@ class TestTimer:
         with xyz.Timer() as timer:
             time.sleep(0.01)
         assert timer.t > 0.0
+
+
+class TestMemoryMonitorGpu:
+    def test_peak_total_across_devices(self, monkeypatch):
+        pid = os.getpid()
+        events = []
+        used = [4, 1]
+
+        def processes(device):
+            return [
+                SimpleNamespace(pid=pid, usedGpuMemory=used[device] << 30),
+                SimpleNamespace(pid=pid + 1, usedGpuMemory=100 << 30),
+            ]
+
+        nvml = SimpleNamespace(
+            nvmlInit=lambda: events.append("init"),
+            nvmlShutdown=lambda: events.append("shutdown"),
+            nvmlDeviceGetCount=lambda: 2,
+            nvmlDeviceGetHandleByIndex=lambda index: index,
+            nvmlDeviceGetComputeRunningProcesses=processes,
+        )
+        monkeypatch.setitem(sys.modules, "pynvml", nvml)
+
+        with xyz.MemoryMonitorGpu(interval=60) as mem:
+            assert mem.peak == pytest.approx(5.0)
+            used[:] = [1, 5]
+        assert mem.peak == pytest.approx(6.0)
+        assert events == ["init", "shutdown"]
+
+        used[:] = [0, 1]
+        with mem:
+            pass
+        assert mem.peak == pytest.approx(1.0)
+
+    def test_background_sample(self, monkeypatch):
+        sampled = Event()
+        used = 0
+        pid = os.getpid()
+
+        def processes(device):
+            process = SimpleNamespace(pid=pid, usedGpuMemory=used)
+            if process.usedGpuMemory:
+                sampled.set()
+            return [process]
+
+        nvml = SimpleNamespace(
+            nvmlInit=lambda: None,
+            nvmlShutdown=lambda: None,
+            nvmlDeviceGetCount=lambda: 1,
+            nvmlDeviceGetHandleByIndex=lambda index: index,
+            nvmlDeviceGetComputeRunningProcesses=processes,
+        )
+        monkeypatch.setitem(sys.modules, "pynvml", nvml)
+
+        with xyz.MemoryMonitorGpu(interval=0.001) as mem:
+            used = 3 << 30
+            assert sampled.wait(timeout=5)
+            used = 0
+        assert mem.peak == pytest.approx(3.0)
+
+    @pytest.mark.parametrize("body_fails", [False, True])
+    def test_cleanup_after_failed_sample(self, monkeypatch, body_fails):
+        events = []
+        processes = []
+        nvml = SimpleNamespace(
+            nvmlInit=lambda: events.append("init"),
+            nvmlShutdown=lambda: events.append("shutdown"),
+            nvmlDeviceGetCount=lambda: 1,
+            nvmlDeviceGetHandleByIndex=lambda index: index,
+            nvmlDeviceGetComputeRunningProcesses=lambda device: processes,
+        )
+        monkeypatch.setitem(sys.modules, "pynvml", nvml)
+
+        error = ValueError if body_fails else RuntimeError
+        match = "work failed" if body_fails else "GPU memory is unavailable"
+        with (
+            pytest.raises(error, match=match),
+            xyz.MemoryMonitorGpu(interval=60) as mem,
+        ):
+            assert mem.peak == pytest.approx(0.0)
+            processes.append(
+                SimpleNamespace(pid=os.getpid(), usedGpuMemory=None)
+            )
+            if body_fails:
+                raise ValueError("work failed")
+        assert events == ["init", "shutdown"]
+
+    def test_requires_nvml(self, monkeypatch):
+        monkeypatch.setitem(sys.modules, "pynvml", None)
+        with (
+            pytest.raises(ImportError, match="requires nvidia-ml-py"),
+            xyz.MemoryMonitorGpu(),
+        ):
+            pass
+
+
+class TestMemoryMonitorGpuTorch:
+    @pytest.mark.parametrize(
+        ("device", "index"), [(None, 1), ("cuda", 1), (0, 0), ("cuda:0", 0)]
+    )
+    def test_peak_stats(self, monkeypatch, device, index):
+        current = 1
+        events = []
+
+        def result(name, device, gib):
+            events.append((name, device))
+            return int(gib * (1 << 30))
+
+        cuda = SimpleNamespace(
+            is_available=lambda: True,
+            current_device=lambda: current,
+            device_count=lambda: 3,
+            init=lambda: events.append(("init", None)),
+            reset_peak_memory_stats=lambda i: events.append(("reset", i)),
+            max_memory_allocated=lambda i: result("allocated", i, 1.5),
+            max_memory_reserved=lambda i: result("reserved", i, 2.0),
+        )
+        torch = SimpleNamespace(
+            cuda=cuda,
+            device=lambda spec: SimpleNamespace(
+                type="cuda", index=0 if spec == "cuda:0" else None
+            ),
+        )
+        monkeypatch.setitem(sys.modules, "torch", torch)
+
+        with xyz.MemoryMonitorGpuTorch(device=device) as mem:
+            assert events == [("init", None), ("reset", index)]
+            current = 2
+
+        assert events == [
+            ("init", None),
+            ("reset", index),
+            ("allocated", index),
+            ("reserved", index),
+        ]
+        assert mem.peak == pytest.approx(1.5)
+        assert mem.peak_reserved == pytest.approx(2.0)
+
+    def test_requires_torch(self, monkeypatch):
+        monkeypatch.setitem(sys.modules, "torch", None)
+        with (
+            pytest.raises(ImportError, match="requires torch"),
+            xyz.MemoryMonitorGpuTorch(),
+        ):
+            pass
+
+    def test_requires_cuda(self, monkeypatch):
+        torch = SimpleNamespace(
+            cuda=SimpleNamespace(is_available=lambda: False)
+        )
+        monkeypatch.setitem(sys.modules, "torch", torch)
+        with (
+            pytest.raises(RuntimeError, match="torch CUDA is not available"),
+            xyz.MemoryMonitorGpuTorch(),
+        ):
+            pass
 
 
 class TestBenchmark:
