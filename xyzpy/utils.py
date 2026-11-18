@@ -3,6 +3,7 @@
 import functools
 import itertools
 import operator
+import os
 import sys
 import time
 from collections.abc import Iterable
@@ -853,8 +854,199 @@ class MemoryMonitor:
         self.stop()
 
     def __repr__(self):
-        s = f"MemoryMonitor(interval={self.interval}, peak={self.peak:.2f}GB)"
-        return s
+        return (
+            f"MemoryMonitor(interval={self.interval}, "
+            f"peak={format_gigabytes(self.peak)})"
+        )
+
+
+def format_gigabytes(x):
+    """Format a memory size in gigabytes for a ``__repr__``."""
+    return "None" if x is None else f"{x:.2f}GB"
+
+
+class MemoryMonitorGpu:
+    """Sample this process's NVIDIA GPU memory usage with NVML.
+
+    Install ``nvidia-ml-py`` to use this context manager. It sums the GPU
+    memory reported for the current compute process across devices at each
+    sample, including on entry and exit. Short-lived peaks between samples can
+    be missed.
+
+    In a container with its own PID namespace, NVML may not see this process,
+    so ``peak`` stays at zero.
+
+    Parameters
+    ----------
+    interval : float, optional
+        Time between background samples in seconds. Defaults to 0.1.
+
+    Attributes
+    ----------
+    interval : float
+        Time between background samples in seconds.
+    peak : float
+        The largest sampled total in GiB.
+
+    Examples
+    --------
+    >>> with MemoryMonitorGpu() as mem:  # doctest: +SKIP
+    ...     run_gpu_work()
+    >>> print(mem.peak)  # doctest: +SKIP
+    """
+
+    def __init__(self, interval: float = 0.1):
+        self.interval = interval
+        self.peak = None
+        self._resources = None
+
+    def _read_memory(self):
+        used = 0
+        for handle in self._handles:
+            for process in self._nvml.nvmlDeviceGetComputeRunningProcesses(
+                handle
+            ):
+                if process.pid != self._pid:
+                    continue
+                if process.usedGpuMemory is None:
+                    raise RuntimeError(
+                        "NVML process GPU memory is unavailable"
+                    )
+                used += process.usedGpuMemory
+        return used / (1 << 30)
+
+    def _monitor(self, stop):
+        while True:
+            stopping = stop.wait(self.interval)
+            self.peak = max(self.peak, self._read_memory())
+            if stopping:
+                return
+
+    def __enter__(self):
+        from concurrent.futures import ThreadPoolExecutor
+        from contextlib import ExitStack
+        from threading import Event
+
+        if self._resources is not None:
+            raise RuntimeError("MemoryMonitorGpu is already running")
+
+        try:
+            import pynvml
+        except ImportError as e:
+            raise ImportError("MemoryMonitorGpu requires nvidia-ml-py") from e
+
+        self._nvml = pynvml
+        self._pid = os.getpid()
+        self.peak = None
+
+        with ExitStack() as resources:
+            pynvml.nvmlInit()
+            resources.callback(pynvml.nvmlShutdown)
+            self._handles = [
+                pynvml.nvmlDeviceGetHandleByIndex(i)
+                for i in range(pynvml.nvmlDeviceGetCount())
+            ]
+            if not self._handles:
+                raise RuntimeError("NVML found no NVIDIA GPUs")
+
+            self.peak = self._read_memory()
+            pool = resources.enter_context(ThreadPoolExecutor(max_workers=1))
+            stop = Event()
+            resources.callback(stop.set)
+            self._future = pool.submit(self._monitor, stop)
+            self._resources = resources.pop_all()
+
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        try:
+            self._resources.close()
+            if exc_type is None:
+                self._future.result()
+        finally:
+            self._resources = None
+
+    def __repr__(self):
+        return (
+            f"MemoryMonitorGpu(interval={self.interval}, "
+            f"peak={format_gigabytes(self.peak)})"
+        )
+
+
+class MemoryMonitorGpuTorch:
+    """Read PyTorch's peak memory statistics for one CUDA device.
+
+    Entering resets the device's peak counters, so the results cover the
+    whole process from entry onwards.
+
+    Parameters
+    ----------
+    device : int, str, torch.device or None, optional
+        CUDA device to monitor. The default is the current CUDA device on
+        entry.
+
+    Attributes
+    ----------
+    device : int, str, torch.device or None
+        The CUDA device given.
+    peak : float
+        The peak memory occupied by tensors in GiB.
+    peak_reserved : float
+        The peak memory held by PyTorch's caching allocator in GiB.
+
+    Examples
+    --------
+    >>> with MemoryMonitorGpuTorch(device="cuda:0") as mem:  # doctest: +SKIP
+    ...     run_torch_work()
+    >>> print(mem.peak, mem.peak_reserved)  # doctest: +SKIP
+    """
+
+    def __init__(self, device=None):
+        self.device = device
+        self.peak = None
+        self.peak_reserved = None
+
+    def __enter__(self):
+        try:
+            import torch
+        except ImportError as e:
+            raise ImportError("MemoryMonitorGpuTorch requires torch") from e
+
+        cuda = torch.cuda
+        if not cuda.is_available():
+            raise RuntimeError("torch CUDA is not available")
+
+        device = self.device
+        if device is not None and not isinstance(device, int):
+            device = torch.device(device)
+            if device.type != "cuda":
+                raise ValueError(
+                    "MemoryMonitorGpuTorch requires a CUDA device"
+                )
+            device = device.index
+        if device is None:
+            device = cuda.current_device()
+        if not 0 <= device < cuda.device_count():
+            raise ValueError(f"invalid CUDA device index {device}")
+
+        cuda.init()
+        cuda.reset_peak_memory_stats(device)
+        self._cuda = cuda
+        self._device = device
+        self.peak = self.peak_reserved = None
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        gib = 1 << 30
+        self.peak = self._cuda.max_memory_allocated(self._device) / gib
+        self.peak_reserved = self._cuda.max_memory_reserved(self._device) / gib
+
+    def __repr__(self):
+        return (
+            f"MemoryMonitorGpuTorch(device={self.device!r}, "
+            f"peak={format_gigabytes(self.peak)}, "
+            f"peak_reserved={format_gigabytes(self.peak_reserved)})"
+        )
 
 
 def get_peak_memory_usage():

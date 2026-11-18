@@ -80,6 +80,7 @@ These are for {func}`~xyzpy.infiniplot`, which also backs `ds.xyz.plot`.
 
 ### Other
 
+- Add {class}`~xyzpy.utils.MemoryMonitorGpu` for sampled per-process NVIDIA GPU memory peaks and {class}`~xyzpy.utils.MemoryMonitorGpuTorch` for PyTorch's peak allocated and reserved memory on one device.
 - {func}`~xyzpy.benchmark`: add `torch_cuda_sync=True`, which synchronizes the current CUDA device at each timing boundary, for accurately timing asynchronous PyTorch work.
 - Pass `compat` and other combine options explicitly to `xarray.merge` and `xarray.concat`, so behavior doesn't change when xarray switches to its new defaults.
 
