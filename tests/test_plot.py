@@ -866,6 +866,48 @@ class TestConstantStyles:
         assert len(set(colors)) == 6
 
 
+class TestSpines:
+    @mark.parametrize(
+        "kwargs, expected_spines",
+        [
+            ({}, {"left", "bottom"}),
+            ({"spines": "all"}, {"left", "bottom", "right", "top"}),
+            ({"spines": True}, {"left", "bottom", "right", "top"}),
+            ({"spines": False}, set()),
+            ({"spines": None}, set()),
+            ({"spines": "left"}, {"left"}),
+            ({"spines": ["bottom", "top"]}, {"bottom", "top"}),
+            ({"spines": np.array(["left", "bottom"])}, {"left", "bottom"}),
+        ],
+    )
+    def test_spines_and_tick_sides(self, kwargs, expected_spines):
+        _, axs = xyz.plot(np.arange(5), show_and_close=False, **kwargs)
+        ax = axs[0, 0]
+        for side, spine in ax.spines.items():
+            assert spine.get_visible() == (side in expected_spines)
+        for which in ("major", "minor"):
+            xparams = ax.xaxis.get_tick_params(which=which)
+            yparams = ax.yaxis.get_tick_params(which=which)
+            for side in ("bottom", "top"):
+                assert xparams[side] == (side in expected_spines)
+            for side in ("left", "right"):
+                assert yparams[side] == (side in expected_spines)
+
+    @mark.parametrize("direction", ["in", "out", "inout"])
+    def test_tick_direction(self, direction):
+        _, axs = xyz.plot(
+            np.arange(5), tick_direction=direction, show_and_close=False
+        )
+        for axis in (axs[0, 0].xaxis, axs[0, 0].yaxis):
+            for which in ("major", "minor"):
+                params = axis.get_tick_params(which=which)
+                assert params["direction"] == direction
+
+    def test_unknown_spine_raises(self):
+        with raises(ValueError, match="Unknown spines"):
+            xyz.plot(np.arange(5), spines="up", show_and_close=False)
+
+
 class TestZorder:
     @staticmethod
     def make_ds():

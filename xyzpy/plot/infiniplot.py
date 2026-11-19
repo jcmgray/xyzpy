@@ -395,6 +395,8 @@ INFINIPLOTTER_DEFAULTS = {
     "grid": True,
     "grid_which": "major",
     "grid_alpha": 0.1,
+    "spines": ("left", "bottom"),
+    "tick_direction": None,
     "legend": True,
     "legend_ncol": None,
     "legend_merge": "auto",
@@ -485,6 +487,22 @@ class Infiniplotter:
             self.text_opts.setdefault("clip_on", True)
 
         self.err_kws = {} if self.err_kws is None else dict(self.err_kws)
+
+        all_spines = ("left", "bottom", "right", "top")
+        if self.spines is True:
+            self.spines = all_spines
+        elif self.spines is False or self.spines is None:
+            self.spines = ()
+        elif isinstance(self.spines, str):
+            self.spines = (
+                all_spines if self.spines == "all" else (self.spines,)
+            )
+        unknown = set(self.spines) - set(all_spines)
+        if unknown:
+            raise ValueError(
+                f"Unknown spines {sorted(unknown)}, valid names are "
+                "'left', 'bottom', 'right' and 'top'."
+            )
 
         # if only one is specified allow it to be either
         if (self.hue is not None) and (self.color is None):
@@ -1838,9 +1856,15 @@ class Infiniplotter:
             if j == 0:
                 ax.set_ylabel(self.labels[self.y])
 
-            # set some nice defaults
-            ax.spines["right"].set_visible(False)
-            ax.spines["top"].set_visible(False)
+            # show the chosen spines, with ticks on the same sides
+            tick_opts = {}
+            for side, spine in ax.spines.items():
+                visible = side in self.spines
+                spine.set_visible(visible)
+                tick_opts[side] = visible
+            if self.tick_direction is not None:
+                tick_opts["direction"] = self.tick_direction
+            ax.tick_params(which="both", **tick_opts)
 
             if self.grid:
                 ax.grid(True, which=self.grid_which, alpha=self.grid_alpha)
@@ -2240,6 +2264,14 @@ def infiniplot(
         Which grid lines to show, either 'major' or 'minor'.
     grid_alpha : float, optional
         Alpha value to use for grid lines.
+    spines : str, sequence[str], bool or None, optional
+        Which sides of each axes to draw a frame line on, from 'left',
+        'bottom', 'right' and 'top'. ``True`` or 'all' draws all four, and
+        ``False`` or ``None`` draws none. Ticks are shown only on these
+        sides. The default is ``("left", "bottom")``.
+    tick_direction : {'out', 'in', 'inout'}, optional
+        Whether ticks point out of the axes, into it, or cross the frame. The
+        default leaves the matplotlib setting.
     legend : bool, optional
         Whether to show a legend.
     legend_ncol : int, optional
